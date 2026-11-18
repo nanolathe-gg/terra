@@ -3,16 +3,16 @@
 // with its reason. Each row opens to set a layer's material, its Coverage (stored as amount), its edge and its rule (conditions that must all
 // hold, or a score); a row moves within its stage, a material layer can be removed, and a layer is added from a preset. Hovering or focusing a
 // row previews where that layer lies on the map. The list is a world setting: `host.apply(next, {commit})` stores it.
-import {SURFACE_BUILTINS, SURFACE_NEEDS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, SURFACE_OWN_AMOUNT, PLANT_KINDS, PLANT_LABELS, PLANT_FACTS, surfaceRows, isMaterialLayer, layerKey} from './sculpt-material-model.js';
+import {SURFACE_BUILTINS, SURFACE_NEEDS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, SURFACE_OWN_AMOUNT, PLANT_KINDS, PLANT_LABELS, PLANT_FACTS, surfaceRows, spreadRule, SURFACE_FACT_RANGE, SURFACE_FACT_GRAY, isMaterialLayer, layerKey} from './sculpt-material-model.js';
 import {controlRow} from './sculpt-workspace.js';
 
 const $ = id => document.getElementById(id);
 // Plain names for the facts a rule reads, with the range a window's sliders cover.
+// Each fact's name for an artist (its range: sculpt-material-model.js SURFACE_FACT_RANGE).
 export const FACT_LABELS = {
-  slope: ['Steepness', 0, 3, .05], aboveSea: ['Height above the sea', -20, 200, 1], abovePlain: ['Height above the plain', -60, 200, 1],
-  wear: ['Worn by water', 0, 1, .01], deposit: ['Sediment laid down', 0, 1, .01], wetness: ['Wetness', 0, 1, .01], moisture: ['Moisture', 0, 1, .01],
-  soilDepth: ['Soil depth', 0, 1, .01], light: ['Sunlight', 0, 1.6, .01], top: ['Lumps (1) and hollows (-1)', -1, 1, .02], convexity: ['Convexity', -1, 1, .02],
-  rockShare: ['Rock', 0, 1, .01], debrisShare: ['Debris', 0, 1, .01], sandShare: ['Sand', 0, 1, .01],
+  slope: ['Steepness'], aboveSea: ['Height above the sea'], abovePlain: ['Height above the plain'], wear: ['Worn by water'], deposit: ['Sediment laid down'],
+  wetness: ['Wetness'], moisture: ['Moisture'], soilDepth: ['Soil depth'], light: ['Sunlight'], top: ['Lumps (1) and hollows (-1)'], convexity: ['Convexity'],
+  rockShare: ['Rock'], debrisShare: ['Debris'], sandShare: ['Sand'],
 };
 export const BUILTIN_LABELS = {
   highland: 'Highland ground', slopeCover: 'Slope cover', soil: 'Bare soil', rock: 'Rock', beach: 'Beach', crown: 'Crown rock', baseBand: 'Base band',
@@ -36,8 +36,9 @@ const andList = words => words.length < 2 ? words.join('') : `${words.slice(0, -
 export function whereWords(layer) {
   const window = w => { const name = factName(w.fact), from = w.from != null, to = w.to != null;
     return from && to ? `${name} is ${fmt(w.from)} to ${fmt(w.to)}` : from ? `${name} is above ${fmt(w.from)}` : to ? `${name} is below ${fmt(w.to)}` : `${name} is anything`; };
-  const rule = layer?.score?.terms?.length ? `Where a score of ${andList(layer.score.terms.map(t => (Number(t.weight ?? 1) < 0 ? 'less ' : '') + factName(t.fact)))} passes ${fmt(layer.score.from ?? .5)}`
-    : layer?.where?.length ? `Where ${layer.where.map(window).join(' and ')}` : '';
+  const {where, score} = spreadRule(layer);   // the limits it draws with, its Spread applied
+  const rule = score?.terms?.length ? `Where a score of ${andList(score.terms.map(t => (Number(t.weight ?? 1) < 0 ? 'less ' : '') + factName(t.fact)))} passes ${fmt(score.from ?? .5)}`
+    : where?.length ? `Where ${where.map(window).join(' and ')}` : '';
   const own = layer?.builtin != null ? BUILTIN_WHERE[layer.builtin] : '';
   if (own) return rule && !SURFACE_FIXED.includes(layer.builtin) ? `${own}, ${rule[0].toLowerCase()}${rule.slice(1)}` : own;
   return rule || 'Everywhere';
@@ -51,6 +52,15 @@ const BUILTIN_SOURCES = {
 // Built-ins whose strength and placement are World settings of their own (the rows under the list, in this section's "Built-in settings"):
 // their row shows no Coverage, which would only repeat the strength.
 const BUILTIN_SETTINGS = {highland: 'highland', baseBand: 'baseBand'};
+// The World settings that place each built-in (what the draw reads for its share, engine-frag.wgsl and engine-common.wgsl), in the order an artist
+// reaches for them: the open row lists each with its value and a door to it, so where a surface lies is answered from its row. A rock type's
+// setting (sculpt-rock-presets.js ROCK_KEYS) shows the world's rock; each rock type sets its own in Rock types.
+export const BUILTIN_PLACED_BY = {
+  highland: ['highland', 'highFrom', 'highReach'], baseBand: ['baseBand', 'baseBandLow', 'baseBandHigh'], slopeCover: ['slopeTexture'], soil: ['soilRim'],
+  rock: ['faceRock', 'rockFaceFrom', 'rimReach', 'shoreRock', 'bankRock', 'lushness'], beach: ['beachWidth'], crown: ['rockCrown'],
+  regrownMoss: ['debrisAmount', 'lushness'], fines: ['debrisAmount', 'debrisReach'], sandDust: ['sandDust'], sand: ['sand', 'sandLee', 'sandCrown'],
+  iceCrest: ['iceCrest'], iceCap: ['iceSnow'],
+};
 // Where each stage's layers lie, in plain words (SURFACE_STAGE_NAMES order). A layer moves only among its stage's layers: the engine's own steps
 // (tints, beds, cracks, weather) lie between the stages. The open row says it; a closed row only where it helps (CLOSED_PLACE).
 const STAGE_PLACE = ['On the ground itself, under everything else', 'With the slope cover, under soil, rock and beach', 'With bare soil, rock and beach, under crown rock and bands',
@@ -150,13 +160,14 @@ const ruleKind = layer => layer.score ? 'score' : layer.where?.length ? 'where' 
 function switchRule(layer, kind) {
   const facts = layer.score ? layer.score.terms.map(t => t.fact) : (layer.where ?? []).map(w => w.fact);
   delete layer.where; delete layer.score;
+  if (kind === 'none') delete layer.spread;   // a layer shown everywhere has no limits to spread
   if (kind === 'where') layer.where = (facts.length ? facts : ['slope']).map(fact => ({fact, from: .5, fade: .1}));
   if (kind === 'score') layer.score = {terms: (facts.length ? facts : ['slope']).map(fact => ({fact, weight: 1})), from: .5, fade: .1};
 }
 
 // `host`: surface() the list now, apply(next, {commit}), restore() the world's own, preview(row or -1), hide(keys) the layers not shown now, material(layer) → {name, color} or
 // null (height: whether it has art height), edit(layer, button) to open its material, materialKey(preset) → a library key for a preset's material, library() → the materials a
-// layer may draw [{key, name, color}], settings(key) to show a World setting's row and settingNote(key) why it is unavailable ('' if not),
+// layer may draw [{key, name, color}],
 // roleMaterial(builtin) and slotMaterial(slot) → {name, color} or null, pick() to take the Pick tool, inspect(at) → what the draw laid there;
 // for the sections (layerSection's facts): control(key), role(key), hasLayer(name), fact(name), worldName(), and place(go) → where the control
 // that turns a layer on lives ("Rock types › Exposure & relief"), open(go) to show and focus it.
@@ -198,19 +209,74 @@ export function mountSurfacePanel(host) {
     return el('label', {className: 'surface-number'}, el('span', {textContent: label}), input);
   };
   const remover = (title, onClick) => { const b = el('button', {type: 'button', textContent: '×', title, ariaLabel: title}); b.onclick = onClick; return b; };
-  function windowRow(i, k, w) {
+  // `drawn`: the condition as the layer draws it, its Spread applied; when that moved its limits, the row says where they are now.
+  function windowRow(i, k, w, drawn) {
     const set = (field, v) => edit(i, l => { if (v === undefined) delete l.where[k][field]; else l.where[k][field] = v; }, true);
+    const moved = drawn && (drawn.from !== w.from || drawn.to !== w.to);
     return el('div', {className: 'surface-term'}, factSelect(w.fact, f => edit(i, l => { l.where[k].fact = f; }, true), `w${k}-fact`),
       number('from', w.from, v => set('from', v), undefined, undefined, `w${k}-from`), number('to', w.to, v => set('to', v), undefined, undefined, `w${k}-to`),
       number('fade', w.fade ?? .05, v => edit(i, l => { l.where[k].fade = Math.max(v ?? .05, .0001); }, true), 'How gradually it starts and stops', '', `w${k}-fade`),
-      remover('Remove this condition', () => edit(i, l => { l.where.splice(k, 1); if (!l.where.length) delete l.where; }, true)));
+      remover('Remove this condition', () => edit(i, l => { l.where.splice(k, 1); if (!l.where.length) delete l.where; }, true)),
+      ...(moved ? [el('span', {className: 'small surface-spread-now', textContent: `With Spread: ${drawn.from != null ? fmt(drawn.from) : 'open'} to ${drawn.to != null ? fmt(drawn.to) : 'open'}`})] : []));
   }
   function termRow(i, k, t) {
     return el('div', {className: 'surface-term'}, factSelect(t.fact, f => edit(i, l => { l.score.terms[k].fact = f; }, true), `t${k}-fact`),
       number('×', t.weight ?? 1, v => edit(i, l => { l.score.terms[k].weight = v ?? 1; }, true), 'Its weight in the sum (negative: it counts against)', '1', `t${k}-weight`),
       remover('Remove this term', () => edit(i, l => { l.score.terms.splice(k, 1); if (!l.score.terms.length) delete l.score; }, true)));
   }
-  function ruleBlock(layer, i) {
+  // The fact view (engine-frag.wgsl views 14 to 17): pointing at or focusing a condition shows its fact over the map in gray, magenta where the
+  // condition holds, while "Stripes where the layer under the pointer lies" is on; the block's legend then gives the fact's range, a histogram
+  // of the map in view across it (from the view's own pixels, host.factSample) with the condition's limits marked, and the share that holds it.
+  // What the legend shows: the layer (key) and its condition k, and its contents (a function, so a rebuilt row gets fresh elements). A rebuild of
+  // the list (a material measured, a World setting changed) keeps it: the new row's legend shows it again (showFact, called by build).
+  let sampling = 0, factShown = null;
+  const showFact = () => {
+    // A rebuild drops the focus from the row (its focusout clears the map's preview): the fact view is asked for again (a no-op when it is on).
+    if (factShown) host.preview(factShown.row, factShown.k);
+    for (const l of list.querySelectorAll('.surface-fact-view')) {
+      const mine = factShown && l.closest('.surface-layer')?.dataset.key === factShown.key;
+      l.hidden = !mine; if (mine) l.replaceChildren(...factShown.parts());
+    }
+  };
+  function factView(term, k, layer, layerRow) {
+    const key = layerKey(layer), fact = layer.score ? layer.score.terms[k]?.fact : layer.where?.[k]?.fact, drawn = layer.score ? null : spreadRule(layer).where[k];
+    const on = () => {
+      if (!$('surface-show').checked || layerRow == null || !fact) return;
+      host.preview(layerRow, k);
+      const ticket = ++sampling, [lo, hi] = SURFACE_FACT_RANGE[fact], holds = layer.score ? 'the score passes' : 'this condition holds';
+      const range = `On the map: ${factName(fact)} in gray, dark at ${fmt(lo)} to light at ${fmt(hi)}`;
+      const late = () => ['rockShare', 'debrisShare', 'sandShare'].includes(fact) ? [el('p', {className: 'small', textContent: 'The map shows its final share; a layer drawn before that share is complete saw less.'})] : [];
+      factShown = {key, k, row: layerRow, parts: () => [el('p', {className: 'small', textContent: `${range}; magenta where ${holds}. Reading the view once the map has finished drawing…`}), ...late()]};
+      showFact();
+      host.factSample?.().then(read => {
+        if (ticket !== sampling) return;
+        factShown = {key, k, row: layerRow, parts: () => [el('p', {className: 'small', textContent: read ? `${range}; magenta where ${holds}: ${percent(read.holds / read.total)} of the map in view.` : `${range}. The view could not be read for a histogram.`}),
+          ...(read ? [histogram(read.levels, lo, hi, drawn)] : []), ...late()]};
+        showFact();
+      });
+    };
+    const off = event => {
+      if (term.contains(event?.relatedTarget)) return;
+      sampling++; if (factShown?.key === key && factShown.k === k) { factShown = null; showFact(); }
+      if ($('surface-show').checked && layerRow != null) host.preview(layerRow);
+    };
+    term.addEventListener('pointerenter', on); term.addEventListener('focusin', event => { if (!term.contains(event.relatedTarget)) on(); });
+    term.addEventListener('pointerleave', event => { if (!term.contains(document.activeElement)) off(event); }); term.addEventListener('focusout', off);
+  }
+  // A histogram of the fact over the map in view (the green levels' counts; green across SURFACE_FACT_GRAY spans [lo, hi]) in 48 bars, the
+  // condition's limits shaded.
+  function histogram(levels, lo, hi, drawn) {
+    const W = 240, H = 40, BARS = 48, c = el('canvas', {width: W, height: H, className: 'surface-histogram', title: `How much of the map in view has each value, ${fmt(lo)} to ${fmt(hi)}`});
+    const g = c.getContext('2d'), bars = new Array(BARS).fill(0);
+    const [g0, g1] = SURFACE_FACT_GRAY.map(v => v * 255);
+    levels.forEach((n, v) => { bars[Math.max(0, Math.min(BARS - 1, Math.floor((v - g0) / (g1 - g0) * BARS)))] += n; });
+    const top = Math.max(...bars, 1), x = v => (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * W;
+    if (drawn) { g.fillStyle = 'rgba(230, 60, 220, .28)'; const a = drawn.from != null ? x(drawn.from) : 0, b = drawn.to != null ? x(drawn.to) : W; g.fillRect(a, 0, Math.max(1, b - a), H); }
+    g.fillStyle = '#d8d8d8';
+    bars.forEach((n, k) => { const h = n ? Math.max(1, Math.sqrt(n / top) * (H - 2)) : 0; g.fillRect(k * W / BARS + .5, H - h, W / BARS - 1, h); });
+    return el('div', {className: 'surface-histogram-row'}, el('span', {className: 'small', textContent: fmt(lo)}), c, el('span', {className: 'small', textContent: fmt(hi)}));
+  }
+  function ruleBlock(layer, i, layerRow) {
     const kind = ruleKind(layer), block = el('div', {className: 'surface-rule'});
     const select = el('select', {title: 'Where the layer may show', id: uid('rule')},
       el('option', {value: 'none', textContent: 'Everywhere', selected: kind === 'none'}),
@@ -218,19 +284,27 @@ export function mountSurfacePanel(host) {
       el('option', {value: 'score', textContent: 'Where a score passes (a weighted sum)', selected: kind === 'score'}));
     select.onchange = () => edit(i, l => switchRule(l, select.value), true);
     block.append(el('label', {className: 'surface-number surface-rule-kind'}, el('span', {textContent: 'Shows'}), select));
-    if (kind === 'where') layer.where.forEach((w, k) => block.append(windowRow(i, k, w)));
+    const drawn = spreadRule(layer), legend = el('div', {className: 'surface-fact-view', hidden: true});
+    if (kind === 'where') layer.where.forEach((w, k) => { const term = windowRow(i, k, w, drawn.where[k]); factView(term, k, layer, layerRow); block.append(term); });
     if (kind === 'score') {
-      layer.score.terms.forEach((t, k) => block.append(termRow(i, k, t)));
+      layer.score.terms.forEach((t, k) => { const term = termRow(i, k, t); factView(term, k, layer, layerRow); block.append(term); });
       block.append(el('div', {className: 'surface-term'}, el('span', {className: 'small', textContent: 'The sum, with the edge noise, passes'}),
         number('at', layer.score.from ?? .5, v => edit(i, l => { l.score.from = v ?? .5; }, true), 'The sum it shows from', '.5', 'score-at'),
-        number('fade', layer.score.fade ?? .05, v => edit(i, l => { l.score.fade = Math.max(v ?? .05, .0001); }, true), 'How gradually it starts', '', 'score-fade')));
+        number('fade', layer.score.fade ?? .05, v => edit(i, l => { l.score.fade = Math.max(v ?? .05, .0001); }, true), 'How gradually it starts', '', 'score-fade'),
+        ...(drawn.score.from !== (layer.score.from ?? .5) ? [el('span', {className: 'small surface-spread-now', textContent: `With Spread: ${fmt(drawn.score.from)}`})] : [])));
     }
+    // Spread: every limit of the rule moved together (sculpt-material-model.js spreadRule), so one slider widens or narrows where the layer may
+    // show; the conditions keep their own numbers. Coverage beside it is how much of that area it covers, not how far it reaches.
+    if (kind !== 'none') block.append(slider('Spread', layer.spread ?? 0, -1, 1, .01, (v, c) => edit(i, l => { if (v) l.spread = v; else delete l.spread; }, c),
+      'Moves every limit of its rule together: right widens where it may show, left narrows it; the conditions keep their own numbers',
+      v => (v > 0 ? '+' : '') + fmt(v)));
     const terms = kind === 'where' ? layer.where.length : kind === 'score' ? layer.score.terms.length : 0;
     if (kind !== 'none' && terms < SURFACE_RULE_TERMS) {
       const add = el('button', {type: 'button', textContent: kind === 'where' ? '+ Condition' : '+ Term', title: 'Read another fact of the site'});
       add.onclick = () => edit(i, l => { if (kind === 'where') l.where.push({fact: 'slope', from: .5, fade: .1}); else l.score.terms.push({fact: 'slope', weight: 1}); }, true);
       block.append(add);
     }
+    block.append(legend);
     return block;
   }
   function materialSelect(layer, i) {
@@ -323,11 +397,7 @@ export function mountSurfacePanel(host) {
         pick.onchange = () => { picking = false; host.recolor(layer, rgb(), true); build(); };
         body.append(el('label', {className: 'surface-number surface-wide'}, el('span', {textContent: 'Color'}), pick));
       }
-      if (builtin && BUILTIN_SETTINGS[layer.builtin]) {
-        const b = el('button', {type: 'button', className: 'surface-wide link', textContent: 'Its strength and height: Built-in settings below'}); b.onclick = () => host.settings(BUILTIN_SETTINGS[layer.builtin]);
-        body.append(b);
-        const note = host.settingNote(BUILTIN_SETTINGS[layer.builtin]); if (note) body.append(el('p', {className: 'small surface-wide', textContent: note}));
-      }
+      if (builtin) { const placedBy = placedByBlock(layer); if (placedBy) body.append(placedBy); }
       if (fixed) body.append(el('p', {className: 'small surface-wide', textContent: 'Its settings place it: it also sets the ground’s relief and caps the beds, so it takes no rule or edge here.'}));
       else body.append(
         slider('Edge width', edge.width ?? 1, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, width: v}; }, c), '1 blends into what is below; near 0 each pixel is one or the other'),
@@ -337,15 +407,33 @@ export function mountSurfacePanel(host) {
       if (!builtin && !layer.where?.length && !layer.score && (layer.amount ?? 1) >= 1) body.append(el('p', {className: 'small', textContent: 'At full Coverage everywhere it has no edge, so Height contrast does nothing: give it a rule or a Coverage under 1.'}));
       if (material && !material.height && (edge.height ?? 0) > 0) body.append(el('p', {className: 'small', textContent: 'This material has no art height, so Height contrast only lets a ground with height push it back: choose one with height (a rock material, for one) for blocks that stand out.'}));
       if (!builtin) body.append(plantsBlock(layer, i));
-      if (!fixed) body.append(ruleBlock(layer, i));
+      if (!fixed) body.append(ruleBlock(layer, i, layerRows[i]));
       item.append(body);
     }
     // Chrome has no onfocusin/onfocusout properties: the focus events are listened for.
-    const preview = () => host.preview($('surface-show').checked ? layerRows[i] : -1);
-    item.onpointerenter = preview; item.addEventListener('focusin', preview);
+    // While one of its conditions shows its fact (factView), the row leaves the map to it: a rebuild that gives the focus back must not undo it.
+    const preview = () => { if (factShown?.key !== key) host.preview($('surface-show').checked ? layerRows[i] : -1); };
+    item.onpointerenter = preview; item.addEventListener('focusin', event => { if (!event.target.closest?.('.surface-term')) preview(); });   // a condition shows its fact (factView)
     item.onpointerleave = () => { if (!item.contains(document.activeElement)) host.preview(-1); };
     item.addEventListener('focusout', event => { if (!item.contains(event.relatedTarget)) host.preview(-1); });
     return item;
+  }
+  // A built-in's own placement (BUILTIN_PLACED_BY): each World setting with its value, and a door to it (its section and tab opened, the focus
+  // on it). A rock type's setting shows the world's rock and says the rock types set their own. Null when the panel can read none of them.
+  function placedByBlock(layer) {
+    const items = (BUILTIN_PLACED_BY[layer.builtin] ?? []).map(key => [key, host.control?.(key)]).filter(([, c]) => c);
+    if (!items.length) return null;
+    const rows = items.map(([key, c]) => {
+      const value = Number(c.own ?? c.value), where = host.place?.({control: key});
+      const line = el('li', {className: 'surface-line'}, el('span', {textContent: `${c.name ?? c.label}: ${Number.isFinite(value) ? fmt(value) : '–'}${c.rock ? ' (the world’s rock)' : ''}`}));
+      if (where) { const b = el('button', {type: 'button', className: 'link surface-go', id: uid(`placed-${key}`), textContent: where + ' ›', title: 'Show this setting'}); b.onclick = () => host.open({control: key}); line.append(b); }
+      return line;
+    });
+    // Why a setting is unavailable, once for settings that share the reason (Highland ground's three wait on one material).
+    const notes = [...new Set(items.map(([, c]) => c.note).filter(Boolean))];
+    if (items.some(([, c]) => c.rock)) notes.push('Rock types set their own rock settings in Rock types; the values here are the world’s rock.');
+    return el('div', {className: 'surface-wide surface-placed'}, el('p', {className: 'small', textContent: 'Where it lies is set by:'}), el('ul', {className: 'surface-placed-list'}, ...rows),
+      ...notes.map(text => el('p', {className: 'small', textContent: text})));
   }
   // A material layer's plants (sculpt-material-model.js PLANT_KINDS): one kind, grown where the layer shows, as dense as its Plants amount.
   // The bake places them (engine-bake.wgsl plantMask) and knows only some facts: a rule that reads another grows them as if it were 0.
@@ -366,6 +454,9 @@ export function mountSurfacePanel(host) {
   // Each layer's section and reasons, as the last build placed them (sync rebuilds only when the world has moved one).
   let placedText = '';
   const placeAll = layers => layers.map(l => layerSection(l, facts));
+  // What a rebuild would change: each layer's section and reasons, and the values the open built-in rows list (placedByBlock), so a World setting
+  // changed through a door shows its new value when the artist comes back.
+  const shownState = layers => JSON.stringify([placeAll(layers), [...open].map(key => (BUILTIN_PLACED_BY[key] ?? []).map(k => { const c = host.control?.(k); return c ? c.own ?? c.value : null; }))]);
   // `reveal`: a layer whose section opens so its row shows (a new layer, a layer opened from the inspector). The focused control keeps the
   // focus across the rebuild (by its id, or a slider by its range's), and a section that receives it opens.
   let revealNext = null;   // a layer the next build reveals (one just added)
@@ -379,7 +470,7 @@ export function mountSurfacePanel(host) {
     let layerRows = [];
     try { layerRows = surfaceRows(layers).layerRows; } catch (_) {}
     const placed = placeAll(layers);
-    placedText = JSON.stringify(placed);
+    placedText = shownState(layers);
     // Shown top first (the topmost layer first), as the map stacks them: the last stage's last layer first.
     const order = layers.map((l, i) => i).sort((a, b) => stageOf(layers[b]) - stageOf(layers[a]) || b - a);
     for (const section of SECTIONS) {
@@ -392,6 +483,7 @@ export function mountSurfacePanel(host) {
     const unshown = layers.filter(l => !shown(layerKey(l))).length;
     $('surface-view').hidden = !unshown;
     $('surface-view-text').textContent = solo ? `Showing “${nameOf(layers.find(l => layerKey(l) === solo))}” alone.` : `${unshown} hidden while you design.`;
+    showFact();   // a condition's legend survives the rebuild
     const back = scrub ? list.querySelector(`.scrub[data-source="${CSS.escape(scrub)}"]`) : focused ? $(focused) : null;
     const shownRow = reveal != null ? list.querySelector(`[data-key="${CSS.escape(reveal)}"]`) : null;
     let moved = false;
@@ -400,7 +492,7 @@ export function mountSurfacePanel(host) {
     if (moved) back.closest('.surface-layer')?.scrollIntoView({block: 'nearest'});   // its row left for a folded section: follow it
   }
   // After a World setting, a rock type in use or a role material changed: rebuild if a layer has changed section or reason.
-  const sync = () => { if (!editing && !picking && JSON.stringify(placeAll(host.surface())) !== placedText) build(); };
+  const sync = () => { if (!editing && !picking && shownState(host.surface()) !== placedText) build(); };
   $('surface-show-all').onclick = () => { hidden.clear(); solo = null; build(); sendView(); };
   // Add a layer: a small gallery of the presets (one tile each: its material's swatch, or a plant mark for a layer that grows plants only, and
   // its name), opened in place by its button; Escape folds it back (sculpt-ui.js closeTop presses the button). Choosing one adds the layer on

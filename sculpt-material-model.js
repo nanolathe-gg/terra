@@ -84,6 +84,36 @@ export const SURFACE_STAGE_NAMES = ['ground', 'slope', 'land', 'crown', 'band', 
 // Facts a rule reads (engine-frag.wgsl surfaceFacts), in their order there. The shares exist from their own stage on.
 export const SURFACE_FACTS = ['slope', 'aboveSea', 'abovePlain', 'wear', 'deposit', 'wetness', 'moisture', 'soilDepth', 'light', 'top', 'convexity',
   'rockShare', 'debrisShare', 'sandShare'];
+// Each fact's range, [low, high] (SURFACE_FACTS order as keys): the Surface section's fact view draws a fact in gray across it, and its histogram
+// spans it. engine-common.wgsl SURFACE_FACT_LO and SURFACE_FACT_HI hold the same numbers.
+export const SURFACE_FACT_RANGE = {slope: [0, 3], aboveSea: [-20, 200], abovePlain: [-60, 200], wear: [0, 1], deposit: [0, 1], wetness: [0, 1], moisture: [0, 1],
+  soilDepth: [0, 1], light: [0, 1.6], top: [-1, 1], convexity: [-1, 1], rockShare: [0, 1], debrisShare: [0, 1], sandShare: [0, 1]};
+// The fact view's gray at a range's low and high ends (engine-common.wgsl SURFACE_FACT_GRAY_LO and _HI): the histogram reads a pixel's green
+// across them. Black is the canvas outside the map.
+export const SURFACE_FACT_GRAY = [.1, .85];
+// Spread (a layer's `spread`, -1 to 1, 0 its rule as written): one control that moves every limit of its rule together, so "more of this layer"
+// widens where it may show without editing each condition. A window's from and to move apart (Spread up) or together (down) by Spread times
+// the fact's step below; a score's threshold falls (up) or rises (down) by Spread times its terms' mean weighted step. A window never inverts:
+// narrowed past its middle, from and to meet there. The steps are implementation constants: about a quarter of each fact's useful range.
+export const SURFACE_SPREAD_STEP = {slope: .5, aboveSea: 20, abovePlain: 20, wear: .25, deposit: .25, wetness: .25, moisture: .25, soilDepth: .25, light: .3,
+  top: .5, convexity: .5, rockShare: .25, debrisShare: .25, sandShare: .25};
+// The rule a layer draws with, Spread applied: {where} or {score} (fresh objects), or {} for none. surfaceRows, ruleHere and the panel's words
+// all read it, so the draw, the inspector and the row agree.
+export function spreadRule(layer) {
+  const s = Math.max(-1, Math.min(1, Number(layer?.spread) || 0)), num = (v, fallback) => v != null && Number.isFinite(Number(v)) ? Number(v) : fallback;
+  if (layer?.score) {
+    const terms = layer.score.terms || [], move = terms.length ? s * terms.reduce((sum, t) => sum + Math.abs(num(t.weight, 1)) * (SURFACE_SPREAD_STEP[t.fact] ?? 0), 0) / terms.length : 0;
+    return {score: {...layer.score, from: num(layer.score.from, .5) - move, terms: terms.map(t => ({...t}))}};
+  }
+  if (layer?.where?.length) return {where: layer.where.map(w => {
+    const step = s * (SURFACE_SPREAD_STEP[w.fact] ?? 0); let from = num(w.from, null), to = num(w.to, null);
+    if (from != null) from -= step;
+    if (to != null) to += step;
+    if (from != null && to != null && from > to) from = to = (from + to) / 2;
+    const out = {...w}; if (from != null) out.from = from; if (to != null) out.to = to; return out;
+  })};
+  return {};
+}
 // A layer's salt for its edge noise, from its id (or its built-in), so adding a layer does not reshuffle another's speckle.
 const layerSalt = key => { let h = 17; for (const c of String(key)) h = (h * 31 + c.charCodeAt(0)) % 9973; return 17 + h; };
 export const layerKey = layer => layer?.id ?? layer?.builtin ?? '';
@@ -121,10 +151,10 @@ export function surfaceRows(surface, slotOf = () => -1, hidden = null) {
       const k = SURFACE_FACTS.indexOf(name); if (k < 0) throw Error(`Surface layer ${i + 1}: unknown fact "${name}".`); return k;
     };
     let rule = [];
-    const fixed = !material && SURFACE_FIXED.includes(layer.builtin);
+    const fixed = !material && SURFACE_FIXED.includes(layer.builtin), {where, score} = fixed ? {} : spreadRule(layer);
     if (fixed) { /* no rule, edge or Amount: its World settings place it */ }
-    else if (layer.score) rule = [[2, number(layer.score.from, .5), Math.max(number(layer.score.fade, .05), 1e-4), 0], ...(layer.score.terms || []).slice(0, SURFACE_RULE_TERMS).map(t => [fact(t.fact), number(t.weight, 1), 0, 0])];
-    else if (layer.where?.length) rule = [[1, 0, 0, 0], ...layer.where.slice(0, SURFACE_RULE_TERMS).map(w => [fact(w.fact), number(w.from, -1e9), number(w.to, 1e9), Math.max(number(w.fade, .05), 1e-4)])];
+    else if (score) rule = [[2, number(score.from, .5), Math.max(number(score.fade, .05), 1e-4), 0], ...(score.terms || []).slice(0, SURFACE_RULE_TERMS).map(t => [fact(t.fact), number(t.weight, 1), 0, 0])];
+    else if (where?.length) rule = [[1, 0, 0, 0], ...where.slice(0, SURFACE_RULE_TERMS).map(w => [fact(w.fact), number(w.from, -1e9), number(w.to, 1e9), Math.max(number(w.fade, .05), 1e-4)])];
     // Height contrast (edge.height, a layer that draws a material): the rule head's w; a layer without a rule gets an empty windows rule.
     const height = Math.max(0, Math.min(1, number(edge.height, 0)));
     if (height > 0 && draws) { if (!rule.length) rule = [[1, 0, 0, 0]]; rule[0][3] = height; }
@@ -157,15 +187,16 @@ const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a
 const LATE_FACTS = ['rockShare', 'debrisShare', 'sandShare'];
 export function ruleHere(layer, facts) {
   const at = name => Number(facts?.[SURFACE_FACTS.indexOf(name)]), num = (v, fallback) => Number.isFinite(Number(v)) ? Number(v) : fallback;
-  if (layer?.score) {
-    const from = num(layer.score.from, .5), fade = Math.max(num(layer.score.fade, .05), 1e-4);
-    const terms = (layer.score.terms || []).slice(0, SURFACE_RULE_TERMS).filter(t => SURFACE_FACTS.includes(t.fact))
+  const {where, score: rule} = spreadRule(layer);   // Spread applied, as the draw has it
+  if (rule) {
+    const from = num(rule.from, .5), fade = Math.max(num(rule.fade, .05), 1e-4);
+    const terms = (rule.terms || []).slice(0, SURFACE_RULE_TERMS).filter(t => SURFACE_FACTS.includes(t.fact))
       .map(t => ({fact: t.fact, weight: num(t.weight, 1), value: at(t.fact), late: LATE_FACTS.includes(t.fact)}));
     const score = terms.reduce((sum, t) => sum + t.weight * t.value, 0);
     return {kind: 'score', score, from, fade, terms, share: smooth(from - fade, from + fade, score)};
   }
-  if (layer?.where?.length) {
-    const terms = layer.where.slice(0, SURFACE_RULE_TERMS).filter(w => SURFACE_FACTS.includes(w.fact)).map(w => {
+  if (where?.length) {
+    const terms = where.slice(0, SURFACE_RULE_TERMS).filter(w => SURFACE_FACTS.includes(w.fact)).map(w => {
       const from = num(w.from, -1e9), to = num(w.to, 1e9), fade = Math.max(num(w.fade, .05), 1e-4), value = at(w.fact);
       return {fact: w.fact, from, to, fade, value, late: LATE_FACTS.includes(w.fact), share: smooth(from - fade, from + fade, value) * (1 - smooth(to - fade, to + fade, value))};
     });
@@ -186,7 +217,8 @@ export function copySurface(value) {
     const edge = l.edge && typeof l.edge === 'object' ? clean({width: finite(l.edge.width), noise: finite(l.edge.noise), noiseSize: finite(l.edge.noiseSize), height: finite(l.edge.height)}) : undefined;
     const where = Array.isArray(l.where) ? l.where.slice(0, SURFACE_RULE_TERMS).map(w => clean({fact: String(w?.fact), from: finite(w?.from), to: finite(w?.to), fade: finite(w?.fade)})) : undefined;
     const score = l.score && typeof l.score === 'object' ? clean({from: finite(l.score.from), fade: finite(l.score.fade), terms: (Array.isArray(l.score.terms) ? l.score.terms : []).slice(0, SURFACE_RULE_TERMS).map(t => clean({fact: String(t?.fact), weight: finite(t?.weight)}))}) : undefined;
-    const base = clean({name, amount: finite(l.amount), edge, ...(where?.length ? {where} : {}), ...(score ? {score} : {})});
+    const spread = finite(l.spread) ? Math.max(-1, Math.min(1, finite(l.spread))) : undefined;
+    const base = clean({name, amount: finite(l.amount), edge, ...(where?.length ? {where} : {}), ...(score ? {score} : {}), spread});
     if (l.builtin == null) {
       const plants = l.plants && typeof l.plants === 'object' && PLANT_KINDS.includes(l.plants.kind) && finite(l.plants.amount) > 0 ? {kind: l.plants.kind, amount: Math.min(1, finite(l.plants.amount))} : undefined;
       if ((typeof l.material !== 'string' && !(l.material == null && plants)) || !SURFACE_ID.test(String(l.id)) || ids.has(l.id) || Object.hasOwn(SURFACE_BUILTINS, l.id)) throw Error(`Surface layer ${i + 1} needs a material or plants, and an id of its own.`);
@@ -196,7 +228,7 @@ export function copySurface(value) {
     // A built-in that draws a material binds by its built-in's name, so one built-in a list draws a material at most once. A built-in keeps
     // only the fields it has: Highland ground and Base band no Amount, Highland ground no rule or edge (SURFACE_OWN_AMOUNT, SURFACE_FIXED).
     const builtin = String(l.builtin), own = clean({...base, amount: SURFACE_OWN_AMOUNT.includes(builtin) ? undefined : base.amount});
-    if (SURFACE_FIXED.includes(builtin)) { delete own.where; delete own.score; delete own.edge; }
+    if (SURFACE_FIXED.includes(builtin)) { delete own.where; delete own.score; delete own.edge; delete own.spread; }
     if (l.material != null) {
       if (typeof l.material !== 'string' || ids.has(builtin)) throw Error(`Surface layer ${i + 1}: a built-in draws one material, once in a list.`);
       if (!SURFACE_DRAWABLE.includes(builtin)) throw Error(`Surface layer ${i + 1}: ${builtin} draws a material set in the Materials panel or Rock types, not a material of its own.`);

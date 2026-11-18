@@ -396,6 +396,14 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .surface-inspect{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0}
 .surface-inspect-result{border:1px solid var(--line,#3a3a3a);border-radius:6px;padding:6px;margin:4px 0;display:flex;flex-direction:column;gap:4px}
 .surface-inspect-result p{margin:0}
+.surface-placed p{margin:2px 0}
+.surface-placed-list{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:2px}
+.surface-placed-list li{display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.surface-placed button.link{border:0;background:none;padding:0;color:var(--accent);text-decoration:underline;cursor:pointer;font-size:inherit;white-space:nowrap}
+.surface-fact-view{margin:4px 0 2px}
+.surface-fact-view p{margin:2px 0}
+.surface-histogram-row{display:flex;align-items:flex-end;gap:4px}
+.surface-histogram{background:#111;border:1px solid #444;width:240px;height:40px;image-rendering:pixelated}
 .surface-inspect-layers{margin:0;padding-left:1.4em;display:flex;flex-direction:column;gap:2px}
 .surface-inspect-layers li{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .surface-inspect-result button.link{border:0;background:none;padding:0;text-decoration:underline;cursor:pointer;color:inherit}
