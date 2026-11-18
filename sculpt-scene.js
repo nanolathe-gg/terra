@@ -374,7 +374,7 @@ export function pagedTime({config,renderer,size,spacing,material}) {
     const erosion=await erosionOf(renderer);
     const r=await erosion.runGpu({...p,planes:win.planes,masks:win.masks,rateMask:MASK_KEYS.indexOf('ovErosion'),grid:win.grid,size,spacing,seaLevel:config.seaLevel,ox:win.ox,oy:win.oy,stale:win.stale});
     // The window's eroded height (plane 1 of the pass's weather buffer) makes the material field; the page keeps its core of it.
-    if (material) r.field=await erosion.materialField(materialRequest(config,material,{heightBuffer:r.weather,heightOffset:win.grid*win.grid,grid:win.grid,size,ox:win.ox,oy:win.oy}));
+    if (material) r.field=await erosion.materialField(materialRequest(config,material,{heightBuffer:r.weather,heightOffset:win.grid*win.grid,grid:win.grid,size,spacing,ox:win.ox,oy:win.oy}));
     return r;
   }};
 }
@@ -413,7 +413,7 @@ export const drawOptions=(s,{clay=false,light='original'}={}) => ({clay,light,de
 // The material field's knobs, or null when Material weathering is 0 (sculpt-erosion.js materialField; `seed` is the refinement seed), and its
 // request over the Time pass's eroded height (heightBuffer, heightOffset cells in; ox, oy a page's first lattice cell).
 export const materialKnobs=(s,seed,transition) => s['material-weathering']/100>0?{depositSpread:s['deposit-spread']/100,seed,mineral:transition==='mineral'}:null;
-export const materialRequest=(config,material,{heightBuffer,heightOffset,grid,size,ox,oy}) => ({heightBuffer,heightOffset,grid,size,ox,oy,seaLevel:config.seaLevel,baseHeight:config.baseHeight,
+export const materialRequest=(config,material,{heightBuffer,heightOffset,grid,size,spacing,ox,oy}) => ({heightBuffer,heightOffset,grid,size,spacing,ox,oy,seaLevel:config.seaLevel,baseHeight:config.baseHeight,
   seed:material.seed,depositSpread:material.depositSpread,profile:{...config.material,mineral:material.mineral}});
 // A world's colors for the renderer ([r, g, b], 0..1): the world's hex colors (null is off: the texture's own) and Shallow water's tone
 // (shallowTone, three shifts of the water material's mean, sculpt-knobs.js waterTone), ?sunColor=ffd9a8&skyColor=8fb0ff
