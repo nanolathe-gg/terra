@@ -173,8 +173,11 @@ export class GpuErosion {
       // also holds whatever else was queued ahead of it (tiles, another Time pass), so it only bounds the pass's own cost: the lowest cost an
       // iteration a million cells has shown (this.rate, per wet or dry pass, drifting up 2% a slice) sizes the batch, and a busy queue no
       // longer shrinks the slices into many more round trips. The first pass starts at one iteration. Slicing does not change the result.
-      const rateKey=rain!==0?'wet':'dry',mcells=n/1e6;this.rate??={};
-      const sized=()=>clamp(Math.floor(25/(this.rate[rateKey]*mcells)),1,256);
+      // The cells are the active tiles' (8 x 8 each), the steps' work: a window that is mostly sea or flat costs little, and timed against the
+      // whole window it would lower the rate for the next dense pass, which would then run whole in one slice. A pass with no active tile
+      // does no step work and teaches the rate nothing.
+      const rateKey=rain!==0?'wet':'dry',mcells=active*64/1e6;this.rate??={};
+      const sized=()=>mcells>0?clamp(Math.floor(25/(this.rate[rateKey]*mcells)),1,256):256;
       let batch=this.rate[rateKey]?sized():1;
       for(let it=0;it<age;){
         current();const count=Math.min(batch,age-it);
@@ -185,8 +188,8 @@ export class GpuErosion {
           step('thermalMain',forward);step('thermalMain',reverse);
         }
         pass.end();const wait=await submitSlice(encoder,count);it+=count;
-        const cost=Math.max(wait,.01)/(count*mcells),known=this.rate[rateKey];
-        this.rate[rateKey]=known?Math.min(cost,known*1.02):cost;batch=sized();
+        if(mcells>0){const cost=Math.max(wait,.01)/(count*mcells),known=this.rate[rateKey];this.rate[rateKey]=known?Math.min(cost,known*1.02):cost;}
+        batch=sized();
         await yieldWork();
       }
       encoder=device.createCommandEncoder({label:'erosion output'});
