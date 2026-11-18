@@ -97,8 +97,10 @@ export class VoxelSurface {
     const origin=region.screenOrigin,width=r.canvas.width*scale,height=r.canvas.height*scale;
     // Voxels at least 2 px at every level: the rock finer than that is drawn per pixel at the hit (engine-volume.wgsl rockDetail).
     const step=2**Math.max(1,Math.floor(Math.log2(r.voxelScale)));
+    // The bounds are sea-relative, like the shader's heights (uSea is 0, uBase the base height above the sea) and like top below: the
+    // authored range measured from the sea, so a higher sea leaves the room above it as it was.
     const h=r.config.heightBounds??[-90,300],extra=Math.max(64,region.reach.projection[1]*2+r.config.baseHeight-h[1]);
-    const low=h[0]-extra-r.config.seaLevel,high=h[1]+extra-r.config.seaLevel;
+    const low=h[0]-extra,high=h[1]+extra;
     // The rays start from one height, the authored maximum with 64 units for the relief and the 40 the bricks reach above it: not from the
     // relief allowance's (high), which every relief term moves. The march can step past thin rock, so a ray from another start finds
     // another face, and a term that only moved the allowance re-rolled a tenth of a picture's steep faces (green-2 10%, Bed lumps .6 to 2).
