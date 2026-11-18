@@ -365,7 +365,6 @@ struct Uniforms {
     ringWobble: f32,      // px of waver in each copy's outline: lobes with inward cusps, the scalloped look (0: smooth)
     ringLobe: f32,        // px across one lobe
     ringFill: f32,        // the pale tint where every copy overlaps; each copy adds its share, so the skirt steps lighter outward (0: none)
-    ringPatch: f32,       // how far the stack's reach varies along the outline, from a few copies to all of them (0: every copy everywhere)
     ringPatchSize: f32,   // px over which that reach varies
     // G6 (Ice blocks and mesas, retail ice-3 and Polar Range).
     iceSoft: f32,         // raised ice is lit by its height blurred over ~13 px, so crests are rounded and faces smooth (0: the full relief lights it, as before)

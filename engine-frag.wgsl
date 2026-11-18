@@ -1084,11 +1084,11 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
     let far = sqrt(-log(outer));
     let tone = mix(vec3f(0.50, 0.16, 0.28), vec3f(0.30, 0.12, 0.13), smoothstep(0.02, 0.3, field));
     // Each copy tints what it covers (ringFill: the tint where every copy overlaps, so the skirt steps
-    // lighter outward) and the reach of the stack varies along the outline (ringPatch).
+    // lighter outward) and the reach of the stack varies along the outline.
     let fillStep = 1.0 - pow(1.0 - clamp(u.ringFill, 0.0, 0.95), 1.0 / f32(count));
     let fillTone = vec3f(0.70, 0.70, 0.50);
     let span = (shelfNoise(p / max(u.ringPatchSize, 20.0) + 53.0) * 0.65 + shelfNoise(p / (0.37 * max(u.ringPatchSize, 20.0)) + 11.0) * 0.35);
-    let reach = mix(2.0, smoothstep(0.3, 0.7, span) * 1.05, u.ringPatch);
+    let reach = mix(2.0, smoothstep(0.3, 0.7, span) * 1.05, 0.8);
     var rgb = base;
     for (var n = 0; n < count; n++) {
         let j = f32(count - 1 - n);

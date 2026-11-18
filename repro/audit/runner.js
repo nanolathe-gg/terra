@@ -70,7 +70,7 @@ function worldGates(group,key){
  if(/^moonCup/.test(key))x.moonCups=.7;
  if(/^moonRib/.test(key))x.moonRibs=.7;
  if(/^moonFold/.test(key))x.moonFolds=.7;
- if(/^ring/.test(key))Object.assign(x,{ringContrast:.8,ringShift:8,ringPatch:.6});
+ if(/^ring/.test(key))Object.assign(x,{ringContrast:.8,ringShift:8});
  return x;
 }
 $('world').onclick=()=>run('World visual sensitivity',async()=>{
