@@ -1,8 +1,10 @@
 # Retail round: one world per card, closer to retail
 
-**Parked on 2026-11-09 (AGENTS.md rule 10).** The owner put realistic
-terrain first and will return to retail later. Start no retail round until
-then. This page, the scenes and `repro/retail.sh` are kept for that return.
+**Superseded on 2026-11-18 by [the retail match harness](retail-match/README.md)**
+(`repro/match.sh`), which covers materials, surface layers and rock types,
+scores each window by terrain class with 1x crops, and logs every trial.
+This page is kept for its history. Parts of it name files and rules that no
+longer exist (`sculpt.py`, the 5% rule).
 
 A round of cards, one per world, each run by a small agent that tries
 settings against the world's retail windows, keeps what brings all of them
