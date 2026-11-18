@@ -1668,7 +1668,8 @@ export function createPagedFields(opts) {
         else{dropWeather(pg);pg.stale=false;}
         continue;
       }
-      if ((pg.weather||pg.weatherJob) && hits(windowRect(pg), {x0: r.x0 - 6, y0: r.y0 - 6, x1: r.x1 + 6, y1: r.y1 + 6})) { if(pg.weather)pg.weather.invalidRect=invalidateRefinement(pg.weather.invalidRect,r,worldGrid);pg.stale = true; pg.staleSeq++; pendingStale = pendingStale ? joinWorld(pendingStale, worldRect(r)) : worldRect(r); }
+      // Stale where the Time pass reads: weatherWindow (windowRect moved inside the world, reaching past the apron on the inner side at an edge).
+      if ((pg.weather||pg.weatherJob) && hits(weatherWindow(pg), {x0: r.x0 - 6, y0: r.y0 - 6, x1: r.x1 + 6, y1: r.y1 + 6})) { if(pg.weather)pg.weather.invalidRect=invalidateRefinement(pg.weather.invalidRect,r,worldGrid);pg.stale = true; pg.staleSeq++; pendingStale = pendingStale ? joinWorld(pendingStale, worldRect(r)) : worldRect(r); }
       // The spill's stamp: the window the Time pass actually reads (windowRect moved inside the world).
       if (hits(grow(weatherWindow(pg), 6), r)) { pg.weatherSeq++; spill.drop(pg.key); }
       if (hits(bufRect(pg), r) && pg.target && engine) { late(pg, r); wantCpu(pg); }

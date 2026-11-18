@@ -132,3 +132,36 @@ test('the edits of a drag are evaluated once, at the next read, and give the byt
     assert.deepEqual(s.errors, []);
   } finally { for (const f of made) f.destroy(); s.dispose(); }
 });
+
+// A page at the map's edge runs Time over its window moved inside the map, so the window reaches past its apron on the inner side. An edit in that
+// band is in what the page's Time pass reads: the page is weathered again at the next read, with the bytes of fields made from the final nodes.
+test('an edit where an edge page\'s Time window reaches past its apron weathers that page again', async () => {
+  const headless = await import('./headless.mjs');
+  const s = await headless.openScene(scene, 'biome=green&mapX=4&mapY=4&scratch=1&gpuMB=512&heapMB=1536&gpuPages=force');
+  const made = [];
+  try {
+    const {fieldsModule, engine, renderer, config} = s;
+    let nodes = s.nodes.slice();
+    const common = {worldSize: s.worldSize, worldGrid: s.worldGrid, baseHeight: config.baseHeight, maskKeys: engine.MASK_KEYS, nodes: () => nodes, device: () => renderer.device, context: s.context, gesture: () => false};
+    const time = engine.pagedTime({config, renderer, size: s.worldSize, spacing: s.spacing, material: s.material});
+    const kept = fieldsModule.createPagedFields(common); made.push(kept);
+    kept.changed(); kept.setTime(time);
+    const {core, apron} = kept.pageInfo(), side = Math.min(s.worldGrid, core + 2 * apron);
+    const near = {x0: 0, y0: 0, x1: core - 1, y1: core - 1};
+    assert.equal((await pageBytes(kept, near)).runs, 1);
+    // Cells past the apron (core + apron, with the 12 cells an edit is grown by) and inside the window moved in (side cells from the edge).
+    const band = {x0: core + apron + 20, x1: side - 20};
+    assert(band.x1 - band.x0 >= 40, `the band is ${band.x1 - band.x0} cells wide`);
+    const mid = (band.x0 + band.x1) / 2 * s.spacing;
+    nodes = [...nodes, ...engine.sceneNodes(config, [['landform', [[mid - 20, 200], [mid + 20, 260]], {card: {diameter: 30, elevation: 120}}]], {ground: false, seed: s.seed, settings: s.settings})];
+    kept.changed({x0: band.x0, y0: 60, x1: band.x1, y1: 160});
+    const again = await pageBytes(kept, near);
+    assert.equal(again.runs, 1, 'the near page is weathered again');
+    const fresh = fieldsModule.createPagedFields(common); made.push(fresh);
+    fresh.changed(); fresh.setTime(time);
+    assert.deepEqual(again.bytes, (await pageBytes(fresh, near)).bytes, 'with the bytes of fresh fields');
+    for (const f of [kept, fresh, s.fields]) await f.coarseSettled();
+    for (const f of [kept, fresh]) await cpuCopiesIdle(f);
+    assert.deepEqual(s.errors, []);
+  } finally { for (const f of made) f.destroy(); s.dispose(); }
+});
