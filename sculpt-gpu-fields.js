@@ -1726,7 +1726,7 @@ export function createPagedFields(opts) {
       const W = new Float32Array(await readBuffer(d, set.W, 0, n * 8)), maps = await Promise.all(set.M.map(b => readBuffer(d, b, 0, n * 4).then(x => new Uint8Array(x))));
       set.destroy(); tmp.forEach(b => b.destroy()); return {W, maps, n};
     },
-    debugPages: () => [...pagesMap.values()].filter(p => p.weather).map(p => ({x0: p.x0, y0: p.y0, cw: p.cw, ch: p.ch, weather: p.weather.weather, maps: p.weather.maps, core: CORE})),
+    debugPages: () => [...pagesMap.values()].filter(p => p.weather).map(p => ({x0: p.x0, y0: p.y0, cw: p.cw, ch: p.ch, weather: p.weather.weather, maps: p.weather.maps, field: p.weather.field ?? null, core: CORE})),
     pageInfo: () => ({np, core: CORE, need: lastNeed, ring: RING, apron: APRON, side: SIDE}),
     destroy() { for (const pg of pagesMap.values()) { dropShape(pg); dropWeather(pg); } spill.clear(); for (const s of spilling) s.destroy(); staging?.destroy(); scratchT?.destroy(); engine?.destroy(); },
   };

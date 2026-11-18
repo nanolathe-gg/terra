@@ -242,9 +242,10 @@ export class GpuErosion {
   // The material field (engine-weather.wgsl mf*): arrival, soil, softened source and source a cell, as a GPU buffer of vec4f that the chunk feed
   // writes into gridTexture layer 1. It reads a height already on the GPU (the Time pass's eroded plane: `heightBuffer`, `heightOffset` cells in)
   // and never comes back to the CPU. {ox, oy} is the window's first lattice cell, so that pages of one map join. The caller owns the buffer.
-  async materialField({heightBuffer, heightOffset = 0, grid, size, ox = 0, oy = 0, seaLevel = 0, baseHeight = 24, seed = 1, depositSpread = .65, profile = {}}) {
+  // A window of a larger map passes the map's spacing, as runGpu's request does: `size` is then the map's, not the window's.
+  async materialField({heightBuffer, heightOffset = 0, grid, size, spacing: given, ox = 0, oy = 0, seaLevel = 0, baseHeight = 24, seed = 1, depositSpread = .65, profile = {}}) {
     await this.ready;
-    const {device} = this, n = grid * grid, spacing = (size - 1) / (grid - 1), spread = clamp(depositSpread, 0, 1);
+    const {device} = this, n = grid * grid, spacing = given ?? (size - 1) / (grid - 1), spread = clamp(depositSpread, 0, 1);
     if (!this.field) {
       const module = device.createShaderModule({label: 'engine-weather material field', code: this.renderer.timeSources.maps});
       const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
