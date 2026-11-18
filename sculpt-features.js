@@ -274,8 +274,11 @@ export async function mountMapFeatures(api) {
     select.replaceChildren(...set[placeKind].recipes.map(r => {const o=doc.createElement('option');o.value=r.id;o.textContent=r.name;return o;})); select.value=entry.id;
     const presets=$('feature-preset');
     if(presets.dataset.kind!==placeKind) { presets.replaceChildren(...featureCatalog(config,placeKind).map(p => {const o=doc.createElement('option');o.value=p.id;o.textContent=p.name;return o;})); presets.dataset.kind=placeKind; }
-    $('feature-add-recipe').disabled=!presets.options.length || set[placeKind].recipes.length>=MAX_RECIPES;
-    $('feature-duplicate-recipe').disabled=set[placeKind].recipes.length>=MAX_RECIPES;
+    // A control the panel disables says why (AGENTS.md rule 9).
+    const full=set[placeKind].recipes.length>=MAX_RECIPES,fullWhy=`A map holds at most ${MAX_RECIPES} styles of ${PLURALS[placeKind]??placeKind}.`;
+    $('feature-add-recipe').disabled=!presets.options.length || full;
+    $('feature-add-recipe').title=full?fullWhy:!presets.options.length?`This world has no starting styles for ${PLURALS[placeKind]??placeKind}.`:'';
+    $('feature-duplicate-recipe').disabled=full; $('feature-duplicate-recipe').title=full?fullWhy:'';
     const used=placements.some(p => p.kind===placeKind && recipeId(p.v)===entry.id);
     $('feature-remove-recipe').disabled=used || set[placeKind].recipes.length<=1;
     $('feature-remove-recipe').title=used?'Remove this style’s placed features first.':set[placeKind].recipes.length<=1?'Keep at least one style of each kind.':'';
@@ -402,6 +405,7 @@ export async function mountMapFeatures(api) {
       showNumericValue(metal);
     }
     $('feature-reroll').disabled=!list.some(p => variantList(p.kind).filter(v => v.recipe===recipeId(p.v)).length>1);
+    $('feature-reroll').title=$('feature-reroll').disabled?(list.length?'Each selected feature’s style has one variant: raise its Variants to re-roll it.':'Select a feature to re-roll it.'):'Swap for another variant of the same kind';
   }
   function selectionChanged() { refreshSelection(); doc.dispatchEvent(new Event('terraform-feature-mode')); api.schedule(); }
   function changed(text) { status(text); prune(); refreshSelection(); update(); api.change(); doc.dispatchEvent(new Event('terraform-feature-mode')); }

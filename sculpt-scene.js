@@ -221,7 +221,7 @@ export const SHAPE_FIELDS=[
   // Rock presets (B2): the rock this landform is made of, one of the map's presets (sculpt-rock-presets.js); -1, Rock beneath, keeps the rock that is
   // already there. Its choices are the map's presets (sculpt.js syncRockChoices).
   ['groundPreset','lf-ground','Ground',['landform','paint'],-1,MATERIAL_SLOTS-1,1,1,'The material this stroke lays down: the world’s ground or another of the map’s materials. Ground beneath leaves the previous surface alone.',[[-1,'Ground beneath']]],
-  ['rockPreset','lf-rock','Rock',['landform'],-1,15,1,1,'The rock this shape is made of, one of the map\'s rock presets (World pane, Rock & cliffs). Rock beneath keeps whatever rock is already there: the world\'s own, or an earlier shape\'s. The shape claims its rock wherever it moves the ground and a few pixels past that, where Time wears its edge, so a later shape wins where it overlaps an earlier one.',[[-1,'Rock beneath']]],
+  ['rockPreset','lf-rock','Rock',['landform'],-1,15,1,1,'The rock this shape is made of, one of the map\'s rock types (World › Rock types). Rock beneath keeps whatever rock is already there: the world\'s own, or an earlier shape\'s. The shape claims its rock wherever it moves the ground and a few pixels past that, where Time wears its edge, so a later shape wins where it overlaps an earlier one.',[[-1,'Rock beneath']]],
   // Local vegetation inside the shape (card C5 stage 2): a change about the world's own cover, 0 none.
   ['styleVegetation','style-vegetation','Local vegetation',['landform'],-100,100,5,100,'Grass and moss cover inside the shape, times 1 + this: below 0 more bare rock, above 0 more cover.'],
   // E10 (Lava): finger size; layer width variation; circle size of the circular layers.

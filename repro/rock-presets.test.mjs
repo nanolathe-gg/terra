@@ -225,7 +225,7 @@ test('a preset carries a stable key: the recipe a world ships it from, unique in
   // Saves and share links: the key travels; an old preset has none; two presets cannot share one; a bad key is refused.
   assert.deepEqual(copyRocks(JSON.parse(JSON.stringify(rocks))).map(r => r.key), ['soil', 'basalt', 'limestone']);
   assert.equal(copyRocks([{slot: 1, name: 'Old', knobs: {}}])[0].key, null);
-  assert.throws(() => copyRocks([{slot: 1, name: 'a', key: 'soil'}, {slot: 2, name: 'b', key: 'soil'}]), /one preset/);
+  assert.throws(() => copyRocks([{slot: 1, name: 'a', key: 'soil'}, {slot: 2, name: 'b', key: 'soil'}]), /one rock type/);
   assert.throws(() => copyRocks([{slot: 1, name: 'a', key: 'Soil Rock'}]), /key/);
   const {shareText, gzipText} = await import('../sculpt-share.js'), {gunzipSync} = await import('node:zlib');
   const back = JSON.parse(gunzipSync(await gzipText(shareText({version: 1, rocks, nodes: []}))).toString('utf8'));

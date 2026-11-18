@@ -139,6 +139,8 @@
     "bedContrast": 1,
     "hillLight": 1,
     "bedRelief": 1,
+    "bedCracks": 0,
+    "bedCrackSize": 36,
     "deepEdge": 0,
     "lumpRelief": 4,
     "groundEdge": 0,

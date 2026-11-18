@@ -165,19 +165,19 @@ export function rockByKey(rocks,key,worldKey=''){
 }
 const NAME_MAX=40,ROCK_FIELDS=['slot','name','key','knobs','column','colors','material','worldKey'],KEY=/^[a-z][a-z0-9_-]{0,39}$/;
 // A preset's key: null, or a short lowercase name ('soil', 'basalt').
-function checkKey(key){if(key==null)return null;if(typeof key!=='string'||!KEY.test(key))throw Error('A rock preset\'s key is a short lowercase name, such as soil or basalt.');return key;}
+function checkKey(key){if(key==null)return null;if(typeof key!=='string'||!KEY.test(key))throw Error('A rock type\'s key is a short lowercase name, such as soil or basalt.');return key;}
 // A key for a preset made now: `key`, unless another preset of the map carries it (keys name one preset each).
 const freeKey=(rocks,key)=>key&&!rocks.some(r=>r.key===key)?key:null;
-function checkName(name){if(typeof name!=='string'||!name.trim()||name.trim().length>NAME_MAX)throw Error(`A rock preset needs a name of 1 to ${NAME_MAX} characters.`);return name.trim();}
+function checkName(name){if(typeof name!=='string'||!name.trim()||name.trim().length>NAME_MAX)throw Error(`A rock type needs a name of 1 to ${NAME_MAX} characters.`);return name.trim();}
 // A preset's column: its sections alone (the beds; colors, bands and wander stay the world's), checked as a map's column is.
-function checkColumn(column){if(column==null)return null;const c=copyColumn(column);if(!c.sections)throw Error('A rock preset\'s column needs its sections.');return {sections:c.sections};}
+function checkColumn(column){if(column==null)return null;const c=copyColumn(column);if(!c.sections)throw Error('A rock type\'s column needs its sections.');return {sections:c.sections};}
 // A preset's colors: {beds, absorb}, its beds' tones (COLUMN_SLOTS [r, g, b] shifts of its material's color, -1 to 1: sculpt-column.js
 // columnTones) and the color it deepens toward with thickness (Color deepens with thickness, '#rrggbb'), each null for slot 0's. None at all
 // is null. The rock's own color is its material's Color; a `rock` color, or beds as colors, from an older save or recipe are dropped.
 const HEX=/^#[0-9a-f]{6}$/i;
 export function checkColors(colors){
  if(colors==null)return null;
- const fail=()=>{throw Error(`A rock preset's colors are {beds, absorb}: ${COLUMN_SLOTS} tones ([r, g, b] from -1 to 1) for its beds and one '#rrggbb' it deepens toward, or null for the world's.`);};
+ const fail=()=>{throw Error(`A rock type's colors are {beds, absorb}: ${COLUMN_SLOTS} tones ([r, g, b] from -1 to 1) for its beds and one '#rrggbb' it deepens toward, or null for the world's.`);};
  if(typeof colors!=='object'||Array.isArray(colors)||Object.keys(colors).some(k=>!['rock','beds','absorb'].includes(k)))fail();
  const hex=v=>{if(typeof v!=='string'||!HEX.test(v))fail();return v.toLowerCase();};
  if(colors.beds!=null&&(!Array.isArray(colors.beds)||colors.beds.length!==COLUMN_SLOTS))fail();
@@ -189,21 +189,21 @@ export function checkColors(colors){
 // the controls' ranges, and a column the uniforms hold. No list is null (the world's own list then).
 export function copyRocks(value){
  if(value==null)return null;
- if(!Array.isArray(value)||value.length>=ROCK_SLOTS)throw Error('Invalid rock presets.');
+ if(!Array.isArray(value)||value.length>=ROCK_SLOTS)throw Error('Invalid rock types.');
  const seen=new Set(),keys=new Set(),worldKeys=new Set();
  return value.map(r=>{
-  if(!r||typeof r!=='object'||Array.isArray(r)||Object.keys(r).some(k=>!ROCK_FIELDS.includes(k)))throw Error('Invalid rock preset.');
-  if(!Number.isInteger(r.slot)||r.slot<1||r.slot>=ROCK_SLOTS||seen.has(r.slot))throw Error('A rock preset needs its own slot, 1 to 15.');
+  if(!r||typeof r!=='object'||Array.isArray(r)||Object.keys(r).some(k=>!ROCK_FIELDS.includes(k)))throw Error('Invalid rock type.');
+  if(!Number.isInteger(r.slot)||r.slot<1||r.slot>=ROCK_SLOTS||seen.has(r.slot))throw Error('A rock type needs its own slot, 1 to 15.');
   seen.add(r.slot);
   const key=checkKey(r.key);if(r.worldKey!==undefined){if(!checkKey(r.worldKey)||worldKeys.has(r.worldKey))throw Error('A world rock needs its own catalog key.');worldKeys.add(r.worldKey);}
-  if(key&&keys.has(key))throw Error(`Two rock presets carry the key ${key}: a key names one preset.`);
+  if(key&&keys.has(key))throw Error(`Two rock types carry the key ${key}: a key names one rock type.`);
   if(key)keys.add(key);
   // Its surface material: a map material's slot (1 to MATERIAL_SLOTS - 1), or none for the world's rock material.
-  if(r.material!=null&&(!Number.isInteger(r.material)||r.material<0||r.material>=MATERIAL_SLOTS))throw Error(`A rock preset's material is a material slot, 1 to ${MATERIAL_SLOTS-1}.`);
+  if(r.material!=null&&(!Number.isInteger(r.material)||r.material<0||r.material>=MATERIAL_SLOTS))throw Error(`A rock type's material is a material slot, 1 to ${MATERIAL_SLOTS-1}.`);
   return {slot:r.slot,name:checkName(r.name),key,...(r.worldKey?{worldKey:r.worldKey}:{}),knobs:copyRockSettings(r.knobs??{}),column:checkColumn(r.column),colors:checkColors(r.colors),...(r.material>0?{material:r.material}:{})};
  }).sort((a,b)=>a.slot-b.slot);
 }
-const freeSlot=rocks=>{for(let s=1;s<ROCK_SLOTS;s++)if(!rocks.some(r=>r.slot===s))return s;throw Error('A map holds at most 15 rock presets besides the world\'s own.');};
+const freeSlot=rocks=>{for(let s=1;s<ROCK_SLOTS;s++)if(!rocks.some(r=>r.slot===s))return s;throw Error('A map holds at most 15 rock types besides the world\'s own.');};
 // A name not yet in the list: the given one, else with a number after it.
 export function uniqueRockName(rocks,name,slot0){
  const taken=new Set([slot0,...rocks.map(r=>r.name)]);if(!taken.has(name))return name;
@@ -217,12 +217,12 @@ export function addRock(rocks,recipe,slot0Name='',config=null){
 // A copy of a preset, or of slot 0 (`world`: {name, knobs, column} as the world's rock has them now; a copy of slot 0 keeps the world's colors,
 // colors null, so it follows them).
 export function duplicateRock(rocks,slot,world){
- const from=slot===0?world:rocks.find(r=>r.slot===slot);if(!from)throw Error(`No rock preset in slot ${slot}.`);
+ const from=slot===0?world:rocks.find(r=>r.slot===slot);if(!from)throw Error(`No rock type in slot ${slot}.`);
  const to=freeSlot(rocks);
  return {slot:to,rocks:[...rocks,{slot:to,name:uniqueRockName(rocks,`${from.name} copy`,world?.name),key:null,knobs:structuredClone(from.knobs),column:structuredClone(from.column??null),colors:checkColors(from.colors),...(from.material>0?{material:from.material}:{})}].sort((a,b)=>a.slot-b.slot)};
 }
 export function renameRock(rocks,slot,name){
- if(!rocks.some(r=>r.slot===slot))throw Error(`No rock preset in slot ${slot}.`);
+ if(!rocks.some(r=>r.slot===slot))throw Error(`No rock type in slot ${slot}.`);
  return rocks.map(r=>r.slot===slot?{...r,name:checkName(name)}:r);
 }
 // A preset's numbers and beds replaced (a starting recipe, a pasted recipe, an edit), its name and key kept; its colors too when `colors` is
@@ -230,13 +230,13 @@ export function renameRock(rocks,slot,name){
 export function setRock(rocks,slot,{knobs,column,key,...rest}){return rocks.map(r=>r.slot===slot?{...r,key:r.key??freeKey(rocks,checkKey(key)),knobs:copyRockSettings(knobs??{}),column:checkColumn(column),colors:'colors' in rest?checkColors(rest.colors):r.colors??null}:r);}
 // A preset's colors replaced (the panel's color rows), its numbers and beds kept.
 export function setRockColors(rocks,slot,colors){
- if(!rocks.some(r=>r.slot===slot))throw Error(`No rock preset in slot ${slot}.`);
+ if(!rocks.some(r=>r.slot===slot))throw Error(`No rock type in slot ${slot}.`);
  return rocks.map(r=>r.slot===slot?{...r,colors:checkColors(colors)}:r);
 }
 // A preset deleted: the strokes that chose it go to Rock beneath (in the same undo step, sculpt.js). Slot 0 is the world's and stays.
 export function deleteRock(rocks,nodes,slot){
  if(slot===0)throw Error('The world\'s own rock cannot be deleted.');
- if(!rocks.some(r=>r.slot===slot))throw Error(`No rock preset in slot ${slot}.`);
+ if(!rocks.some(r=>r.slot===slot))throw Error(`No rock type in slot ${slot}.`);
  return {rocks:rocks.filter(r=>r.slot!==slot),nodes:nodes.map(n=>Math.round(n.params?.rockPreset??-1)===slot?{...n,params:{...n.params,rockPreset:-1}}:n)};
 }
 // A stroke's choice as the list allows: -1 (Rock beneath), 0 or a slot the list holds; anything else is Rock beneath.

@@ -1868,7 +1868,7 @@ $('reset-strokes').onclick=() => {
   status('Reset every stroke to this world\'s defaults.');
 };
 function persistLater() {
-  if (!SAVING) { $('save-state').textContent='Comparison sketch · use Save sketch to keep it.'; return; }
+  if (!SAVING) { $('save-state').textContent='Comparison sketch · use Map › Save editable map to keep it.'; return; }
   if (!mapStore) { $('save-state').textContent=mapsNote||'Saving in this browser is unavailable. Use Save to keep this map as a file.'; return; }
   clearTimeout(autosaveTimer); autosaveTimer=setTimeout(() => {
     if (stroke || moving || loading) { persistLater(); return; }
@@ -2790,7 +2790,7 @@ function mountRockPanel() {
     cancelWeather();nodes=gone.nodes;editRocks(gone.rocks);
     {const left=dropRockMaterials(mapMaterials,old,{rocks:mapRocks,nodes,config,keep:toolLays});if(left!==mapMaterials)editMaterials(left);}   // its material, when nothing else uses it
     selectRock(0);evaluate(0);checkpoint();queueWeather();
-    status(`Deleted the rock preset ${name}${moved?`; ${moved} shape${moved===1?'':'s'} now keep the rock beneath`:''}.`);
+    status(`Deleted the rock type ${name}${moved?`; ${moved} shape${moved===1?'':'s'} now keep the rock beneath`:''}.`);
   };
   // Copy and Paste a recipe (JSON on the clipboard): its name, numbers and beds, to compare two sets of numbers or move one between maps and worlds.
   $('rock-copy').onclick=async()=>{
