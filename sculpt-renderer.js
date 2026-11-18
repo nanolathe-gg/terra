@@ -978,7 +978,6 @@ export class TerrainRenderer {
     this.f('uRingWobble', variant.has('ringWobble') ? Number(variant.get('ringWobble')) : 3);
     this.f('uRingLobe', variant.has('ringLobe') ? Number(variant.get('ringLobe')) : 22);
     this.f('uRingFill', variant.has('ringFill') ? Number(variant.get('ringFill')) : 0);
-    this.f('uRingPatch', variant.has('ringPatch') ? Number(variant.get('ringPatch')) : 0);
     this.f('uRingPatchSize', variant.has('ringPatchSize') ? Number(variant.get('ringPatchSize')) : 120);
     // G6: Ice blocks and mesas (0: the earlier look exactly).
     this.f('uIceSoft', variant.has('iceSoft') ? Number(variant.get('iceSoft')) : 0);
