@@ -462,5 +462,6 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 /* The card's profile is compact (its silhouette, still editable); Full size opens it at the workspace's size. */
 .app:not(.curves-large) #card-profile #section-preview{height:104px}.app:not(.curves-large) #card-profile #along-preview{height:56px}
 .pick-group{margin:4px 0 0;font-size:10px;font-weight:600;color:#96ada2}
-/* World › Surface shows its own note while open: the map's label steps aside rather than say it twice. */
-.app:has(#pane-world:not([hidden]) #wpane-surface:not([hidden]) #surface-view:not([hidden])) #map-view-note{display:none}
+/* World › Surface shows its own note while open and in sight: the map's label steps aside rather than say it twice. The docked material
+   editor covers the panel and Focus hides it: the label stays then. */
+.app:not(.material-docked):not(.inspector-collapsed):has(#pane-world:not([hidden]) #wpane-surface:not([hidden]) #surface-view:not([hidden])) #map-view-note{display:none}
