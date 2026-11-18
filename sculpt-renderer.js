@@ -354,8 +354,10 @@ export class TerrainRenderer {
     this.device.queue.writeBuffer(this.outputPalette, 0, new Float32Array(colours.flatMap(c => [c[0], c[1], c[2], 0])));
     this.outputCount = colours.length;
     // Its candidate table (engine-output.wgsl buildTable, 64^3 grid points x 8 indices, 2 MiB), built before the next output pass reads it.
-    if (this.outputTable) { this.worldTextures.delete(this.outputTable); this.outputTable.destroy(); }
+    for (const b of [this.outputTable, this.outputPaletteCount]) if (b) { this.worldTextures.delete(b); b.destroy(); }
     this.outputTable = this.worldResource(this.device.createBuffer({label: 'output palette table', size: OUTPUT_TABLE_BYTES, usage: GPUBufferUsage.STORAGE}));
+    this.outputPaletteCount = this.worldResource(this.device.createBuffer({label: 'output palette count', size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}));
+    this.device.queue.writeBuffer(this.outputPaletteCount, 0, new Uint32Array([colours.length, 0, 0, 0]));
     this.track?.(this.outputTable, 'output palette table', OUTPUT_TABLE_BYTES, 'shared');
     this.outputTableBuilt = false;
   }
@@ -633,15 +635,13 @@ export class TerrainRenderer {
     if (!this.outputTableBuilt) this.buildOutputTable();
   }
   buildOutputTable() {
-    const device = this.device, count = device.createBuffer({label: 'output palette count', size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
-    device.queue.writeBuffer(count, 0, new Uint32Array([this.outputCount, 0, 0, 0]));
+    const device = this.device, count = this.outputPaletteCount;
     const encoder = device.createCommandEncoder({label: 'output palette table'}), pass = encoder.beginComputePass({label: 'output palette table'});
     pass.setPipeline(this.outputTableBuild);
     pass.setBindGroup(0, device.createBindGroup({layout: this.outputTableBuild.getBindGroupLayout(0), entries: [{binding: 2, resource: {buffer: this.outputPalette}}, {binding: 6, resource: {buffer: this.outputTable}}, {binding: 7, resource: {buffer: count}}]}));
     pass.dispatchWorkgroups(OUTPUT_TABLE_CELLS / 64);
     pass.end();
     device.queue.submit([encoder.finish()]);
-    count.destroy();
     this.outputTableBuilt = true;
   }
   // The output stage's working texture, at least width x height. A batch sizes it once before its first pass: a release mid-encoder would
