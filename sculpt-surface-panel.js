@@ -51,6 +51,15 @@ const BUILTIN_SOURCES = {
 // Built-ins whose strength and placement are World settings of their own (the rows under the list, in this section's "Built-in settings"):
 // their row shows no Coverage, which would only repeat the strength.
 const BUILTIN_SETTINGS = {highland: 'highland', baseBand: 'baseBand'};
+// The World settings that place each built-in (what the draw reads for its share, engine-frag.wgsl and engine-common.wgsl), in the order an artist
+// reaches for them: the open row lists each with its value and a door to it, so where a surface lies is answered from its row. A rock type's
+// setting (sculpt-rock-presets.js ROCK_KEYS) shows the world's rock; each rock type sets its own in Rock types.
+export const BUILTIN_PLACED_BY = {
+  highland: ['highland', 'highFrom', 'highReach'], baseBand: ['baseBand', 'baseBandLow', 'baseBandHigh'], slopeCover: ['slopeTexture'], soil: ['soilRim'],
+  rock: ['faceRock', 'rockFaceFrom', 'rimReach', 'shoreRock', 'bankRock', 'lushness'], beach: ['beachWidth'], crown: ['rockCrown'],
+  regrownMoss: ['debrisAmount', 'lushness'], fines: ['debrisAmount', 'debrisReach'], sandDust: ['sandDust'], sand: ['sand', 'sandLee', 'sandCrown'],
+  iceCrest: ['iceCrest'], iceCap: ['iceSnow'],
+};
 // Where each stage's layers lie, in plain words (SURFACE_STAGE_NAMES order). A layer moves only among its stage's layers: the engine's own steps
 // (tints, beds, cracks, weather) lie between the stages. The open row says it; a closed row only where it helps (CLOSED_PLACE).
 const STAGE_PLACE = ['On the ground itself, under everything else', 'With the slope cover, under soil, rock and beach', 'With bare soil, rock and beach, under crown rock and bands',
@@ -156,7 +165,7 @@ function switchRule(layer, kind) {
 
 // `host`: surface() the list now, apply(next, {commit}), restore() the world's own, preview(row or -1), hide(keys) the layers not shown now, material(layer) → {name, color} or
 // null (height: whether it has art height), edit(layer, button) to open its material, materialKey(preset) → a library key for a preset's material, library() → the materials a
-// layer may draw [{key, name, color}], settings(key) to show a World setting's row and settingNote(key) why it is unavailable ('' if not),
+// layer may draw [{key, name, color}],
 // roleMaterial(builtin) and slotMaterial(slot) → {name, color} or null, pick() to take the Pick tool, inspect(at) → what the draw laid there;
 // for the sections (layerSection's facts): control(key), role(key), hasLayer(name), fact(name), worldName(), and place(go) → where the control
 // that turns a layer on lives ("Rock types › Exposure & relief"), open(go) to show and focus it.
@@ -323,11 +332,7 @@ export function mountSurfacePanel(host) {
         pick.onchange = () => { picking = false; host.recolor(layer, rgb(), true); build(); };
         body.append(el('label', {className: 'surface-number surface-wide'}, el('span', {textContent: 'Color'}), pick));
       }
-      if (builtin && BUILTIN_SETTINGS[layer.builtin]) {
-        const b = el('button', {type: 'button', className: 'surface-wide link', textContent: 'Its strength and height: Built-in settings below'}); b.onclick = () => host.settings(BUILTIN_SETTINGS[layer.builtin]);
-        body.append(b);
-        const note = host.settingNote(BUILTIN_SETTINGS[layer.builtin]); if (note) body.append(el('p', {className: 'small surface-wide', textContent: note}));
-      }
+      if (builtin) { const placedBy = placedByBlock(layer); if (placedBy) body.append(placedBy); }
       if (fixed) body.append(el('p', {className: 'small surface-wide', textContent: 'Its settings place it: it also sets the ground’s relief and caps the beds, so it takes no rule or edge here.'}));
       else body.append(
         slider('Edge width', edge.width ?? 1, 0, 1, .01, (v, c) => edit(i, l => { l.edge = {...l.edge, width: v}; }, c), '1 blends into what is below; near 0 each pixel is one or the other'),
@@ -346,6 +351,23 @@ export function mountSurfacePanel(host) {
     item.onpointerleave = () => { if (!item.contains(document.activeElement)) host.preview(-1); };
     item.addEventListener('focusout', event => { if (!item.contains(event.relatedTarget)) host.preview(-1); });
     return item;
+  }
+  // A built-in's own placement (BUILTIN_PLACED_BY): each World setting with its value, and a door to it (its section and tab opened, the focus
+  // on it). A rock type's setting shows the world's rock and says the rock types set their own. Null when the panel can read none of them.
+  function placedByBlock(layer) {
+    const items = (BUILTIN_PLACED_BY[layer.builtin] ?? []).map(key => [key, host.control?.(key)]).filter(([, c]) => c);
+    if (!items.length) return null;
+    const rows = items.map(([key, c]) => {
+      const value = Number(c.own ?? c.value), where = host.place?.({control: key});
+      const line = el('li', {className: 'surface-line'}, el('span', {textContent: `${c.name ?? c.label}: ${Number.isFinite(value) ? fmt(value) : '–'}${c.rock ? ' (the world’s rock)' : ''}`}));
+      if (where) { const b = el('button', {type: 'button', className: 'link surface-go', id: uid(`placed-${key}`), textContent: where + ' ›', title: 'Show this setting'}); b.onclick = () => host.open({control: key}); line.append(b); }
+      return line;
+    });
+    // Why a setting is unavailable, once for settings that share the reason (Highland ground's three wait on one material).
+    const notes = [...new Set(items.map(([, c]) => c.note).filter(Boolean))];
+    if (items.some(([, c]) => c.rock)) notes.push('Rock types set their own rock settings in Rock types; the values here are the world’s rock.');
+    return el('div', {className: 'surface-wide surface-placed'}, el('p', {className: 'small', textContent: 'Where it lies is set by:'}), el('ul', {className: 'surface-placed-list'}, ...rows),
+      ...notes.map(text => el('p', {className: 'small', textContent: text})));
   }
   // A material layer's plants (sculpt-material-model.js PLANT_KINDS): one kind, grown where the layer shows, as dense as its Plants amount.
   // The bake places them (engine-bake.wgsl plantMask) and knows only some facts: a rule that reads another grows them as if it were 0.

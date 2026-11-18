@@ -890,20 +890,15 @@ function surfaceHost() {
     material:layer=>{const m=layerMaterial(layer);return m?{name:m.name,color:hex(m),own:own(m),height:Boolean(m.nodes?.find(n=>n.type==='output')?.in?.height)}:null;},
     edit:(layer,button)=>{const m=layerMaterial(layer);if(m)materialEditor?.open(m.slot,button);},
     library:()=>Object.entries(LIBRARY).filter(([key])=>!key.endsWith('-water')).map(([key,m])=>({key,name:m.name,color:hex(m)})),
-    // A built-in's World setting (the Surface section's Built-in settings): show its block, reveal the row if the panel folded it away as
-    // unavailable, and focus it; settingNote says why it is unavailable ('' when it is not).
-    settings:key=>{const row=document.querySelector(`#wpane-surface [data-knob="${key}"]`),block=row?.closest('.world-subsection');if(!row)return;
-      if(row.hidden)block?.querySelector(`.unavailable-summary button[aria-expanded="false"][aria-controls~="knob-${key}-row"]`)?.click();
-      (block??row).scrollIntoView({block:'center',behavior:'smooth'});row.querySelector('input,select')?.focus({preventScroll:true});},
-    settingNote:key=>document.querySelector(`#wpane-surface [data-knob="${key}"] .control-requirement`)?.textContent??'',
     materialKey:preset=>{const key=preset.material.startsWith('role:')?config.materials?.[preset.material.slice(5)]:preset.material;return LIBRARY[key]?key:config.materials?.ground??'green-ground';},
     // The list's sections (sculpt-surface-panel.js layerSection): a World setting as the draw reads it (a rock type's: the largest of the
-    // world's rock and the rock types in use), its row's words and requirement; a role, a world surface (config.layers), a world fact.
+    // world's rock and the rock types in use; own: the world's rock alone), its row's words (name: its own label; label: with its group when
+    // that is one word) and requirement; a role, a world surface (config.layers), a world fact.
     control:key=>{
       const row=document.querySelector(`#knobs [data-knob="${key}"]`);if(!row||!renderer)return null;
       const own=Number(renderer.variant.get(key)??config.defaults?.[key]),rock=ROCK_KEYS.includes(key);   // a setting with no value is no claim (NaN)
       const label=(row.querySelector('label')?.title??key).replace(/\s*\([^)]*\)/g,''),group=row.closest('.world-subsection')?.querySelector('h3')?.textContent??'';
-      return {value:rock?renderer.rockMax(key,own):own,rock,rocks:renderer.rocks.size,label:/\s/.test(label)?label:`${group} ${label.toLowerCase()}`,note:row.querySelector('.control-requirement')?.textContent??''};
+      return {value:rock?renderer.rockMax(key,own):own,own,rock,rocks:renderer.rocks.size,name:label,label:/\s/.test(label)?label:`${group} ${label.toLowerCase()}`,note:row.querySelector('.control-requirement')?.textContent??''};
     },
     role:key=>({present:mapMaterials.some(m=>m[key]),name:roleName(key)}),
     hasLayer:name=>(config.layers||[]).includes(name),
