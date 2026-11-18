@@ -13,8 +13,10 @@ permissions:
   pages: write
   id-token: write
 
+# One group a ref: a pull request's run never replaces a pending run of main. The deploy job has its own group below, so deploys run one at a
+# time and none is cancelled.
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -38,6 +40,9 @@ jobs:
   deploy:
     needs: check
     if: ${{ !github.event.repository.private && github.event_name != 'pull_request' }}
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment:
       name: github-pages
