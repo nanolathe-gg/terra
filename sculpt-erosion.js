@@ -30,6 +30,18 @@ const ROCK_WEAR = 15;      // hardest rock (hardness 1, contrast 1) wears 1/16 a
 const SOFT_EXTRA = 0;      // softest rock stands this many degrees steeper than loose debris (shale slopes as debris does)
 const HARD_ANGLE = 80;     // repose of the hardest rock, degrees
 const THERMAL = 0.05;      // share of a pair's excess slope moved per thermal step (eight pairs share a sample's budget)
+// Budget the larger of the solver and the subsequent material pass. On a fine lattice
+// runCoarse keeps its result while simulating on a smaller, world-aligned square.
+export function timePassBytes(grid, spacing, material) {
+  const step = Math.max(1, Math.round(TIME_CELL / spacing)), side = Math.ceil(grid / step);
+  const cells = grid * grid, simCells = side * side;
+  // Three states, pipe flow, velocity, totals and bounds (104 B), plus the 20 B result.
+  const solver = simCells * 124 + Math.ceil(side / 8) ** 2 * 12;
+  const coarseInputs = step > 1 ? cells * 20 + simCells * 12 : 0;
+  // Material retains the 20 B Time result and uses eight scratch words plus its RGBA8 output.
+  return Math.max(solver + coarseInputs, material ? cells * 56 : 0) + 65536;
+}
+
 export class GpuErosion {
   constructor(renderer, source) {
     this.renderer = renderer;
@@ -41,7 +53,7 @@ export class GpuErosion {
       const C = GPUShaderStage.COMPUTE;
       const buffer = type => ({visibility: C, buffer: {type}});
       this.layout1 = device.createBindGroupLayout({label: 'erosion', entries: [{binding: 0, ...buffer('uniform')}, {binding: 1, ...buffer('read-only-storage')}, {binding: 2, ...buffer('storage')},
-        {binding: 3, ...buffer('read-only-storage')}, {binding: 4, ...buffer('storage')}, {binding: 5, ...buffer('storage')}, {binding: 6, ...buffer('storage')}, {binding: 7, ...buffer('storage')}, {binding: 8, ...buffer('read-only-storage')}]});
+        {binding: 3, ...buffer('storage')}, {binding: 4, ...buffer('storage')}, {binding: 5, ...buffer('storage')}, {binding: 6, ...buffer('storage')}, {binding: 7, ...buffer('read-only-storage')}]});
       this.layout0 = device.createBindGroupLayout({label: 'erosion u', entries: [{binding: 0, ...buffer('uniform')}]});
       const layout = device.createPipelineLayout({bindGroupLayouts: [this.layout0, this.layout1]});
       this.pipelines = {};
@@ -97,16 +109,16 @@ export class GpuErosion {
       const tw = Math.ceil(grid / 8);
       // The steps dispatch one workgroup per active tile, directly; a window's tiles fit one dispatch dimension up to 2047 cells.
       if (tw * tw > 65535) throw new Error(`nanolathe: a Time pass window of ${grid} cells is over the 2047 a dispatch covers`);
-      let state,fluxA,fluxB,vel,acc,fixedBuffer,paramBuffer,tileFlag,tileList,tileCount,tileArgs,weather,maps;
+      let state,pipeFlow,vel,acc,fixedBuffer,paramBuffer,tileFlag,tileList,tileCount,tileArgs,weather,maps;
       await terrainAllocation(device,()=>{
       state = [0, 1, 2].map(k => make('erosion state ' + k, n * 16));
-      fluxA = make('erosion flux a', n * 16), fluxB = make('erosion flux b', n * 16), vel = make('erosion velocity', n * 8), acc = make('erosion totals', n * 16);
+      pipeFlow = make('erosion pipe flow', n * 16), vel = make('erosion velocity', n * 8), acc = make('erosion totals', n * 16);
       fixedBuffer = make('erosion fixed', n * 16), paramBuffer = make('erosion params', 80, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST);
       tileFlag = make('erosion tile flags', tw * tw * 4), tileList = make('erosion tiles', tw * tw * 8), tileCount = make('erosion tile count', 4);
       tileArgs = make('erosion tile args', 12, S | GPUBufferUsage.INDIRECT);
       weather = make('time pass height', n * 8), maps = [0, 1, 2].map(k => make('time pass map ' + k, n * 4));
       });current();
-      const uniform = feedUniform(device, {grid, cells: n, rateMask: request.rateMask, sea: seaLevel, spacing, envelope: request.envelope ?? 1, tilesWide: tw});
+      const uniform = feedUniform(device, {grid, cells: n, rateMask: request.rateMask, maskStride: request.maskStride, sea: seaLevel, spacing, envelope: request.envelope ?? 1, tilesWide: tw});
       owned.push(uniform);
       device.queue.writeBuffer(paramBuffer, 0, params);
       this.renderer.setColumn();
@@ -115,9 +127,9 @@ export class GpuErosion {
       const res = {'0.0': {buffer: uniform}, '0.1': {buffer: request.planes}, '0.2': {buffer: request.masks},
         '1.0': {buffer: state[0]}, '1.1': {buffer: state[1]}, '1.2': {buffer: state[2]}, '1.3': {buffer: fixedBuffer}, '1.4': {buffer: tileFlag}, '1.5': {buffer: tileList},
         '1.6': {buffer: tileCount}, '1.7': {buffer: tileArgs}, '1.8': {buffer: weather}, '1.9': {buffer: state[1]}, '1.10': {buffer: acc}};
-      const group1 = (src, dst, fIn, fOut) => device.createBindGroup({layout: this.layout1, entries: [{binding: 0, resource: {buffer: paramBuffer}},
-        {binding: 1, resource: {buffer: src}}, {binding: 2, resource: {buffer: dst}}, {binding: 3, resource: {buffer: fIn}}, {binding: 4, resource: {buffer: fOut}},
-        {binding: 5, resource: {buffer: vel}}, {binding: 6, resource: {buffer: acc}}, {binding: 7, resource: {buffer: fixedBuffer}}, {binding: 8, resource: {buffer: tileList}}]});
+      const group1 = (src, dst) => device.createBindGroup({layout: this.layout1, entries: [{binding: 0, resource: {buffer: paramBuffer}},
+        {binding: 1, resource: {buffer: src}}, {binding: 2, resource: {buffer: dst}}, {binding: 3, resource: {buffer: pipeFlow}},
+        {binding: 4, resource: {buffer: vel}}, {binding: 5, resource: {buffer: acc}}, {binding: 6, resource: {buffer: fixedBuffer}}, {binding: 7, resource: {buffer: tileList}}]});
       // A chunk may change the shared uniforms while this request yields.
       // Time reads CPU-owned column values, never the GPU-written chunk flags.
       const worldUniform=make('time pass world uniforms',this.renderer.uniformData.byteLength,GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST);
@@ -125,8 +137,8 @@ export class GpuErosion {
       const countRead=make('erosion tile count read',16,GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST);
       const group0=device.createBindGroup({layout:this.layout0,entries:[{binding:0,resource:{buffer:worldUniform}}]});
       const [s0, s1, s2] = state;
-      const flux = group1(s0, s1, fluxA, fluxB), water = group1(s0, s2, fluxB, fluxA), exchange = group1(s2, s1, fluxA, fluxB), carry = group1(s1, s0, fluxA, fluxB);
-      const thermalA = group1(s0, s1, fluxA, fluxB), thermalB = group1(s1, s0, fluxA, fluxB);
+      const forward = group1(s0, s1), reverse = group1(s1, s0);
+      const water = group1(s0, s2), exchange = group1(s2, s1);
       const groups=Math.ceil(grid/8),parts={gpu:0,slices:0,iterations:[],maxSliceWait:0};
       const submitSlice=async (encoder,iterations=0,submitted=null) => {
         if(request.beforeSlice)await request.beforeSlice();current();
@@ -153,7 +165,7 @@ export class GpuErosion {
       // every tile of the window costs the GPU its idle ones. The count is read once, with the input pass this run already waits for.
       encoder.copyBufferToBuffer(tileCount,0,countRead,0,4);
       let active=0,mapped;
-      const initial=begin(encoder,'erosion offset');initial.step('offsetMain',flux);initial.pass.end();
+      const initial=begin(encoder,'erosion offset');initial.step('offsetMain',forward);initial.pass.end();
       await submitSlice(encoder,0,()=>{mapped=countRead.mapAsync(GPUMapMode.READ);mapped.catch(()=>{});});
       await mapped;current();active=new Uint32Array(countRead.getMappedRange(0,4))[0];countRead.unmap();
       await yieldWork();
@@ -169,8 +181,8 @@ export class GpuErosion {
         encoder=device.createCommandEncoder({label:'erosion gpu slice'});
         const {pass,step}=begin(encoder,'erosion');
         for(let i=0;i<count;i++){
-          if(rain!==0){step('fluxMain',flux);step('waterMain',water);step('exchangeMain',exchange);step('carryMain',carry);}
-          step('thermalMain',thermalA);step('thermalMain',thermalB);
+          if(rain!==0){step('fluxMain',forward);step('waterMain',water);step('exchangeMain',exchange);step('carryMain',reverse);}
+          step('thermalMain',forward);step('thermalMain',reverse);
         }
         pass.end();const wait=await submitSlice(encoder,count);it+=count;
         const cost=Math.max(wait,.01)/(count*mcells),known=this.rate[rateKey];
@@ -179,7 +191,7 @@ export class GpuErosion {
       }
       encoder=device.createCommandEncoder({label:'erosion output'});
       const final=begin(encoder,'erosion settle');
-      final.step('settleMain',thermalA);final.step('thermalMain',thermalB);final.step('thermalMain',thermalA);final.step('thermalMain',thermalB);final.step('thermalMain',thermalA);final.pass.end();
+      final.step('settleMain',forward);final.step('thermalMain',reverse);final.step('thermalMain',forward);final.step('thermalMain',reverse);final.step('thermalMain',forward);final.pass.end();
       const output=encoder.beginComputePass({label:'time pass output'});
       output.setPipeline(feed.pipes.refinedMain);for(const [g,bg] of feed.groups('refinedMain',res))output.setBindGroup(g,bg);output.dispatchWorkgroups(groups,groups);output.end();
       const mapParams=make('erosion map params',64,GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST);
@@ -211,10 +223,10 @@ export class GpuErosion {
       current();await this.ready;const feed=await feedPasses(device);current();
       let planes,masks,weather,maps;
       await terrainAllocation(device,()=>{
-        planes=make('time cells height',nc*8);masks=make('time cells masks',nc*28);
+        planes=make('time cells height',nc*8);masks=make('time cells erosion mask',nc*4);
         weather=make('time pass height',n*8,kept);maps=[0,1,2].map(k=>make('time pass map '+k,n*4,kept));
       });current();
-      const uniform=feedUniform(device,{grid,cells:n,ox:sx,oy:sy,gw:gc,gh:step,sea:request.seaLevel});owned.push(uniform);
+      const uniform=feedUniform(device,{grid,cells:n,rateMask:request.rateMask,ox:sx,oy:sy,gw:gc,gh:step,sea:request.seaLevel});owned.push(uniform);
       const res={'0.0':{buffer:uniform},'0.1':{buffer:request.planes},'0.2':{buffer:request.masks},'3.15':{buffer:planes},'3.16':{buffer:masks},
         '3.21':{buffer:weather},'3.22':{buffer:weather},'3.23':{buffer:maps[0]},'3.24':{buffer:maps[1]},'3.25':{buffer:maps[2]}};
       const pass=(encoder,entry,side)=>{const p=encoder.beginComputePass({label:entry});p.setPipeline(feed.pipes[entry]);for(const [g,bg] of feed.groups(entry,res))p.setBindGroup(g,bg);p.dispatchWorkgroups(Math.ceil(side/8),Math.ceil(side/8));p.end();};
@@ -224,7 +236,7 @@ export class GpuErosion {
       let encoder=device.createCommandEncoder({label:'erosion cells input'});
       encoder.copyBufferToBuffer(request.planes,0,weather,0,n*8);pass(encoder,'timeDownMain',gc);
       device.queue.submit([encoder.finish()]);
-      coarse=await this.runGpu({...request,planes,masks,grid:gc,spacing:spacing*step,ox:(ox+sx)/step,oy:(oy+sy)/step});
+      coarse=await this.runGpu({...request,planes,masks,maskStride:1,rateMask:request.rateMask&3,grid:gc,spacing:spacing*step,ox:(ox+sx)/step,oy:(oy+sy)/step});
       current();if(request.beforeSlice)await request.beforeSlice();current();
       Object.assign(res,{'3.17':{buffer:coarse.weather},'3.18':{buffer:coarse.maps[0]},'3.19':{buffer:coarse.maps[1]},'3.20':{buffer:coarse.maps[2]}});
       encoder=device.createCommandEncoder({label:'erosion cells output'});

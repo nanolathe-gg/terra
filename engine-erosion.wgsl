@@ -40,12 +40,11 @@ struct EP {
 @group(1) @binding(0) var<uniform> ep: EP;
 @group(1) @binding(1) var<storage, read> src: array<vec4f>;              // (rock, debris, water, sediment)
 @group(1) @binding(2) var<storage, read_write> dst: array<vec4f>;
-@group(1) @binding(3) var<storage, read> fluxIn: array<vec4f>;           // pipe flow toward x-1, x+1, y-1, y+1
-@group(1) @binding(4) var<storage, read_write> fluxOut: array<vec4f>;
-@group(1) @binding(5) var<storage, read_write> vel: array<vec2f>;
-@group(1) @binding(6) var<storage, read_write> acc: array<vec4f>;        // x water throughput, y material deposited
-@group(1) @binding(7) var<storage, read_write> fixedField: array<vec4f>; // lower bound, upper bound, mobility (-1 submerged), column offset
-@group(1) @binding(8) var<storage, read> tiles: array<vec2u>;           // active tiles (x, y), 8 x 8 samples each
+@group(1) @binding(3) var<storage, read_write> pipeFlow: array<vec4f>; // left, right, up, down
+@group(1) @binding(4) var<storage, read_write> vel: array<vec2f>;
+@group(1) @binding(5) var<storage, read_write> acc: array<vec4f>;        // x water throughput, y material deposited
+@group(1) @binding(6) var<storage, read_write> fixedField: array<vec4f>; // lower bound, upper bound, mobility (-1 submerged), column offset
+@group(1) @binding(7) var<storage, read> tiles: array<vec2u>;           // active tiles (x, y), 8 x 8 samples each
 fn tileCell(w: u32, l: vec3u) -> vec3u { let t = tiles[w]; return vec3u(t.x * 8u + l.x, t.y * 8u + l.y, 0u); }
 
 fn at(x: i32, y: i32) -> u32 { return u32(y * i32(ep.grid) + x); }
@@ -83,7 +82,7 @@ fn fluxMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) lid:
         let w = c.z + ep.rain;
         let h = ground(c) + w;
         let dx = vec4i(-1, 1, 0, 0); let dy = vec4i(0, 0, -1, 1);
-        let before = fluxIn[i];
+        let before = pipeFlow[i];
         for (var k = 0; k < 4; k++) {
             let nx = x + dx[k]; let ny = y + dy[k];
             if (!inside(nx, ny)) { continue; }
@@ -94,12 +93,11 @@ fn fluxMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) lid:
         let total = out.x + out.y + out.z + out.w;
         if (total > 0.0) { out *= min(1.0, w / total); }
     }
-    fluxOut[i] = out;
+    pipeFlow[i] = out;
 }
 
 // Water update from the new pipes, and the velocity they imply. Submerged samples and
-// the edge of the grid take the water away (the sea, the map edge). The old pipes are
-// copied back into fluxOut for the next iteration.
+// the edge of the grid take the water away. The flux dispatch has finished writing every pipe.
 @compute @workgroup_size(8, 8)
 fn waterMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) lid: vec3u) {
     let id = tileCell(wg.x, lid);
@@ -111,11 +109,11 @@ fn waterMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) lid
     let f = fixedField[i];
     let edge = x == 0 || y == 0 || x == n - 1 || y == n - 1;
     var inL = 0.0; var inR = 0.0; var inT = 0.0; var inB = 0.0;
-    if (x > 0) { inL = fluxIn[at(x - 1, y)].y; }
-    if (x < n - 1) { inR = fluxIn[at(x + 1, y)].x; }
-    if (y > 0) { inT = fluxIn[at(x, y - 1)].w; }
-    if (y < n - 1) { inB = fluxIn[at(x, y + 1)].z; }
-    let mine = fluxIn[i];
+    if (x > 0) { inL = pipeFlow[at(x - 1, y)].y; }
+    if (x < n - 1) { inR = pipeFlow[at(x + 1, y)].x; }
+    if (y > 0) { inT = pipeFlow[at(x, y - 1)].w; }
+    if (y < n - 1) { inB = pipeFlow[at(x, y + 1)].z; }
+    let mine = pipeFlow[i];
     let outTotal = mine.x + mine.y + mine.z + mine.w;
     var w = c.z + select(0.0, ep.rain, f.z >= 0.0) + inL + inR + inT + inB - outTotal;
     let mean = max(0.5 * (c.z + w), 1e-4);
@@ -125,7 +123,6 @@ fn waterMain(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) lid
     if (f.z < 0.0 || edge) { w = 0.0; v = vec2f(0.0); }
     vel[i] = v;
     dst[i] = vec4f(c.x, c.y, max(w, 0.0), c.w);
-    fluxOut[i] = mine;
     acc[i].x += outTotal * max(f.z, 0.0);
 }
 

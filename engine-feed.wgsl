@@ -30,7 +30,7 @@ struct FU {
     spacing: f32,
     envelope: f32,      // the erosion budget's envelope (erosionEnvelope)
     tilesWide: u32,
-    pad0: u32,
+    maskStride: u32,    // seedMain: seven authored mask words or one selected word per Time cell
     pad1: u32,
     invalidRect: vec4i, // authored edits since this refinement result; empty when current
 }
@@ -57,8 +57,7 @@ const SHORE_BUDGET = 0.35;
 const BUDGET = 3.0;
 
 fn sm(a: f32, b: f32, v: f32) -> f32 { let t = clamp((v - a) / (b - a), 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
-fn maskByte(i: u32, p: u32) -> i32 {
-    let w = Mk[i * 7u + (p >> 2u)];
+fn signedByte(w: u32, p: u32) -> i32 {
     return (i32(w << (24u - (p & 3u) * 8u))) >> 24u;
 }
 fn height(x: i32, y: i32) -> f32 { return F[u32(y) * fu.grid + u32(x)]; }
@@ -91,7 +90,8 @@ fn seedMain(@builtin(global_invocation_id) id: vec3u) {
     out.x = max(max(sea - 90.0, min(h, sea + 1.0)), h - (4.0 + 8.0 * steep) * budget * weight);
     out.y = min(sea + 300.0, h + (2.5 + 2.5 * steep) * budget * weight);
     // The erosion override plane is a rate: 1 + v / 127 (no erosion at -1).
-    let rate = 1.0 + f32(maskByte(i, fu.rateMask)) / 127.0;
+    let word = Mk[i * fu.maskStride + (fu.rateMask >> 2u)];
+    let rate = 1.0 + f32(signedByte(word, fu.rateMask)) / 127.0;
     out.z = weight * max(0.0, rate);
     // The same plane scales the thermal repose by the same rate (a share of 0 where nothing is painted), read by thermalMain through the pair's mean.
     totals[i].z = max(0.0, rate) - 1.0;
@@ -280,7 +280,7 @@ fn gatherMaps(@builtin(global_invocation_id) id: vec3u) {
 // as a change of the lattice's own heights. Here fu.grid and fu.cells are the fine lattice's, fu.gw is the coarse side, fu.gh the step in fine
 // cells, and (fu.ox, fu.oy) the fine cell of the first coarse one (chosen so coarse cells sit on the same world cells in every window).
 @group(3) @binding(15) var<storage, read_write> tcF: array<f32>;    // coarse h and p, two planes
-@group(3) @binding(16) var<storage, read_write> tcMk: array<u32>;   // coarse masks, 7 words a cell
+@group(3) @binding(16) var<storage, read_write> tcRate: array<u32>; // one packed word containing the erosion override per coarse cell
 @group(3) @binding(17) var<storage, read> tcW: array<f32>;          // the coarse pass's weather: authored, eroded
 @group(3) @binding(18) var<storage, read> tcM0: array<u32>;
 @group(3) @binding(19) var<storage, read> tcM1: array<u32>;
@@ -306,7 +306,7 @@ fn timeDownMain(@builtin(global_invocation_id) id: vec3u) {
     } }
     let i = u32(f.y) * fu.grid + u32(f.x);
     tcF[j] = h; tcF[gc * gc + j] = F[fu.cells + i];
-    for (var k = 0u; k < 7u; k++) { tcMk[j * 7u + k] = Mk[i * 7u + k]; }
+    tcRate[j] = Mk[i * 7u + (fu.rateMask >> 2u)];
 }
 // Where a fine cell sits among the coarse ones: the four around it and its weights.
 struct TcAt { i: array<u32, 4>, w: vec4f }
