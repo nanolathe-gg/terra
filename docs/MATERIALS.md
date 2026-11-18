@@ -105,7 +105,6 @@ with gray stops is a curve for a height or mask. Every pattern wraps at the
 | Color adjust | color | Turns a color's hue and scales its saturation and brightness (0 leaves each); an optional Mask scales all three, so half a mask is half the turn (gradual hue sweeps, iridescence), not a blend of two colors: varies every layer at once. The material's palette limits what shows; after a large change, Pick from the material. |
 | Blur | gray or color | Softens its input over Radius px (0 leaves it exactly), wrapping at the repeat; the Directional type smears along one line (its Direction measured as a Waves noise's, so the same number lies parallel to its streaks): soft halos from hard masks, dirt filling cracks, smoother heights. Gives what it reads. |
 | Slope blur | gray or color | Smears its Input along its Slope's downhill direction by Distance px (uphill when negative; 0 leaves it exactly), averaging along the way; level parts of the Slope stay put. Melted or eroded rock, wind-swept sand, runnels. |
-| Stamp | gray or color | Copies of its Shape over its Base: each a disc of Radius px cut from the Shape (from its middle at Variety 0, from anywhere at 1), turned and sized its own way on a jittered lattice; the topmost copy wins where two overlap, Outline roughness breaks each copy's circle into an irregular outline, Hardness sharpens their edges, a Density input thins them and a Warp on Coordinates bends their outlines. Coverage 0 leaves the Base exactly. For a color and a height that match, duplicate the node and change its inputs. |
 | Light | gray | A height's slope toward a light: tints color like a lit bump. |
 | Cavity | gray | Hollows (below .5) and crests (above) of a height. |
 | Constant | gray or color | One value (Gray) or one color (Color), everywhere. A Color has the gradient's color fields for its one stop and publishes like a gradient's colors. |
@@ -116,7 +115,7 @@ Height is art relief only; gameplay heights never change.
 
 A graph has at most 40 nodes. Light and Cavity evaluate their input again at
 four neighbors, so a material may use four of them, two in a chain. A
-material may use four Blur, Slope blur and Stamp nodes in all (each needs
+material may use four Blur or Slope blur nodes in all (each needs
 an input over the whole repeat).
 
 ## The palette
@@ -156,7 +155,7 @@ that material. The workspace gives the graph the upper-left two thirds, the live
 - Each graph card shows what its node makes. Fit includes every card and frame below the toolbar. Arrange uses the graph cell’s aspect; saved node positions stay put until you ask for it. While the view is still fitted, resizing and Focus graph fit it to the space available. After you pan or zoom, edits, reopening the same material, resizing and Focus graph keep your zoom and the graph point at the center. A different material, Restore from library or a newly loaded map fits its graph again.
 - Add a node from its menu: it lists every node and type by name, and a search
   also matches the names other editors use (Perlin, Voronoi, Worley, fBm,
-  terrace, posterize, HSL, displace, tile sampler, bomber, motion blur ...).
+  terrace, posterize, HSL, displace, motion blur ...).
 - **Starting points** (Start · … in the same menu, `materials/snippets.json`):
   twelve named looks, each two to five wired nodes with their numbers, that
   join the graph being edited at the pointer, selected and ready to tune or
@@ -210,8 +209,7 @@ runs in stages (`stagePlan`): before a material's pass, each such node's
 inputs are computed over the whole repeat into a scratch layer, then its pass
 writes that node's layer (a Blur across then down: Gaussian, sigma half the
 Radius, wrapping; a Slope blur 24 steps down its slope, kept in the stage's
-alpha, averaging its input; a Stamp's Shape copied as it is, to be cut into
-discs where the Stamp is read), and every later
+alpha, averaging its input), and every later
 pass (another Blur's stage, the material's pass, the node thumbnails) reads
 the layer instead of the branch behind it. The stage textures
 (`rgba32float`, four layers and two scratch layers, 24 MiB at 512 px) are
