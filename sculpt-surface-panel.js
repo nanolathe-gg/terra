@@ -3,16 +3,16 @@
 // with its reason. Each row opens to set a layer's material, its Coverage (stored as amount), its edge and its rule (conditions that must all
 // hold, or a score); a row moves within its stage, a material layer can be removed, and a layer is added from a preset. Hovering or focusing a
 // row previews where that layer lies on the map. The list is a world setting: `host.apply(next, {commit})` stores it.
-import {SURFACE_BUILTINS, SURFACE_NEEDS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, SURFACE_OWN_AMOUNT, PLANT_KINDS, PLANT_LABELS, PLANT_FACTS, surfaceRows, spreadRule, SURFACE_FACT_RANGE, SURFACE_FACT_GRAY, isMaterialLayer, layerKey} from './sculpt-material-model.js';
+import {SURFACE_BUILTINS, SURFACE_NEEDS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, SURFACE_OWN_AMOUNT, PLANT_KINDS, PLANT_LABELS, PLANT_FACTS, surfaceRows, spreadRule, SURFACE_FACT_RANGE, SURFACE_FACT_GRAY, SURFACE_FACT_ROOT, factPosition, factAtPosition, isMaterialLayer, layerKey} from './sculpt-material-model.js';
 import {controlRow} from './sculpt-workspace.js';
 
 const $ = id => document.getElementById(id);
-// Plain names for the facts a rule reads, with the range a window's sliders cover.
 // Each fact's name for an artist (its range: sculpt-material-model.js SURFACE_FACT_RANGE).
 export const FACT_LABELS = {
   slope: ['Steepness'], aboveSea: ['Height above the sea'], abovePlain: ['Height above the plain'], wear: ['Worn by water'], deposit: ['Sediment laid down'],
   wetness: ['Wetness'], moisture: ['Moisture'], soilDepth: ['Soil depth'], light: ['Sunlight'], top: ['Lumps (1) and hollows (-1)'], convexity: ['Convexity'],
-  rockShare: ['Rock'], debrisShare: ['Debris'], sandShare: ['Sand'],
+  rockShare: ['Rock'], debrisShare: ['Debris'], sandShare: ['Sand'], north: ['Faces north (1) or south (-1)'], east: ['Faces east (1) or west (-1)'],
+  sheltered: ['Sheltered'], toWater: ['Distance to water (px)'],
 };
 export const BUILTIN_LABELS = {
   highland: 'Highland ground', slopeCover: 'Slope cover', soil: 'Bare soil', rock: 'Rock', beach: 'Beach', crown: 'Crown rock', baseBand: 'Base band',
@@ -244,14 +244,14 @@ export function mountSurfacePanel(host) {
       if (!$('surface-show').checked || layerRow == null || !fact) return;
       host.preview(layerRow, k);
       const ticket = ++sampling, [lo, hi] = SURFACE_FACT_RANGE[fact], holds = layer.score ? 'the score passes' : 'this condition holds';
-      const range = `On the map: ${factName(fact)} in gray, dark at ${fmt(lo)} to light at ${fmt(hi)}`;
+      const range = `On the map: ${factName(fact)} in gray, dark at ${fmt(lo)} to light at ${fmt(hi)}${SURFACE_FACT_ROOT.includes(fact) ? ` (${fmt(factAtPosition(fact, .5))} at the middle: the low end spread out)` : ''}`;
       const late = () => ['rockShare', 'debrisShare', 'sandShare'].includes(fact) ? [el('p', {className: 'small', textContent: 'The map shows its final share; a layer drawn before that share is complete saw less.'})] : [];
       factShown = {key, k, row: layerRow, parts: () => [el('p', {className: 'small', textContent: `${range}; magenta where ${holds}. Reading the view once the map has finished drawing…`}), ...late()]};
       showFact();
       host.factSample?.().then(read => {
         if (ticket !== sampling) return;
         factShown = {key, k, row: layerRow, parts: () => [el('p', {className: 'small', textContent: read ? `${range}; magenta where ${holds}: ${percent(read.holds / read.total)} of the map in view.` : `${range}. The view could not be read for a histogram.`}),
-          ...(read ? [histogram(read.levels, lo, hi, drawn)] : []), ...late()]};
+          ...(read ? [histogram(read.levels, fact, drawn)] : []), ...late()]};
         showFact();
       });
     };
@@ -263,14 +263,15 @@ export function mountSurfacePanel(host) {
     term.addEventListener('pointerenter', on); term.addEventListener('focusin', event => { if (!term.contains(event.relatedTarget)) on(); });
     term.addEventListener('pointerleave', event => { if (!term.contains(document.activeElement)) off(event); }); term.addEventListener('focusout', off);
   }
-  // A histogram of the fact over the map in view (the green levels' counts; green across SURFACE_FACT_GRAY spans [lo, hi]) in 48 bars, the
-  // condition's limits shaded.
-  function histogram(levels, lo, hi, drawn) {
+  // A histogram of the fact over the map in view (the green levels' counts; green across SURFACE_FACT_GRAY spans the fact's range, as the fact
+  // view draws it: factPosition) in 48 bars, the condition's limits shaded.
+  function histogram(levels, fact, drawn) {
+    const [lo, hi] = SURFACE_FACT_RANGE[fact];
     const W = 240, H = 40, BARS = 48, c = el('canvas', {width: W, height: H, className: 'surface-histogram', title: `How much of the map in view has each value, ${fmt(lo)} to ${fmt(hi)}`});
     const g = c.getContext('2d'), bars = new Array(BARS).fill(0);
     const [g0, g1] = SURFACE_FACT_GRAY.map(v => v * 255);
     levels.forEach((n, v) => { bars[Math.max(0, Math.min(BARS - 1, Math.floor((v - g0) / (g1 - g0) * BARS)))] += n; });
-    const top = Math.max(...bars, 1), x = v => (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * W;
+    const top = Math.max(...bars, 1), x = v => factPosition(fact, v) * W;
     if (drawn) { g.fillStyle = 'rgba(230, 60, 220, .28)'; const a = drawn.from != null ? x(drawn.from) : 0, b = drawn.to != null ? x(drawn.to) : W; g.fillRect(a, 0, Math.max(1, b - a), H); }
     g.fillStyle = '#d8d8d8';
     bars.forEach((n, k) => { const h = n ? Math.max(1, Math.sqrt(n / top) * (H - 2)) : 0; g.fillRect(k * W / BARS + .5, H - h, W / BARS - 1, h); });
@@ -447,7 +448,8 @@ export function mountSurfacePanel(host) {
     if (layer.plants) {
       wrap.append(slider('Plant density', layer.plants.amount ?? .6, 0, 1, .01, (v, c) => edit(i, l => { l.plants = {...l.plants, amount: v}; }, c), 'How many of them grow where the layer shows'));
       const facts = [...(layer.where || []).map(w => w.fact), ...(layer.score?.terms || []).map(t => t.fact)].filter(f => !PLANT_FACTS.includes(f));
-      if (facts.length) wrap.append(el('p', {className: 'small', textContent: `Plants are placed before ${[...new Set(facts)].join(', ')} ${facts.length > 1 ? 'are' : 'is'} known, so they grow as if ${facts.length > 1 ? 'those were' : 'it were'} 0.`}));
+      const names = [...new Set(facts)].map(factName);
+      if (names.length) wrap.append(el('p', {className: 'small', textContent: `Plants are placed before ${andList(names)} ${names.length > 1 ? 'are' : 'is'} known, so they grow as if ${names.length > 1 ? 'those were' : 'it were'} 0.`}));
     }
     return wrap;
   }

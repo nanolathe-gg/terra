@@ -159,8 +159,15 @@ fn plantMask(c: vec2f) -> vec4f {
     if (u.overrideOn != 0) { vegetation += sampleRegionalArray(masksTex,maskPoint(c),4).r; }
     let slope = length(broad);
     let site = coverSite(broad, tm);
-    let facts = array<f32, 14>(slope, h0 - u.sea, h0 - u.base, tm.wear, tm.deposit, tm.wet, site.x, coverSoil(slope, clamp((h0 - around) / 1.5, -1.0, 1.0), tm, site.x),
-        site.y, clamp((h0 - around) / 1.5, -1.0, 1.0), 0.0, 0.0, 0.0, 0.0);
+    let facing = surfaceFacing(broad);
+    // The facts that look around, only where a rule reads them (the flags row's y), as the color pass has them.
+    let looks = u32(u.materialTable[SURFACE_FLAGS].y);
+    var shelter = 0.0;
+    if ((looks & SURFACE_LOOK_SHELTER) != 0u) { shelter = surfaceShelter(c); }
+    var toWater = 0.0;
+    if ((looks & SURFACE_LOOK_WATER) != 0u) { toWater = surfaceToWater(c); }
+    let facts = array<f32, 18>(slope, h0 - u.sea, h0 - u.base, tm.wear, tm.deposit, tm.wet, site.x, coverSoil(slope, clamp((h0 - around) / 1.5, -1.0, 1.0), tm, site.x),
+        site.y, clamp((h0 - around) / 1.5, -1.0, 1.0), 0.0, 0.0, 0.0, 0.0, facing.x, facing.y, shelter, toWater);
     let entries = u32(cvr(3u).w);
     var mask = vec4f(0.0);
     for (var stage = 0u; stage < 8u; stage++) {

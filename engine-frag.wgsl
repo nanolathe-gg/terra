@@ -290,7 +290,7 @@ fn coverZ(p: vec2f, scale: f32) -> f32 {
 // is Amount times its rule. Coverage: with an edge of width under 1 or noise, clamp((share + noise - .5) / width + .5); a score's coverage is
 // its smoothstep. Noise is Noise times an even value from -.5 to .5, by the art pixel at a size of 1 or less and in patches of that size above
 // (the cover classes' pick), both repeating with the ground's pool. Width 1 and no noise lay the share itself, as the draw always has.
-var<private> surfaceFacts: array<f32, 14>;
+var<private> surfaceFacts: array<f32, 18>;
 var<private> surfacePreviewCover: f32 = 0.0;   // the previewed layer's coverage (diagnostic view 13)
 var<private> surfacePreviewSeen: f32 = -1.0;   // what of it the layers after it leave showing (-1 until it is drawn)
 // The inspector's pixel (GeometryFrame.probe): this invocation draws it, and how many layers it has recorded (probeOut).
@@ -1716,8 +1716,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.materialTable[SURFACE_FLAGS].x > 0.0 || probeHere || u.diagnosticView >= 14) {
         // The surface layers' facts (surfaceFacts), once a pixel and only when a layer reads them or draws a material.
         let site = coverSite(broad, timeMaps);
-        surfaceFacts = array<f32, 14>(slope, baseHeight(p) - u.sea, baseHeight(p) - u.base, timeMaps.wear, timeMaps.deposit, timeMaps.wet,
-            site.x, coverSoil(slope, place.top, timeMaps, site.x), site.y, place.top, place.convexity, 0.0, 0.0, 0.0);
+        let facing = surfaceFacing(broad);
+        // The facts that look around the pixel cost up to 24 and 168 height taps: only where a rule reads them, the inspector's pixel and the fact view.
+        let looks = u32(u.materialTable[SURFACE_FLAGS].y);
+        let every = probeHere || u.diagnosticView >= 14;
+        var shelter = 0.0;
+        if ((looks & SURFACE_LOOK_SHELTER) != 0u || every) { shelter = surfaceShelter(p); }
+        var toWater = 0.0;
+        if ((looks & SURFACE_LOOK_WATER) != 0u || every) { toWater = surfaceToWater(p); }
+        surfaceFacts = array<f32, 18>(slope, baseHeight(p) - u.sea, baseHeight(p) - u.base, timeMaps.wear, timeMaps.deposit, timeMaps.wet,
+            site.x, coverSoil(slope, place.top, timeMaps, site.x), site.y, place.top, place.convexity, 0.0, 0.0, 0.0, facing.x, facing.y, shelter, toWater);
     }
     if (ownGround) { let hs = highShare(p); if (hs > 0.0) { surfSrc[0] = groundPigment(p, u32(u.highGround), timeMaps.wear, timeMaps.deposit); surfMask[0] = hs; } }
     surfaceStage(0u, &grass, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);   // stage 0: highland ground
@@ -2459,7 +2467,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if ((at.x + at.y) % 6u < 2u && cover > 0.0) { color = mix(color, (vec3f(1.0, 0.1, 0.9) * seen + vec3f(0.1, 0.9, 1.0) * (cover - seen)) / cover, min(cover * 1.5, 1.0)); }
     }
     // The Surface section's fact view: the fact one condition of the previewed layer reads (views 14 to 17: its term 0 to 3, the layer at
-    // u.surfacePreview), in gray from its range's low end (dark gray) to its high end (light gray, SURFACE_FACT_GRAY_LO and _HI), magenta where that condition holds (a score: where
+    // u.surfacePreview), in gray from its range's low end (dark gray) to its high end (light gray, SURFACE_FACT_GRAY_LO and _HI; a square root of the way across
+    // for SURFACE_FACT_ROOT's facts), magenta where that condition holds (a score: where
     // the whole score passes, without its edge noise). Green stays the gray alone, so the page reads the view's own pixels for its histogram.
     // The rock, debris and sand shares are their final values here, not what an earlier stage's layer saw.
     if (u.diagnosticView >= 14 && u.diagnosticView <= 17 && u.surfacePreview >= 0) {
@@ -2470,7 +2479,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             let head = u.materialTable[at + 2u];
             let term = u.materialTable[at + 3u + k];
             let f = min(u32(term.x), SURFACE_FACTS - 1u);
-            let g = mix(SURFACE_FACT_GRAY_LO, SURFACE_FACT_GRAY_HI, clamp((surfaceFacts[f] - SURFACE_FACT_LO[f]) / (SURFACE_FACT_HI[f] - SURFACE_FACT_LO[f]), 0.0, 1.0));
+            let t = clamp((surfaceFacts[f] - SURFACE_FACT_LO[f]) / (SURFACE_FACT_HI[f] - SURFACE_FACT_LO[f]), 0.0, 1.0);
+            let g = mix(SURFACE_FACT_GRAY_LO, SURFACE_FACT_GRAY_HI, select(t, sqrt(t), SURFACE_FACT_ROOT[f] > 0.5));
             var holds = 0.0;
             if (head.x < 1.5) { holds = surfaceWindow(surfaceFacts[f], term.y, term.z, term.w); }
             else { holds = smoothstep(head.y - head.z, head.y + head.z, surfaceScore(at + 2u, rules, surfaceFacts, 0.0)); }
@@ -2487,7 +2497,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.diagnosticView == 7) { let code = bakedFields(p).b; color = vec3f(clamp(-code, 0.0, 1.0), clamp(code - 1.0, 0.0, 1.0), clamp(0.5 + bakedFields(p).r * 0.08, 0.0, 1.0) * 0.6); }
     if (probeHere) {
         probeOut[0] = 1.0; probeOut[1] = color.r; probeOut[2] = color.g; probeOut[3] = color.b; probeOut[4] = f32(gs); probeOut[5] = h - u.sea;
-        for (var k = 0u; k < SURFACE_FACTS; k++) { probeOut[6u + k] = surfaceFacts[k]; }
+        for (var k = 0u; k < 14u; k++) { probeOut[6u + k] = surfaceFacts[k]; }
+        for (var k = 14u; k < SURFACE_FACTS; k++) { probeOut[76u + k] = surfaceFacts[k]; }   // facts 14 to 17 at 90 to 93, past the layers' record
         probeOut[21] = nearWater; probeOut[22] = surfCover; probeOut[23] = select(0.0, 1.0, ownGround); probeOut[24] = f32(probeCount);
         probeOut[20] = f32(rs & rockMask); probeOut[89] = exposed;   // the rock type drawn here, and how much of its rock shows
     }

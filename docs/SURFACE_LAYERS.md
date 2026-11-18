@@ -369,6 +369,35 @@ Not done: the "More here / not here" buttons on Pick, new facts (distance to wat
 layer that sheds off slopes and stays in shade, rock placement as a rule the rock solid reads, and moving setting rows into Surface.
 The Spread steps (`SURFACE_SPREAD_STEP`) are first guesses; Moss at +1 on Green is strong.
 
+## Round 9 (branch `facts`, 2026-11-17): facts for snow and shores
+
+The owner tried round 8 ("Looks good") and asked for the next three: fix the Steepness view, add the new facts, add Pick's "more here / not
+here". Built on the branch, not landed.
+- **Steepness's view runs to 20, on a square-root scale** (`SURFACE_FACT_ROOT`): a Plateau's faces read up to about 16 (1x on Green), so the
+  old 0 to 3 drew every cliff white. Rules did not change.
+- **Four facts** (`SURFACE_FACTS` 14 to 17), so a snow or shore layer can be placed by what places them in the world:
+  - *Faces north* and *Faces east* (-1 to 1): which way the ground falls, 0 on level ground, whole from a slope of 0.25. Two signed facts, not
+    an angle, so a window never wraps and a score weighs any direction. Sunlight already reads the sun's side, but it moves with the Light
+    settings and mixes in steepness; facing is the compass alone (snow on the shaded side, lee slopes, a wet side). Under TA's camera a
+    north face steeper than about 2 is hidden behind its own top, so east and west read most on screen.
+  - *Sheltered* (0 to 1): how much of the sky round a pixel the ground hides, eight looks at 24, 48 and 96 px. A cliff's foot and a gorge
+    read high, a top and the open plain 0.
+  - *Distance to water* (0 to 192 px, square-root view): twelve rays to the first ground under the sea.
+  The last two look around the pixel (24 and up to 168 height taps), so the draw computes them only where a rule reads them (the flags row's
+  y, `SURFACE_LOOKS`), for Pick's pixel and in the fact view. Both reach less than the draw's own 203.6 px (the shadow march), so a tile
+  already holds every height they read and no margin moved. The plant bake reads all four too: it walks every material layer, so a
+  shore layer reading Distance to water as 0 would have covered every plant under it. Its height apron grows by their reach
+  (`surfaceLookReach`) only when plants are placed and a rule reads one.
+  Measured headless on Dawn: a 1024 px window takes the same time with a rule on either of them as with one on
+  Steepness (120 to 200 ms each way, within run-to-run noise); the color pass was not timed alone.
+- **Show here / Not here on Pick's card**: each layer with a rule gets a button on its line, Not here where it shows and Show here where its
+  rule keeps it out (`ruleToShow`, `ruleToHide`, from the facts the draw recorded at the pixel; a score's margin covers half its edge noise,
+  not its height contrast). Show moves each failing window just past
+  the value, and a limit that would leave its fact's range goes instead. Not here moves the one limit that cuts least of its fact's gray,
+  never one that would cross the window's other end, drawn or stored. A score moves its threshold. The stored limit is the drawn one less
+  the layer's Spread. The card says what moved, one undo step. It says why instead when no limit can help: no rule (Coverage or edge noise
+  decides), the rule already holds, or a Rock, Debris or Sand share decides it, since the draw finishes those after the layer.
+
 ## Sources (phase 1)
 
 Built-in sources are the surfaces the engine draws today without a material: rock (the rock type's color and
@@ -390,4 +419,4 @@ Phase 4 turns them into materials one by one.
 - Low ground (round 7): the "Low ground by the water" preset draws Red's ground as a band along the shore; judge its material and reach.
 - Shallow water (round 7): a picked tone is kept in the world's colors (`shallowTone`); say if it should live elsewhere.
 - Converting highland, base band and rock face into rules means their World rows move into the Surface section.
-- Spread (round 8): you asked for it as proposed; it does repeat what editing a rule's limits does (rule 9), so say if it should go.
+- Spread (round 8): kept; the owner tried it on 2026-11-17 and said it looks good.

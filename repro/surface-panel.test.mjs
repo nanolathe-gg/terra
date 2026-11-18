@@ -102,3 +102,8 @@ test('each built-in names World settings that exist as the ones that place it', 
     for (const key of list) assert.ok(keys.has(key), `${builtin}: ${key} is a World setting`);
   }
 });
+
+test('every fact a rule may read has a name for the artist', async () => {
+  const {FACT_LABELS} = await import('../sculpt-surface-panel.js'), {SURFACE_FACTS} = await import('../sculpt-material-model.js');
+  for (const f of SURFACE_FACTS) assert.ok(FACT_LABELS[f]?.[0], f);
+});

@@ -4,7 +4,7 @@
 // water, the water. A swatch is the Color of what its line names, changed through the same path as that thing's own control, one undo step a
 // change; the line under it says what the change reaches. index.html holds the card (#pick); this fills it and keeps it beside its pixel.
 import {layersAt, FACT_LABELS} from './sculpt-surface-panel.js';
-import {ruleHere, layerKey as layerKeyOf} from './sculpt-material-model.js';
+import {ruleHere, ruleToShow, ruleToHide, layerKey as layerKeyOf} from './sculpt-material-model.js';
 import {controlRow} from './sculpt-workspace.js';
 
 const $ = id => document.getElementById(id);
@@ -35,7 +35,8 @@ export function absentReason(layer, state, facts) {
 // shape(i) → {name, values} or null; selectShape(i); shapeSettings(i); rock(slot) → {name, color, tag, scope, values, material: {slot, name},
 // reach} or null; recolorRock(slot, hex, commit); openRock(slot); ground(slot) and water() → {slot, name, color, tag, scope, reach} (water also
 // shallow, its tint) or null; recolor(slot, hex, commit); editMaterial(slot, button); openSurface(at, read); read(at, read) on each new read;
-// openColors(); surface() → the world's layers; client(at) → where the art pixel is on the page {x, y}; focusMap().
+// openColors(); surface() → the world's layers; setSurface(list) → stores the world's layers, one undo step; client(at) → where the art pixel is
+// on the page {x, y}; focusMap().
 export function mountPick(host) {
   const layer = $('pick'), card = $('pick-card'), marker = $('pick-marker'), view = $('viewport');
   // The picked pixel (art space, as the probe reads it), the ground point under it (as Select hit-tests), and what the last read said.
@@ -55,7 +56,7 @@ export function mountPick(host) {
     show();
   }
   function pick(art, ground) {
-    at = {x: Math.floor(art.x), y: Math.floor(art.y)}; world = ground; read = null;
+    at = {x: Math.floor(art.x), y: Math.floor(art.y)}; world = ground; read = null; $('pick-layers-moved').hidden = true;
     layer.hidden = false; readHere();
   }
   function close() {
@@ -140,12 +141,21 @@ export function mountPick(host) {
       const layers = host.surface(), here = layersAt(r, layers), drew = new Set(here.map(e => e.key)), states = new Map(host.layerStates().map(l => [l.key, l]));
       $('pick-layers-text').textContent = here.length ? 'Surface layers here, top first' : 'No surface layer drew here: the ground shows.';
       const door = (key, name) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'link'; b.textContent = name; b.title = 'Open this layer in World › Surface'; b.onclick = () => host.openLayer(key); return b; };
-      const item = (key, name, text) => { const li = document.createElement('li'), span = document.createElement('span'); span.textContent = text; li.append(door(key, name), span); return li; };
-      $('pick-layers-list').replaceChildren(...here.map(e => item(e.key, e.name, e.seen >= .995 ? 'shows' : e.seen < .005 ? 'covered by a later layer' : `${percent(e.seen)} shows`)));
+      const item = (key, name, text, act) => { const li = document.createElement('li'), span = document.createElement('span'); span.textContent = text; li.append(door(key, name), span); if (act) li.append(' ', act); return li; };
+      const byKey = new Map(layers.map(l => [layerKeyOf(l), l])), ruled = l => Boolean(l?.where?.length || l?.score?.terms?.length);
+      // A layer with a rule may be moved here: Not here on one that shows, Show here on one its rule keeps out (not one hidden, painted only
+      // or unable to draw, which no limit changes).
+      const move = (key, show) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pick-door pick-move'; b.textContent = show ? 'Show here' : 'Not here';
+        b.title = show ? 'Move this layer’s rule limits so it holds at this pixel (one undo step)' : 'Move one of this layer’s rule limits so it no longer holds at this pixel (one undo step)';
+        b.onclick = () => moveLayer(key, show); return b; };
+      $('pick-layers-list').replaceChildren(...here.map(e => item(e.key, e.name, e.seen >= .995 ? 'shows' : e.seen < .005 ? 'covered by a later layer' : `${percent(e.seen)} shows`,
+        ruled(byKey.get(e.key)) && !states.get(e.key)?.hidden ? move(e.key, false) : null)));
       const absent = layers.filter(l => !drew.has(layerKeyOf(l)));
       $('pick-layers-absent').hidden = !absent.length;
       $('pick-layers-absent-label').textContent = `Why ${count(absent.length, 'other layer')} ${absent.length === 1 ? 'is' : 'are'} not here`;
-      $('pick-layers-absent-list').replaceChildren(...absent.map(l => { const st = states.get(layerKeyOf(l)); return item(layerKeyOf(l), st?.name ?? layerKeyOf(l), absentReason(l, st, r.facts)); }));
+      $('pick-layers-absent-list').replaceChildren(...absent.map(l => { const key = layerKeyOf(l), st = states.get(key);
+        const open = ruled(l) && st?.section === 'drawing' && !st.hidden && ruleHere(l, r.facts).share < .995;
+        return item(key, st?.name ?? key, absentReason(l, st, r.facts), open ? move(key, true) : null); }));
     }
     const ground = r ? host.ground(r.slot) : null;
     $('pick-ground').hidden = !ground; groundSlot = ground?.slot ?? null;
@@ -156,6 +166,20 @@ export function mountPick(host) {
       group('pick-ground-more', wet || r.rock.share >= .95 ? [] : acting(host.settings(['Ground'])), null, n => `${count(n, 'setting')} of the world’s ground acting here`);
     }
     place();
+  }
+  // Show here / Not here (sculpt-material-model.js ruleToShow, ruleToHide): the layer's rule limits moved from the facts the draw recorded at
+  // the pixel, stored as one undo step; the card says what moved (or why nothing could) and reads the pixel again once the map has redrawn.
+  const limitName = (fact, end) => fact ? `${(FACT_LABELS[fact]?.[0] ?? fact).replace(/\s*\([^)]*\)/g, '')} ${end}:` : 'the score’s threshold:';
+  const limitValue = v => v == null ? 'none' : String(+Number(v).toFixed(3));
+  function moveLayer(key, show) {
+    if (!read) return;
+    const layers = host.surface(), i = layers.findIndex(l => layerKeyOf(l) === key), name = host.layerStates().find(l => l.key === key)?.name ?? key;
+    const note = $('pick-layers-moved'), result = i < 0 ? {reason: 'That layer is gone from the world.'} : (show ? ruleToShow : ruleToHide)(layers[i], read.facts);
+    note.hidden = false;
+    if (result.reason) { note.textContent = `${name}: ${result.reason}`; return; }
+    if (!host.setSurface(layers.map((l, k) => k === i ? result.layer : l))) { note.textContent = `${name} could not be changed.`; return; }
+    note.textContent = `${name}: its rule now ${show ? 'holds here' : 'leaves this pixel out'}: ${result.moved.map(m => `${limitName(m.fact, m.end)} ${limitValue(m.was)} → ${limitValue(m.now)}`).join(', ')}. Undo puts it back.`;
+    readHere();
   }
   // The ring on the pixel and the card beside it, inside the map view: right of the pixel, or left where the view ends, and held on screen.
   // Placed now, and again on the next frame, once a zoom has settled the view's scroll bars.

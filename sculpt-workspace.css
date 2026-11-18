@@ -458,6 +458,7 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .pick-rows{display:grid;gap:3px}.pick-rows .control{margin:0}
 .pick-more>summary{cursor:pointer;color:var(--muted);font-size:10.5px;display:flex;align-items:center;gap:6px}.pick-more[open]>summary{margin-bottom:4px}.pick-more>summary .scope-tag{margin-left:auto}
 .pick-layer-list{margin:0;padding-left:16px;display:grid;gap:3px;font-size:10.5px;color:var(--muted)}.pick-layer-list li>button.link{margin-right:5px;font-size:inherit;padding:0}
+.pick-layer-list .pick-move{font-size:inherit}.pick-moved{margin:6px 0 0;color:var(--text)}
 /* The card's profile is compact (its silhouette, still editable); Full size opens it at the workspace's size. */
 .app:not(.curves-large) #card-profile #section-preview{height:104px}.app:not(.curves-large) #card-profile #along-preview{height:56px}
 .pick-group{margin:4px 0 0;font-size:10px;font-weight:600;color:#96ada2}
