@@ -105,3 +105,24 @@ test('a score’s new threshold clears the edge noise the draw adds, and a value
   const past = {id: 'm', material: 'x', where: [{fact: 'aboveSea', from: 0, fade: 2}]};
   assert.equal(ruleHere(ruleToHide(past, facts({aboveSea: 260})).layer, facts({aboveSea: 260})).share, 0);
 });
+
+test('Show here and Not here answer only what the draw would do, Spread included', async () => {
+  const {ruleToShow: toShow, ruleToHide: toHide, SURFACE_FACT_RANGE} = await import('../sculpt-material-model.js');
+  // Seeded cases as the review's fuzz made them: windows of one to three facts, a fade, a Spread that narrows or widens, any value.
+  let seed = 12345; const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const pick = a => a[Math.floor(rnd() * a.length)], early = SURFACE_FACTS.filter(f => !['rockShare', 'debrisShare', 'sandShare'].includes(f));
+  let shown = 0, hidden = 0;
+  for (let n = 0; n < 20000; n++) {
+    const values = SURFACE_FACTS.map(f => { const [lo, hi] = SURFACE_FACT_RANGE[f], r = rnd(); return r < .1 ? lo : r < .2 ? hi : lo + (hi - lo) * rnd(); });
+    const spread = rnd() < .5 ? 0 : Math.round((rnd() * 2 - 1) * 100) / 100, where = [];
+    for (let k = 1 + Math.floor(rnd() * 3); k > 0; k--) {
+      const f = pick(early), [lo, hi] = SURFACE_FACT_RANGE[f], w = {fact: f, fade: pick([.05, .1, .2, (hi - lo) * .03])}, a = lo + (hi - lo) * rnd(), b = lo + (hi - lo) * rnd(), m = rnd();
+      if (m < .7) w.from = +Math.min(a, b).toFixed(2); if (m >= .4) w.to = +Math.max(a, b).toFixed(2); where.push(w);
+    }
+    const layer = {id: 'x-1', material: 'm', where, edge: {noise: rnd()}, ...(spread ? {spread} : {})}, share = ruleHere(layer, values).share;
+    if (share < .995) { const r = toShow(layer, values); if (!r.reason) { shown++; assert.ok(ruleHere(r.layer, values).share >= .995, `Show here: ${JSON.stringify({layer, moved: r.moved})}`); } }
+    if (share > 0) { const r = toHide(layer, values); if (!r.reason) { hidden++; assert.equal(ruleHere(r.layer, values).share, 0, `Not here: ${JSON.stringify({layer, moved: r.moved})}`); } }
+  }
+  assert.ok(shown > 10000 && hidden > 5000, `${shown} shown, ${hidden} hidden`);
+});
+

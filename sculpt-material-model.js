@@ -268,8 +268,12 @@ function moveRule(layer, facts, show) {
     const late = failing.filter(([t]) => t.late);
     if (late.length) return {reason: `${lateNames(late.map(([t]) => t))} here is the share the draw finishes after this layer, so its limit cannot be read from this pixel: set it in World › Surface.`};
     for (const [t, k] of failing) {
-      if (t.value < t.from + t.fade) store(k, 'from', Math.min(t.value - t.fade, clear(t, -1)));
-      if (t.value > t.to - t.fade) store(k, 'to', Math.max(t.value + t.fade, clear(t, 1)));
+      // The limits as Spread moves them before a window that narrows past its middle closes (spreadRule): a closed window shows its middle as
+      // both limits, and each limit the value is not clear of moves.
+      const w = layer.where[k], step = s * (SURFACE_SPREAD_STEP[t.fact] ?? 0), num = v => v != null && Number.isFinite(Number(v)) ? Number(v) : null;
+      const from = num(w.from) == null ? t.from : num(w.from) - step, to = num(w.to) == null ? t.to : num(w.to) + step;
+      if (t.value < from + t.fade) store(k, 'from', Math.min(t.value - t.fade, clear(t, -1)));
+      if (t.value > to - t.fade) store(k, 'to', Math.max(t.value + t.fade, clear(t, 1)));
     }
   } else {
     // Each limit that could leave the value out, by how much of its fact's gray the move cuts away (factPosition): a limit by the distance it
@@ -288,6 +292,10 @@ function moveRule(layer, facts, show) {
     const best = options.reduce((a, b) => b.cost < a.cost ? b : a);
     store(best.k, best.end, best.drawn);
   }
+  // The answer is checked as the draw reads it (Spread, rounding and the window's other limits): one that would not do what it says is not given.
+  const after = ruleHere(next, facts).share;
+  if (show ? after < .995 : after > 0) return {reason: show ? 'Moving its limits to this pixel would not show it here (its Spread keeps the window shut): change the rule in World › Surface.'
+    : 'No single limit can leave this pixel out without closing its window: change the rule in World › Surface.'};
   return {layer: next, moved};
 }
 // A surface read from a save, a world file or this browser's world store: only the fields a layer has, numbers checked, and the draw's
