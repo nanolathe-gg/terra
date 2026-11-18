@@ -120,6 +120,7 @@ class PipelinesPending extends Error { constructor(state,ready) { super('Terrain
 // the per-chunk textures, the memory accounting and renderChunk.
 // The diagnostic views (engine-frag.wgsl u.diagnosticView, from 1): the page's `view`, and the Surface section's layer preview (setSurfacePreview).
 const DIAGNOSTIC_VIEWS = ['diffuse','occlusion','shadow','exposure','shading','material','cracks','color','relief','roughness','wetness','palette-color','surface-layer'];
+const SURFACE_FACT_VIEW = DIAGNOSTIC_VIEWS.length + 1;   // 14 to 17: the Surface section's fact view of a previewed layer's condition 0 to 3
 export class TerrainRenderer {
   static async createChunked(canvas, config) {
     const {ChunkTerrainRenderer} = await import('./sculpt-chunk-renderer.js');
@@ -1010,7 +1011,7 @@ export class TerrainRenderer {
     this.f('uDetail', this.config.material?.surfaceRelief ?? 1.0);
     this.i('uSlopeMaterial', ['slopes', 'structured'].includes(variant.get('surface')));
     this.i('uMineralMargins', variant.get('transition') === 'mineral');
-    this.i('uDiagnosticView', this.surfacePreview >= 0 ? DIAGNOSTIC_VIEWS.indexOf('surface-layer') + 1 : DIAGNOSTIC_VIEWS.indexOf(variant.get('view')) + 1);
+    this.i('uDiagnosticView', this.previewView(variant));
     this.i('uSurfacePreview', this.surfacePreview ?? -1);
     this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : Math.max(0, Math.min(.5, (Number(variant.get('fill')) || 0) / 100)));
     const material = this.config.material || {};
@@ -1336,20 +1337,27 @@ export class TerrainRenderer {
   // a Surface section edit stays in the surface rows, which only the color pass reads.
   uniformStage(write) { const before = new Uint32Array(this.uniformData.slice(0)); write(); return worldUniformDelta(before, this.uniformData, this.layout, this.uniformStages).stage; }
   // The Surface section's preview of one layer (its first row, surfaceRows layerRows), or none (-1): the draw shows where that layer lies.
-  setSurfacePreview(row = -1) {
-    this.surfacePreview = row;
+  // `term` (0 to 3): the fact view of that condition of the layer in place of its coverage (engine-frag.wgsl views 14 to 17).
+  setSurfacePreview(row = -1, term = -1) {
+    this.surfacePreview = row; this.surfaceFact = row >= 0 ? term : -1;
     this.i('uSurfacePreview', row);
-    this.i('uDiagnosticView', row >= 0 ? DIAGNOSTIC_VIEWS.indexOf('surface-layer') + 1 : DIAGNOSTIC_VIEWS.indexOf(this.variant?.get('view')) + 1);
+    this.i('uDiagnosticView', this.previewView(this.variant));
+  }
+  // The diagnostic view the draw shows: the Surface section's preview (a layer's coverage, 13, or one of its conditions' fact, 14 to 17), else
+  // the variant's own view.
+  previewView(variant) {
+    if (this.surfacePreview >= 0) return this.surfaceFact >= 0 ? SURFACE_FACT_VIEW + Math.min(this.surfaceFact, 3) : DIAGNOSTIC_VIEWS.indexOf('surface-layer') + 1;
+    return DIAGNOSTIC_VIEWS.indexOf(variant?.get('view')) + 1;
   }
   // The layers the Surface section hides while an artist designs (their keys): a view only. An export draws every layer (designView).
   setSurfaceHidden(keys = []) { this.surfaceHidden = keys.length ? new Set(keys) : null; this.set('uMaterialTable', this.placementTable(this.variant)); }
   // Clears the Surface section's design view (hidden layers, the coverage preview) for an export's tiles; returns the function that puts it back,
   // or null when there is none.
   suspendDesignView() {
-    const hidden = this.surfaceHidden, preview = this.surfacePreview ?? -1;
+    const hidden = this.surfaceHidden, preview = this.surfacePreview ?? -1, term = this.surfaceFact ?? -1;
     if (!hidden && preview < 0) return null;
     this.surfaceHidden = null; this.set('uMaterialTable', this.placementTable(this.variant)); this.setSurfacePreview(-1);
-    return () => { this.surfaceHidden = hidden; this.set('uMaterialTable', this.placementTable(this.variant)); this.setSurfacePreview(preview); };
+    return () => { this.surfaceHidden = hidden; this.set('uMaterialTable', this.placementTable(this.variant)); this.setSurfacePreview(preview, term); };
   }
   // The color a material is drawn in: its slot's mean as the GPU computed it (sculpt-material-cache.js readMeans) when that read is of this
   // graph; else its graph's Color (materialColor) moved by the slot's last measured difference between the two, which recoloring keeps.

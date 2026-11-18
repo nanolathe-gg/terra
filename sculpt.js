@@ -872,7 +872,19 @@ function surfaceHost() {
     surface:()=>config.surface,
     apply:applySurface,
     restore:()=>{setSurfaceList(structuredClone(baseSurface),false);saveWorlds();checkpoint(true);},
-    preview:row=>{if(!renderer||renderer.surfacePreview===row)return;const stage=renderer.uniformStage(()=>renderer.setSurfacePreview(row));worldChanged({stage:stage??'F',world:false});schedule();},
+    // term (0 to 3): the fact view of that condition of the layer at `row` in place of its coverage stripes (engine-frag.wgsl views 14 to 17).
+    preview:(row,term=-1)=>{if(!renderer||renderer.surfacePreview===row&&(renderer.surfaceFact??-1)===(row>=0?term:-1))return;const stage=renderer.uniformStage(()=>renderer.setSurfacePreview(row,term));worldChanged({stage:stage??'F',world:false});schedule();},
+    // The fact view's pixels once the view has settled (the map canvas idle): the count of each gray level (the fact across its range, green
+    // carries it alone; the view never draws black, the canvas outside the map) and of the pixels where the condition holds (tinted), over
+    // the map's own pixels in view. Null when it cannot be read.
+    factSample:async()=>{
+      if(!mapCanvas?.idle)return null;await mapCanvas.idle();
+      let data;try{data=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;}catch(_){return null;}
+      const levels=new Uint32Array(256);let holds=0,total=0;
+      for(let k=0;k<data.length;k+=4){if(data[k+3]<255)continue;const r=data[k],g=data[k+1],b=data[k+2];if(Math.max(r,g,b)<8)continue;   // the black canvas outside the map
+        const tinted=r>g+8&&b>g+8;if(!tinted&&(Math.abs(r-g)>2||Math.abs(b-g)>2))continue;levels[g]++;total++;if(tinted)holds++;}
+      return total?{levels,holds,total}:null;
+    },
     // Pick on the map: the inspector's pixels come from the Pick tool (its card's Surface door, pickHost openSurface).
     pick:()=>{if(!stroke&&!moving)setPicking(true);},
     inspect:(at,current)=>mapCanvas?mapCanvas.inspect(at,current):Promise.resolve(null),
@@ -890,20 +902,15 @@ function surfaceHost() {
     material:layer=>{const m=layerMaterial(layer);return m?{name:m.name,color:hex(m),own:own(m),height:Boolean(m.nodes?.find(n=>n.type==='output')?.in?.height)}:null;},
     edit:(layer,button)=>{const m=layerMaterial(layer);if(m)materialEditor?.open(m.slot,button);},
     library:()=>Object.entries(LIBRARY).filter(([key])=>!key.endsWith('-water')).map(([key,m])=>({key,name:m.name,color:hex(m)})),
-    // A built-in's World setting (the Surface section's Built-in settings): show its block, reveal the row if the panel folded it away as
-    // unavailable, and focus it; settingNote says why it is unavailable ('' when it is not).
-    settings:key=>{const row=document.querySelector(`#wpane-surface [data-knob="${key}"]`),block=row?.closest('.world-subsection');if(!row)return;
-      if(row.hidden)block?.querySelector(`.unavailable-summary button[aria-expanded="false"][aria-controls~="knob-${key}-row"]`)?.click();
-      (block??row).scrollIntoView({block:'center',behavior:'smooth'});row.querySelector('input,select')?.focus({preventScroll:true});},
-    settingNote:key=>document.querySelector(`#wpane-surface [data-knob="${key}"] .control-requirement`)?.textContent??'',
     materialKey:preset=>{const key=preset.material.startsWith('role:')?config.materials?.[preset.material.slice(5)]:preset.material;return LIBRARY[key]?key:config.materials?.ground??'green-ground';},
     // The list's sections (sculpt-surface-panel.js layerSection): a World setting as the draw reads it (a rock type's: the largest of the
-    // world's rock and the rock types in use), its row's words and requirement; a role, a world surface (config.layers), a world fact.
+    // world's rock and the rock types in use; own: the world's rock alone), its row's words (name: its own label; label: with its group when
+    // that is one word) and requirement; a role, a world surface (config.layers), a world fact.
     control:key=>{
       const row=document.querySelector(`#knobs [data-knob="${key}"]`);if(!row||!renderer)return null;
       const own=Number(renderer.variant.get(key)??config.defaults?.[key]),rock=ROCK_KEYS.includes(key);   // a setting with no value is no claim (NaN)
       const label=(row.querySelector('label')?.title??key).replace(/\s*\([^)]*\)/g,''),group=row.closest('.world-subsection')?.querySelector('h3')?.textContent??'';
-      return {value:rock?renderer.rockMax(key,own):own,rock,rocks:renderer.rocks.size,label:/\s/.test(label)?label:`${group} ${label.toLowerCase()}`,note:row.querySelector('.control-requirement')?.textContent??''};
+      return {value:rock?renderer.rockMax(key,own):own,own,rock,rocks:renderer.rocks.size,name:label,label:/\s/.test(label)?label:`${group} ${label.toLowerCase()}`,note:row.querySelector('.control-requirement')?.textContent??''};
     },
     role:key=>({present:mapMaterials.some(m=>m[key]),name:roleName(key)}),
     hasLayer:name=>(config.layers||[]).includes(name),
