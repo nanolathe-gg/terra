@@ -212,7 +212,6 @@ struct Uniforms {
     // Crystals: their own colour (world base colour 'crystal', else the world's).
     sandDust: f32,
     sandGrass: f32,
-    bandWater: f32,
     highland: f32,      // Highland ground: how far level raised ground takes the world's highland material (0: none)
     highFrom: f32,      // the rise above the plain where the highland material starts
     highReach: f32,     // the rise over which it comes in fully
@@ -368,13 +367,11 @@ struct Uniforms {
     ringFill: f32,        // the pale tint where every copy overlaps; each copy adds its share, so the skirt steps lighter outward (0: none)
     ringPatch: f32,       // how far the stack's reach varies along the outline, from a few copies to all of them (0: every copy everywhere)
     ringPatchSize: f32,   // px over which that reach varies
-    ringTone: f32,        // the copies' lines take retail's rose, darker on the inner copies and paler on the outer (0: the earlier crimson)
     // G6 (Ice blocks and mesas, retail ice-3 and Polar Range).
     iceSoft: f32,         // raised ice is lit by its height blurred over ~13 px, so crests are rounded and faces smooth (0: the full relief lights it, as before)
     iceFrost: f32,        // Ice frost band: fine dark-blue hairlines in parallel runs, thinning inland (0: none)
     // G1 (shallow water round 3: Green, Red, Archipelago). Every default is the earlier look.
     shoalRag: f32,        // the shallow-to-deep step's outline: pixel notches of up to this many px, whatever the bed's slope (0: as before)
-    shoalStairs: f32,     // the hard waterline's stairs: runs of 1-3 px moving it up to this many px, whatever the bank's slope (0: as before)
     shoalShoreSoft: f32,  // Archipelago: the waterline the world draws (a stroke's Hard and Faded stay) is a dithered blend this many px wide (0: a clean line)
     // Low ground (Zhon's mud lowland): the ground from the sea up to lowReach above it, and the shallows, keep lowGrain of their grain.
     lowReach: f32,        // height above the sea where low ground ends (its ragged edge fades over the upper half)

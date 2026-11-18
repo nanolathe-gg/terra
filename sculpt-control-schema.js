@@ -151,11 +151,10 @@ export function worldControlRequirement(key,v){
  // (A slope gloss counts here even while the texture is 0: raising the texture gives the slope its share.)
  if(key==='slopeTexture'&&n('slopeReplaced')>0&&!shiny&&!rough&&n('shineSlope')<=0&&n('shineSlopeRough')<=0)return 'The sediment transition replaces the slope color at 100 percent Material weathering, so this scales only the slope\'s gloss. Lower Material weathering, or set a Gloss or Roughness above zero in one of the Shine groups, to use this setting.';
  // The water: the hard step is the only place the step's rows draw; the ramp's rows draw only where the step is off.
- if(['waterSoft','bandWater'].includes(key))return Number(v.waterTones)===3?'':n('rampWater')>0?'':RAMP_IDLE;
+ if(key==='waterSoft')return Number(v.waterTones)===3?'':n('rampWater')>0?'':RAMP_IDLE;
  if(['stepSoftPx','shelfWander','shoalRag'].includes(key))return needs('deepEdge',HARD_STEP);
  // The waterline's stairs and blur are drawn only by a crisp waterline, and a blur replaces the stairs (engine-frag.wgsl, the shore's crisp cut).
  if(key==='shoalShoreSoft')return needs('crispShore','Crisp waterline');
- if(key==='shoalStairs')return needs('crispShore','Crisp waterline')||(n('shoalShoreSoft')>0?'Waterline blur replaces the stairs. Set it to 0 to use this setting.':'');
  if(/^ring[A-Z]/.test(key)&&n('ringLayer')<=0)return 'This world draws no mineral fringe.';
  if(key==='beachWidth'&&n('beachLayer')<=0)return 'This world has no beach of its own. Choose another world\'s Beach, above, to use this setting.';
  if(key==='ringShiftDir'||key==='ringScatter')return needs('ringShift','Offset between copies');
@@ -185,7 +184,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedTint','bedBright','bedContrast','bedRelief','bedCracks','shoreEdge',
  'baseBand','desertCapFlat',
  'shelfWander','bedFlat',
- 'ringContrast','ringCount','ringSize','ringShift','ringTone',
+ 'ringContrast','ringCount','ringSize','ringShift',
  'lavaCrust','lavaPillow','lavaVeins','layerCrease','pockmark',
  'moonCups','moonRibs','moonFolds','iceCrystal','gougeWeb','iceCrest','iceSoft','iceSnow','iceFall','iceApron','iceFrost','frostGaps'
 ]);

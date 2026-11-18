@@ -1110,9 +1110,7 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
         let gap = 0.75 + 0.25 * smoothstep(0.15, 0.5, shelfNoise(p / 11.0 + 91.0 + j * 5.1));
         let inside = 1.0 - smoothstep(-0.7, 0.7, d);
         rgb = mix(rgb, fillTone, inside * fillStep * zone * vis);
-        // Retail's lines run from a dusky rose (155, 91, 99) on the inner copies to a pale one (215, 163, 179) on the outer.
-        let lineTone = mix(tone, mix(vec3f(0.55, 0.27, 0.31), vec3f(0.84, 0.62, 0.68), t), u.ringTone);
-        rgb = mix(rgb, lineTone, line * gap * zone * vis * (1.0 - RING_TAPER * t) * u.ringContrast);
+        rgb = mix(rgb, tone, line * gap * zone * vis * (1.0 - RING_TAPER * t) * u.ringContrast);
     }
     return rgb;
 }
@@ -2326,8 +2324,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         var mottle = ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * smoothstep(2.0, 8.0, bedDepth);
         if (u.lowGrain < 1.0) { mottle *= lowGrain; }
         colorDepth += mottle;
-        // Optional contour rings in the water colour, every 6 depth units.
-        if (u.bandWater > 0.0) { colorDepth = mix(colorDepth, (floor(colorDepth / 6.0) + 0.5) * 6.0, u.bandWater * 0.7); }
         // A deep or shallow stroke's water choices (card E1), painted into the
         // masks: +1 hard, -1 faded, 0 the world's own.
         // The plane is bilinear, so a half threshold keeps a stroke's footprint
@@ -2387,19 +2383,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // far from shore; there is no fixed-width coastal blue collar.
         var submerged = smoothstep(-0.2, 2.8, depth);
         if (shoreHard > 0.0) {
-            // Retail waterlines are hard edges with small stair-step notches,
-            // not soft fades: threshold depth against pixel-block jitter.
+            // Vary the crisp edge over two-pixel blocks.
             let block = floor(grainPixel(pixel) / 2.0);
             let jitter = fract(sin(dot(block, vec2f(12.9898, 78.233))) * 43758.5453) - 0.5;
             var crisp = step(0.6 + jitter * 1.4, depth);
-            if (u.shoalStairs > 0.0) {
-                // G1: retail's waterline steps in runs of 1-3 px on any bank. The earlier jitter is in depth, so
-                // a steep bank is cut straight and a gentle one in 6-px notches; here the depth is read where a
-                // point displaced by smooth noise of 3 and 7 px sits, up to shoalStairs px (smooth, so the cut
-                // leaves runs and no isolated pixels, which per-pixel hashes did).
-                let off = ((vec2f(shelfNoise(p / 3.0 + 5.3), shelfNoise(p / 3.0 + 37.9)) - 0.5) * 1.0 + (vec2f(shelfNoise(p / 7.0 + 9.1), shelfNoise(p / 7.0 + 77.3)) - 0.5) * 1.6) * u.shoalStairs;
-                crisp = step(0.6, depth + baseHeight(p) - baseHeight(p + off));
-            }
             if (u.shoalShoreSoft > 0.0) {
                 // G1: retail's Archipelago shore is not a clean line: 2-4 px of sand and water pixels mix at it. The
                 // depth is turned into a coverage over shoalShoreSoft px (the bank's gradient, floored for flat

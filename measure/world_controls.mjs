@@ -55,7 +55,7 @@ const ALLOWED = {};
 // A cancelled term leaves float rounding (a pixel or two), not a control.
 const HIDDEN_PX = 8;
 // The rows a picked water color changes the answer for; no scene picks one, so the sweep does (H25).
-const COLORED_ROWS = new Set(['deepEdge', 'shallowDepth', 'deepDepth', 'waterSoft', 'bandWater', 'bedTint', 'bedBright', 'bedContrast', 'bedFlat']);
+const COLORED_ROWS = new Set(['deepEdge', 'shallowDepth', 'deepDepth', 'waterSoft', 'bedTint', 'bedBright', 'bedContrast', 'bedFlat']);
 const reasonFor = r => ALLOWED[(r.stroke ? r.stroke + ':' : '') + r.key] || ALLOWED[r.key] || null;
 const failed = r => (r.zero && !r.allowed) || r.leak || r.hides;
 const named = r => `${r.world} ${r.stroke ? r.stroke + ':' : ''}${r.key}${r.hides ? ' moves while the panel says "' + r.reason + '"' : ''}`;

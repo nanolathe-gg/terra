@@ -30,7 +30,7 @@ const scenePath = (world, n) => existsSync(`${sceneRoot}/${world}-${n}.json`) ? 
 // The water-bed knobs (bedTint, bedRelief, ...) are Water's, not geology.
 const FAMILY = /^(bed(Dip|DipDir)|banding|band[A-Z]\w*|sandBanding|sandBandSpacing|strata\w*|ring\w*|layer\w*|shoreLayers|lava(Spread|CircleVary)|baseBand\w*|desertCapFlat|column\w*)$/;
 // The class each family acts on (measure/geology_diff.py).
-const SHORES = /^(shoal\w*|shelf\w*|shallowDepth|deepDepth|waterSoft|crispShore|stepSoftPx|deepEdge|bed(Tint|Flat|Relief|Contrast|Bright)|flatBank|bankRock|beachWidth|apron|sandCrown|shoreEdge|bandWater|fingers|finger[A-Z]\w*|shoreLayers|layer(Px|Riser|Ledge|Rough|Style|Vary|Circle|Crease)|lava(Spread|CircleVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*|water(Deep|Bed))$/;
+const SHORES = /^(shoal\w*|shelf\w*|shallowDepth|deepDepth|waterSoft|crispShore|stepSoftPx|deepEdge|bed(Tint|Flat|Relief|Contrast|Bright)|flatBank|bankRock|beachWidth|apron|sandCrown|shoreEdge|fingers|finger[A-Z]\w*|shoreLayers|layer(Px|Riser|Ledge|Rough|Style|Vary|Circle|Crease)|lava(Spread|CircleVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*|water(Deep|Bed))$/;
 const SHORE_CLASS = k => /^(shoal(Stairs|ShoreSoft)|crispShore|shoreEdge|shore)$/.test(k) ? 'edge' : /^(beachWidth|apron|sandCrown)$/.test(k) ? 'beach' : /^(flatBank|bankRock|layerCrease)$/.test(k) ? 'bank'
   : /^(fingers|finger[A-Z]\w*|shoreLayers|layer[A-Z]\w*|lava(Spread|CircleVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*)$/.test(k) ? 'shore' : 'shallows';
 const IMPACTS = /^(moon\w*|pock\w*|crystalCrater\w*|worms|wrinkles|slopeMarks)$/;
