@@ -16,7 +16,16 @@
 //   ALLOW_LOCALHOST  "0" to refuse localhost origins (default: allowed, for development)
 
 export const MAX_COMPRESSED = 1024 * 1024;      // 1 MiB of gzip
-export const MAX_UNCOMPRESSED = 16 * 1024 * 1024; // a real save is 40-105 KB of JSON; this stops gzip bombs
+// A save is 40-105 KB of JSON without features; a fill of trees adds about 75 bytes a tree (a 16 x 16 map filled: 1.7 MB, 24 x 24: 3.9 MB,
+// gzipped about ten to one). The cap fits those twice over, and a body may inflate to at most MAX_RATIO times its own size, so a small gzip
+// bomb costs as little as a small save to refuse.
+export const MAX_UNCOMPRESSED = 8 * 1024 * 1024;
+export const MAX_RATIO = 40;
+// The fields of a save (sculpt.js sketch()); a body with any other is refused, so the bucket holds saves and nothing else. Add a field here
+// when the editor's save gains one, and deploy the Worker before the editor that writes it.
+export const SAVE_FIELDS = ['format', 'version', 'nodes', 'map', 'mapData', 'biome', 'world', 'worldSettings', 'size', 'grid', 'baseHeight', 'seaLevel', 'seed',
+  'varySeed', 'refinementSeed', 'column', 'rock', 'rocks', 'materials', 'tools', 'toolSettings', 'softness', 'relief', 'materialWeathering', 'depositSpread',
+  'transitionDetail', 'tool', 'diameter', 'amount', 'roughness', 'weather', 'clay', 'light', 'encoding'];
 export const FORMAT = 'nanolathe-terrain-sculpt';
 const ID_RE = /^[a-z2-7]{16}$/;
 const DEFAULT_ORIGINS = 'https://terra.nanolathe.gg';
@@ -66,7 +75,8 @@ export async function checkSave(gz) {
   let text;
   try {
     const stream = new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'));
-    text = new TextDecoder('utf-8', {fatal: true}).decode(await readLimited(stream, MAX_UNCOMPRESSED, 'The save is too large once uncompressed (limit 16 MB).'));
+    const limit = Math.min(MAX_UNCOMPRESSED, gz.length * MAX_RATIO + 65536);
+    text = new TextDecoder('utf-8', {fatal: true}).decode(await readLimited(stream, limit, `The save is too large once uncompressed (limit ${limit === MAX_UNCOMPRESSED ? '8 MB' : MAX_RATIO + ' times its gzip size'}).`));
   } catch (err) {
     if (err instanceof Refusal) throw err;
     throw new Refusal(400, 'The gzip data is damaged or does not hold UTF-8 text.');
@@ -75,18 +85,32 @@ export async function checkSave(gz) {
   try { save = JSON.parse(text); } catch { throw new Refusal(400, 'The save is not valid JSON.'); }
   if (!save || typeof save !== 'object' || Array.isArray(save) || save.format !== FORMAT) throw new Refusal(400, 'This is not a Terraform save: its format must be ' + FORMAT + '.');
   if (!Number.isInteger(save.version) || save.version < 1) throw new Refusal(400, 'This is not a Terraform save: it has no version number.');
-  if (!Array.isArray(save.nodes) || save.nodes.some(n => !n || typeof n !== 'object')) throw new Refusal(400, 'This is not a Terraform save: nodes must be a list of stroke objects.');
+  if (!Array.isArray(save.nodes) || save.nodes.some(n => !n || typeof n !== 'object' || Array.isArray(n))) throw new Refusal(400, 'This is not a Terraform save: nodes must be a list of stroke objects.');
+  const extra = Object.keys(save).filter(k => !SAVE_FIELDS.includes(k));
+  if (extra.length) throw new Refusal(400, `This is not a Terraform save: it has fields a save does not have (${extra.slice(0, 3).join(', ')}).`);
+  const object = v => v === undefined || (v && typeof v === 'object' && !Array.isArray(v)), list = v => v === undefined || Array.isArray(v);
+  const text16 = v => v === undefined || (typeof v === 'string' && v.length <= 128), number = v => v === undefined || Number.isFinite(v), flag = v => v === undefined || typeof v === 'boolean';
+  if (!text16(save.biome) || !text16(save.world) || !text16(save.tool) || !text16(save.encoding) || !text16(save.light)
+    || !object(save.map) || !object(save.mapData) || !object(save.worldSettings) || !object(save.rock) || !object(save.column) || !object(save.toolSettings)
+    || !list(save.rocks) || !list(save.materials) || !list(save.tools)
+    || !['size', 'grid', 'baseHeight', 'seaLevel', 'seed', 'refinementSeed', 'softness', 'relief', 'materialWeathering', 'depositSpread', 'transitionDetail', 'diameter', 'amount', 'roughness'].every(k => number(save[k]))
+    || !['varySeed', 'weather', 'clay'].every(k => flag(save[k])))
+    throw new Refusal(400, 'This is not a Terraform save: a field holds the wrong kind of value.');
 }
 
-function corsHeaders(request, env) {
-  const origin = request.headers.get('Origin');
-  if (!origin) return {};
+function originAllowed(origin, env) {
+  if (!origin) return false;
   const allowed = String(env.ALLOWED_ORIGINS ?? DEFAULT_ORIGINS).split(',').map(s => s.trim()).filter(Boolean);
   let ok = allowed.includes(origin);
   if (!ok && env.ALLOW_LOCALHOST !== '0') {
     try { const u = new URL(origin); ok = u.protocol === 'http:' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1'); } catch { /* not an origin */ }
   }
-  if (!ok) return {Vary: 'Origin'};
+  return ok;
+}
+function corsHeaders(request, env) {
+  const origin = request.headers.get('Origin');
+  if (!origin) return {};
+  if (!originAllowed(origin, env)) return {Vary: 'Origin'};
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
@@ -114,6 +138,8 @@ async function route(request, env) {
   const key = id => `maps/${id}.json.gz`;
 
   if (request.method === 'POST' && id === undefined) {
+    // Saves come from the editor's own pages (a browser sends their Origin); a request from another site or without one is refused.
+    if (!originAllowed(request.headers.get('Origin'), env)) throw new Refusal(403, 'Saves are accepted from the editor\'s own site only.');
     const declared = Number(request.headers.get('Content-Length'));
     if (declared > MAX_COMPRESSED) throw new Refusal(413, 'The save is too large (limit 1 MB compressed).');
     const gz = await readLimited(request.body, MAX_COMPRESSED, 'The save is too large (limit 1 MB compressed).');

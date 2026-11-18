@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {gzipSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
-import {handle, mapId, MAX_COMPRESSED} from '../deploy/worker/worker.js';
+import {handle, mapId, MAX_COMPRESSED, MAX_UNCOMPRESSED} from '../deploy/worker/worker.js';
 
 // An in-memory stand-in for the parts of an R2 bucket the Worker uses.
 function fakeBucket() {
@@ -16,7 +16,8 @@ function fakeBucket() {
 }
 const save = (extra = {}) => ({format: 'nanolathe-terrain-sculpt', version: 6, nodes: [{kind: 'hill', x: 1}], size: 64, ...extra});
 const gz = o => gzipSync(typeof o === 'string' ? o : JSON.stringify(o), {level: 9});
-const post = (env, body, headers = {}) => handle(new Request('https://w.test/maps', {method: 'POST', body, headers}), env);
+const SITE = 'https://terra.nanolathe.gg';
+const post = (env, body, headers = {}) => handle(new Request('https://w.test/maps', {method: 'POST', body, headers: {Origin: SITE, ...headers}}), env);
 const env = (over = {}) => ({MAPS: fakeBucket(), ...over});
 
 test('a good save round-trips with browser-readable headers', async () => {
@@ -66,7 +67,10 @@ test('bad bodies are refused with clear errors and nothing is stored', async () 
     [gz({format: 'nanolathe-terrain-sculpt', version: 6, nodes: 'x'}), 400, /nodes/],
     [gz([1, 2]), 400, /not a Terraform save/],
     [Buffer.concat([gz(save()).subarray(0, 20)]), 400, /damaged/],
-    [gz(JSON.stringify(save({pad: 'a'.repeat(17 * 1024 * 1024)}))), 413, /uncompressed/],
+    [gz(JSON.stringify(save({mapData: {pad: 'a'.repeat(MAX_UNCOMPRESSED + 1)}}))), 413, /uncompressed/],
+    [gz(save({junk: 'stored for good'})), 400, /fields a save does not have \(junk\)/],
+    [gz(save({biome: {x: 1}})), 400, /wrong kind of value/],
+    [gz(save({seaLevel: 'deep'})), 400, /wrong kind of value/],
     [Buffer.alloc(MAX_COMPRESSED + 1, 7), 413, /too large/],
   ];
   for (const [body, status, re] of cases) {
@@ -129,4 +133,29 @@ test('CPU cost: hashing and checking a 100 KB save', async () => {
   const ms = (performance.now() - t) / 20;
   console.log(`# ${JSON.stringify(big).length} bytes of JSON, ${body.length} gzipped: ${ms.toFixed(2)} ms per POST in Node`);
   assert.ok(ms < 10);
+});
+
+test('a save as the editor writes it is accepted: every field sketch() writes, of its kind', async () => {
+  const e = env(), full = save({map: {unitsX: 4, unitsY: 4}, mapData: {name: 'x', features: []}, biome: 'green', world: 'green', worldSettings: {knobs: {}}, size: 1216, grid: 608,
+    baseHeight: 104, seaLevel: 95, seed: 2701, varySeed: true, refinementSeed: 2701, column: {sections: []}, rock: {}, rocks: [], materials: [], tools: [], toolSettings: {},
+    softness: 50, relief: 100, materialWeathering: 0, depositSpread: 65, transitionDetail: 65, tool: 'plateau', diameter: 800, amount: 70, roughness: 0, weather: false,
+    clay: false, light: 'original', encoding: 'stroke-graph'});
+  assert.equal((await post(e, gz(full))).status, 200);
+});
+test('a small gzip bomb is refused at forty times its size, before it is parsed', async () => {
+  const e = env(), body = gz(JSON.stringify(save({mapData: {pad: 'a'.repeat(4 * 1024 * 1024)}})));
+  assert.ok(body.length < 16 * 1024, `${body.length} bytes of gzip`);
+  const r = await post(e, body);
+  assert.equal(r.status, 413);
+  assert.match((await r.json()).error, /40 times its gzip size/);
+  assert.equal(e.MAPS.store.size, 0);
+});
+test('a save is accepted from the editor\'s site or localhost only', async () => {
+  const e = env(), body = gz(save());
+  for (const origin of [null, 'https://evil.example']) {
+    const r = await handle(new Request('https://w.test/maps', {method: 'POST', body, headers: origin ? {Origin: origin} : {}}), e);
+    assert.equal(r.status, 403, String(origin));
+  }
+  assert.equal((await post(e, body, {Origin: 'http://localhost:8801'})).status, 200);
+  assert.equal(e.MAPS.store.size, 1);
 });
