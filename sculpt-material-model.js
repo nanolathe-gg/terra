@@ -39,7 +39,7 @@ export function coverRows(site = null, plants = [], relief = 1) {
 // facts: `where` (up to four windows {fact, from, to, fade}, all of which must hold) or `score` ({terms: [{fact, weight}], from, fade}).
 // The world's list sets their order within a stage, an Amount and an edge. Rows from row 0, sorted by stage: (built-in slot or -1, Amount,
 // material slot or -1, rule rows), (width, noise, noise size, salt), then the rule's (kind, score from, score fade, 0) and its terms;
-// SURFACE_FLAGS_ROW x is 1 when a layer reads facts or draws a material; a rule head's w is the layer's
+// SURFACE_FLAGS_ROW x is 1 when a layer reads facts or draws a material, y the SURFACE_LOOKS bits of the facts its rules read; a rule head's w is the layer's
 // height contrast (edge.height: the taller of its material and the ground below wins at its edge), so a layer with one and no rule has an empty one; SURFACE_HEAD_ROW's four rows the stages' (first row, count) pairs.
 export const SURFACE_STAGES = 8, SURFACE_MAX = 32, SURFACE_HEAD_ROW = 152, SURFACE_FLAGS_ROW = 151, SURFACE_RULE_TERMS = 4;
 // Built-ins: [stage, slot in its stage]. Stages: 0 after the ground, 1 after the low-ground tint, 2 after the cover classes, 3 after the
@@ -82,19 +82,25 @@ export const SURFACE_DRAWABLE = ['soil', 'baseBand', 'regrownMoss', 'paintedSnow
 export const SURFACE_OWN_AMOUNT = ['highland', 'baseBand'], SURFACE_FIXED = ['highland'];
 export const SURFACE_STAGE_NAMES = ['ground', 'slope', 'land', 'crown', 'band', 'loose', 'chips', 'snow'];
 // Facts a rule reads (engine-frag.wgsl surfaceFacts), in their order there. The shares exist from their own stage on.
+// north and east: which way the ground falls (0 on level ground); sheltered: how much of the sky round a pixel the ground hides; toWater: px to
+// the nearest ground under the sea, up to 192. The last two look around the pixel, so the draw computes them only where a rule reads them.
 export const SURFACE_FACTS = ['slope', 'aboveSea', 'abovePlain', 'wear', 'deposit', 'wetness', 'moisture', 'soilDepth', 'light', 'top', 'convexity',
-  'rockShare', 'debrisShare', 'sandShare'];
+  'rockShare', 'debrisShare', 'sandShare', 'north', 'east', 'sheltered', 'toWater'];
+// The facts that look around a pixel, by their bit in the flags row's y (engine-common.wgsl SURFACE_LOOK_SHELTER, SURFACE_LOOK_WATER).
+export const SURFACE_LOOKS = {sheltered: 1, toWater: 2};
 // Each fact's range, [low, high] (SURFACE_FACTS order as keys): the Surface section's fact view draws a fact in gray across it, and its histogram
 // spans it. engine-common.wgsl SURFACE_FACT_LO and SURFACE_FACT_HI hold the same numbers. Steepness (rise per px, 5 px each side) reaches about
 // 16 on a Plateau's cliff faces (measured at 1x on Green), so its range runs to 20.
 export const SURFACE_FACT_RANGE = {slope: [0, 20], aboveSea: [-20, 200], abovePlain: [-60, 200], wear: [0, 1], deposit: [0, 1], wetness: [0, 1], moisture: [0, 1],
-  soilDepth: [0, 1], light: [0, 1.6], top: [-1, 1], convexity: [-1, 1], rockShare: [0, 1], debrisShare: [0, 1], sandShare: [0, 1]};
+  soilDepth: [0, 1], light: [0, 1.6], top: [-1, 1], convexity: [-1, 1], rockShare: [0, 1], debrisShare: [0, 1], sandShare: [0, 1], north: [-1, 1], east: [-1, 1],
+  sheltered: [0, 1], toWater: [0, 192]};
 // The fact view's gray at a range's low and high ends (engine-common.wgsl SURFACE_FACT_GRAY_LO and _HI): the histogram reads a pixel's green
 // across them. Black is the canvas outside the map.
 export const SURFACE_FACT_GRAY = [.1, .85];
 // Facts whose values bunch at the low end of their range, drawn on a square-root scale (engine-common.wgsl SURFACE_FACT_ROOT): Steepness's
-// grass, scree and rock limits sit between 0.3 and 3 while its cliffs run to 16, and on a straight scale 0 to 3 would be a seventh of the gray.
-export const SURFACE_FACT_ROOT = ['slope'];
+// grass, scree and rock limits sit between 0.3 and 3 while its cliffs run to 16, and on a straight scale 0 to 3 would be a seventh of the gray;
+// a shore's bands lie within 40 px of the water, a sixth of Distance to water's reach.
+export const SURFACE_FACT_ROOT = ['slope', 'toWater'];
 // Where a value of a fact sits across the fact view's gray and its histogram (0 at the range's low end, 1 at its high end), and back.
 export function factPosition(fact, v) {
   const [lo, hi] = SURFACE_FACT_RANGE[fact], t = Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
@@ -109,7 +115,7 @@ export function factAtPosition(fact, t) {
 // the fact's step below; a score's threshold falls (up) or rises (down) by Spread times its terms' mean weighted step. A window never inverts:
 // narrowed past its middle, from and to meet there. The steps are implementation constants: about a quarter of each fact's useful range.
 export const SURFACE_SPREAD_STEP = {slope: .5, aboveSea: 20, abovePlain: 20, wear: .25, deposit: .25, wetness: .25, moisture: .25, soilDepth: .25, light: .3,
-  top: .5, convexity: .5, rockShare: .25, debrisShare: .25, sandShare: .25};
+  top: .5, convexity: .5, rockShare: .25, debrisShare: .25, sandShare: .25, north: .5, east: .5, sheltered: .25, toWater: 24};
 // The rule a layer draws with, Spread applied: {where} or {score} (fresh objects), or {} for none. surfaceRows, ruleHere and the panel's words
 // all read it, so the draw, the inspector and the row agree.
 export function spreadRule(layer) {
@@ -139,7 +145,7 @@ export const PLANT_KINDS = ['grass', 'meadow', 'moss', 'shrubs'];
 export const PLANT_LABELS = {grass: 'Grass tufts', meadow: 'Meadow tufts', moss: 'Moss cushions', shrubs: 'Shrubs'};
 export const PLANT_MAX = 8;
 // The facts the bake knows where it places plants (the shares of rock, debris and sand and the convexity exist only in the color pass).
-export const PLANT_FACTS = ['slope', 'aboveSea', 'abovePlain', 'wear', 'deposit', 'wetness', 'moisture', 'soilDepth', 'light', 'top'];
+export const PLANT_FACTS = ['slope', 'aboveSea', 'abovePlain', 'wear', 'deposit', 'wetness', 'moisture', 'soilDepth', 'light', 'top', 'north', 'east'];
 // A stored list (this browser's world store, a save's world settings) made before the engine's surfaces drew materials: each engine
 // surface without one takes the world's (its own list, `base`), so it does not draw nothing.
 export const withSurfaceMaterials = (list, base) => list.map(l => l?.builtin != null && SURFACE_DRAWABLE.includes(l.builtin) && l.material == null
@@ -149,7 +155,7 @@ export const withSurfaceMaterials = (list, base) => list.map(l => l?.builtin != 
 export function surfaceRows(surface, slotOf = () => -1, hidden = null) {
   const list = Array.isArray(surface) ? surface : [];
   if (list.length > SURFACE_MAX) throw Error(`A world's surface holds at most ${SURFACE_MAX} layers.`);
-  let facts = false;
+  let facts = false, looks = 0;
   const layers = list.map((layer, i) => {
     const material = isMaterialLayer(layer), draws = layer?.material != null, at = material ? null : SURFACE_BUILTINS[layer?.builtin];
     if (!material && !at) throw Error(`Surface layer ${i + 1}: unknown built-in "${layer?.builtin}".`);
@@ -172,6 +178,7 @@ export function surfaceRows(surface, slotOf = () => -1, hidden = null) {
     const height = Math.max(0, Math.min(1, number(edge.height, 0)));
     if (height > 0 && draws) { if (!rule.length) rule = [[1, 0, 0, 0]]; rule[0][3] = height; }
     if (rule.length > 1 || layer.score || draws) facts = true;
+    for (const term of rule.slice(1)) looks |= SURFACE_LOOKS[SURFACE_FACTS[term[0]]] ?? 0;
     // The world's copy of its library material, shared by every layer that draws it; -2 where the layer must draw a material and the map
     // has none for it (a material layer, or a built-in the engine no longer colors: SURFACE_DRAWABLE): it draws nothing.
     const bound = draws ? slotOf(layer.material) : -1;
@@ -188,7 +195,7 @@ export function surfaceRows(surface, slotOf = () => -1, hidden = null) {
   // The layers that grow plants, by their first row (the bake walks the layers in draw order and adds each one's plants where it shows).
   const plants = list.flatMap((layer, i) => layer?.plants?.amount > 0 ? [{row: layerRows[i], kind: PLANT_KINDS.indexOf(layer.plants.kind), amount: Math.min(1, Number(layer.plants.amount))}] : []);
   if (plants.length > PLANT_MAX) throw Error(`A world's surface grows plants on at most ${PLANT_MAX} layers.`);
-  return {rows, flags: [facts ? 1 : 0, 0, 0, 0], head: [0, 2, 4, 6].map(k => [...heads[k], ...heads[k + 1]]), layerRows, plants};
+  return {rows, flags: [facts ? 1 : 0, looks, 0, 0], head: [0, 2, 4, 6].map(k => [...heads[k], ...heads[k + 1]]), layerRows, plants};
 }
 // What a layer's rule says at one pixel, from the facts the probe recorded there (readProbe `facts`, SURFACE_FACTS order), as the draw
 // evaluates it (engine-common.wgsl surfaceWindow, surfaceWindows, surfaceScore): a windows rule multiplies smooth windows, one a term, each

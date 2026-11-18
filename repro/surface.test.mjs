@@ -246,3 +246,12 @@ test('Steepness spreads its low end across the fact view, and a position maps ba
   assert.equal(factPosition('moisture', .25), .25);
   for (const [fact, v] of [['slope', 3], ['slope', .4], ['moisture', .7], ['aboveSea', 50]]) assert.ok(Math.abs(factAtPosition(fact, factPosition(fact, v)) - v) < 1e-9);
 });
+
+test('every fact has a range and a Spread step, and only a rule that reads Sheltered or Distance to water asks the draw to look around', () => {
+  for (const f of SURFACE_FACTS) { assert.equal(SURFACE_FACT_RANGE[f]?.length, 2, f); assert.ok(SURFACE_SPREAD_STEP[f] > 0, f); }
+  const flags = list => surfaceRows(list, () => 3).flags;
+  assert.deepEqual(flags([{id: 'a', material: 'm', where: [{fact: 'north', from: .3}]}]), [1, 0, 0, 0]);
+  assert.deepEqual(flags([{id: 'a', material: 'm', where: [{fact: 'sheltered', from: .3}]}]), [1, 1, 0, 0]);
+  assert.deepEqual(flags([{id: 'a', material: 'm', score: {terms: [{fact: 'toWater', weight: -1}, {fact: 'slope'}]}}]), [1, 2, 0, 0]);
+  assert.deepEqual(flags([{id: 'a', material: 'm', where: [{fact: 'sheltered', from: .3}]}, {id: 'b', material: 'm', where: [{fact: 'toWater', to: 40}]}]), [1, 3, 0, 0]);
+});

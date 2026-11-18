@@ -608,7 +608,7 @@ export class TerrainRenderer {
     try{await read.mapAsync(GPUMapMode.READ);const v=[...new Float32Array(read.getMappedRange().slice(0))];read.unmap();if(!v[0])return null;
       const count=Math.min(32,Math.round(v[24])),layers=Array.from({length:count},(_,k)=>({row:Math.round(v[25+2*k]),cover:v[26+2*k]}));
       // rock: the rock type whose numbers the pixel read (its slot: 0 the world's) and how much of its rock shows there (0-1).
-      return {color:v.slice(1,4),slot:Math.round(v[4]),aboveSea:v[5],facts:v.slice(6,20),wet:v[21],surf:v[22],ownGround:v[23]>.5,layers,rock:{slot:Math.round(v[20]),share:v[89]}};}
+      return {color:v.slice(1,4),slot:Math.round(v[4]),aboveSea:v[5],facts:[...v.slice(6,20),...v.slice(90,94)],wet:v[21],surf:v[22],ownGround:v[23]>.5,layers,rock:{slot:Math.round(v[20]),share:v[89]}};}
     finally{read.destroy();}
   }
 

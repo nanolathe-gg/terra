@@ -290,7 +290,7 @@ fn coverZ(p: vec2f, scale: f32) -> f32 {
 // is Amount times its rule. Coverage: with an edge of width under 1 or noise, clamp((share + noise - .5) / width + .5); a score's coverage is
 // its smoothstep. Noise is Noise times an even value from -.5 to .5, by the art pixel at a size of 1 or less and in patches of that size above
 // (the cover classes' pick), both repeating with the ground's pool. Width 1 and no noise lay the share itself, as the draw always has.
-var<private> surfaceFacts: array<f32, 14>;
+var<private> surfaceFacts: array<f32, 18>;
 var<private> surfacePreviewCover: f32 = 0.0;   // the previewed layer's coverage (diagnostic view 13)
 var<private> surfacePreviewSeen: f32 = -1.0;   // what of it the layers after it leave showing (-1 until it is drawn)
 // The inspector's pixel (GeometryFrame.probe): this invocation draws it, and how many layers it has recorded (probeOut).
@@ -1271,6 +1271,47 @@ fn joinSedimentTransition(material: vec3f, pixel: vec2f, rock: vec3f, exposed: f
     return mix(material, refined, materialWeather);
 }
 
+// The surface facts that look around a pixel (engine-common.wgsl SURFACE_LOOK_*), over the authored height. Both reach less than the draw's
+// own reach (sculpt-chunk-renderer.js reaches: the shadow march's 203.6 px), so a tile already holds every height they read.
+// Sheltered (fact 16): how much of the sky round the pixel the ground hides, 0 open (a top, a plain) to 1 closed (a narrow gorge). Eight looks
+// at 24, 48 and 96 px, each the steepest rise that way, from 3 degrees (nothing) to 31 (all), averaged. The sea counts as level ground.
+fn surfaceShelter(p: vec2f) -> f32 {
+    let h = max(baseHeight(p), u.sea);
+    var s = 0.0;
+    for (var k = 0; k < 8; k++) {
+        let a = f32(k) * 0.785398 + 0.39;
+        let dir = vec2f(cos(a), sin(a));
+        var rise = 0.0;
+        for (var i = 0; i < 3; i++) { let d = 24.0 * exp2(f32(i)); rise = max(rise, (max(baseHeight(p + dir * d), u.sea) - h) / d); }
+        s += smoothstep(0.05, 0.6, rise);
+    }
+    return s / 8.0;
+}
+// Distance to water (fact 17): px to the nearest ground under the sea, up to SURFACE_WATER_REACH, 0 in the water. Twelve rays, each to its first
+// crossing of the sea, placed between two taps by their heights (as surfShore does), so the distance is smooth between taps.
+const SURFACE_WATER_REACH = 192.0;
+fn surfaceToWater(p: vec2f) -> f32 {
+    let h0 = baseHeight(p) - u.sea;
+    if (h0 < 0.0) { return 0.0; }
+    var radii = array<f32, 14>(2.0, 4.0, 7.0, 11.0, 16.0, 23.0, 32.0, 43.0, 57.0, 74.0, 95.0, 120.0, 152.0, 192.0);
+    var best = SURFACE_WATER_REACH;
+    for (var k = 0; k < 12; k++) {
+        let a = f32(k) * 0.523599 + 0.2;
+        let dir = vec2f(cos(a), sin(a));
+        var lastR = 0.0;
+        var lastH = h0;
+        for (var i = 0; i < 14; i++) {
+            if (lastR >= best) { break; }
+            let r = radii[i];
+            let hr = baseHeight(p + dir * r) - u.sea;
+            if (hr < 0.0) { best = min(best, lastR + (r - lastR) * lastH / (lastH - hr)); break; }
+            lastR = r;
+            lastH = hr;
+        }
+    }
+    return best;
+}
+
 // Card P27, Surf: the shore as one cross-shore coordinate. surfShore marches 8 rays from the pixel over the height field and returns x, the signed
 // distance in world px to the drawn waterline (onshore +; the drawn edge sits where the bed is 0.6 under the sea, so the bank's own run is added),
 // the nearest shore point q, a coordinate along the coast that value noise can use, and the bed's slope there (units per px). Beyond SURF_REACH, or where the height is more than a beach
@@ -1716,8 +1757,16 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.materialTable[SURFACE_FLAGS].x > 0.0 || probeHere || u.diagnosticView >= 14) {
         // The surface layers' facts (surfaceFacts), once a pixel and only when a layer reads them or draws a material.
         let site = coverSite(broad, timeMaps);
-        surfaceFacts = array<f32, 14>(slope, baseHeight(p) - u.sea, baseHeight(p) - u.base, timeMaps.wear, timeMaps.deposit, timeMaps.wet,
-            site.x, coverSoil(slope, place.top, timeMaps, site.x), site.y, place.top, place.convexity, 0.0, 0.0, 0.0);
+        let facing = surfaceFacing(broad);
+        // The facts that look around the pixel cost up to 24 and 168 height taps: only where a rule reads them, the inspector's pixel and the fact view.
+        let looks = u32(u.materialTable[SURFACE_FLAGS].y);
+        let every = probeHere || u.diagnosticView >= 14;
+        var shelter = 0.0;
+        if ((looks & SURFACE_LOOK_SHELTER) != 0u || every) { shelter = surfaceShelter(p); }
+        var toWater = 0.0;
+        if ((looks & SURFACE_LOOK_WATER) != 0u || every) { toWater = surfaceToWater(p); }
+        surfaceFacts = array<f32, 18>(slope, baseHeight(p) - u.sea, baseHeight(p) - u.base, timeMaps.wear, timeMaps.deposit, timeMaps.wet,
+            site.x, coverSoil(slope, place.top, timeMaps, site.x), site.y, place.top, place.convexity, 0.0, 0.0, 0.0, facing.x, facing.y, shelter, toWater);
     }
     if (ownGround) { let hs = highShare(p); if (hs > 0.0) { surfSrc[0] = groundPigment(p, u32(u.highGround), timeMaps.wear, timeMaps.deposit); surfMask[0] = hs; } }
     surfaceStage(0u, &grass, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);   // stage 0: highland ground
@@ -2489,7 +2538,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.diagnosticView == 7) { let code = bakedFields(p).b; color = vec3f(clamp(-code, 0.0, 1.0), clamp(code - 1.0, 0.0, 1.0), clamp(0.5 + bakedFields(p).r * 0.08, 0.0, 1.0) * 0.6); }
     if (probeHere) {
         probeOut[0] = 1.0; probeOut[1] = color.r; probeOut[2] = color.g; probeOut[3] = color.b; probeOut[4] = f32(gs); probeOut[5] = h - u.sea;
-        for (var k = 0u; k < SURFACE_FACTS; k++) { probeOut[6u + k] = surfaceFacts[k]; }
+        for (var k = 0u; k < 14u; k++) { probeOut[6u + k] = surfaceFacts[k]; }
+        for (var k = 14u; k < SURFACE_FACTS; k++) { probeOut[76u + k] = surfaceFacts[k]; }   // facts 14 to 17 at 90 to 93, past the layers' record
         probeOut[21] = nearWater; probeOut[22] = surfCover; probeOut[23] = select(0.0, 1.0, ownGround); probeOut[24] = f32(probeCount);
         probeOut[20] = f32(rs & rockMask); probeOut[89] = exposed;   // the rock type drawn here, and how much of its rock shows
     }

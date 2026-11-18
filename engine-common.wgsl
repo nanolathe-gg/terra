@@ -777,31 +777,45 @@ fn timeMapsAt(p: vec2f) -> TimeMaps {
 const SURFACE_HEAD = 152u;
 const SURFACE_FLAGS = 151u;
 // Facts (surfaceFacts): 0 slope, 1 height above the sea, 2 above the plain, 3 wear, 4 deposit, 5 wetness, 6 moisture, 7 soil depth, 8 light
-// (level 1, sunward slopes more), 9 top (a lump 1, a hollow -1), 10 convexity, 11 the rock's share, 12 the debris', 13 the sand's. The shares
-// exist from their stage on (0 before it).
-const SURFACE_FACTS = 14u;
+// (level 1, sunward slopes more), 9 top (a lump 1, a hollow -1), 10 convexity, 11 the rock's share, 12 the debris', 13 the sand's, 14 faces
+// north and 15 faces east (surfaceFacing), 16 sheltered and 17 distance to water (engine-frag.wgsl surfaceShelter, surfaceToWater: computed
+// only where a rule reads them, the flags row's y). The shares exist from their stage on (0 before it).
+const SURFACE_FACTS = 18u;
 // Each fact's range for the Surface section's fact view (diagnostic views 14 to 17), SURFACE_FACTS order: sculpt-material-model.js
 // SURFACE_FACT_RANGE holds the same numbers (repro/surface.test.mjs compares them).
-const SURFACE_FACT_LO = array<f32, 14>(0.0, -20.0, -60.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.0);
-const SURFACE_FACT_HI = array<f32, 14>(20.0, 200.0, 200.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.6, 1.0, 1.0, 1.0, 1.0, 1.0);
+const SURFACE_FACT_LO = array<f32, 18>(0.0, -20.0, -60.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0);
+const SURFACE_FACT_HI = array<f32, 18>(20.0, 200.0, 200.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.6, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 192.0);
 // The fact view's gray at a range's low and high ends (sculpt-material-model.js SURFACE_FACT_GRAY): over black, which is the canvas outside the
 // map, and under white, so the magenta where a condition holds stays apart from the gray at both ends.
 const SURFACE_FACT_GRAY_LO = 0.1;
 const SURFACE_FACT_GRAY_HI = 0.85;
-// 1 for a fact the fact view draws on a square-root scale (sculpt-material-model.js SURFACE_FACT_ROOT: Steepness, whose limits bunch low).
-const SURFACE_FACT_ROOT = array<f32, 14>(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+// 1 for a fact the fact view draws on a square-root scale (sculpt-material-model.js SURFACE_FACT_ROOT: Steepness and Distance to water,
+// whose limits bunch low).
+const SURFACE_FACT_ROOT = array<f32, 18>(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0);
+// The flags row's y: the facts that look around a pixel which some rule reads (sculpt-material-model.js surfaceRows), so a world that reads
+// neither pays for neither.
+const SURFACE_LOOK_SHELTER = 1u;
+const SURFACE_LOOK_WATER = 2u;
+// Facing (facts 14 and 15): which way the ground falls, as its north and east parts (the map's top is north), 0 on level ground and whole from
+// a slope of 0.25 (14 degrees) up. Two signed facts rather than an angle, so a window never wraps and a score can weigh any direction.
+fn surfaceFacing(broad: vec2f) -> vec2f {
+    let s = length(broad);
+    if (s < 1e-4) { return vec2f(0.0); }
+    let down = -broad / s;
+    return vec2f(-down.y, down.x) * smoothstep(0.03, 0.25, s);
+}
 fn surfaceWindow(v: f32, lo: f32, hi: f32, fade: f32) -> f32 {
     let f = max(fade, 0.0001);
     return smoothstep(lo - f, lo + f, v) * (1.0 - smoothstep(hi - f, hi + f, v));
 }
 // A layer's rule over the facts, its rows from ruleAt (the head, then rules - 1 terms), one evaluator for the color pass and the bake: a
 // windows rule multiplies `share` by each window in turn; a score rule adds each weighted fact to `score` (the caller's noise and lift).
-fn surfaceWindows(ruleAt: u32, rules: u32, facts: array<f32, 14>, share: f32) -> f32 {
+fn surfaceWindows(ruleAt: u32, rules: u32, facts: array<f32, 18>, share: f32) -> f32 {
     var s = share;
     for (var t = 1u; t < rules; t++) { let w = u.materialTable[ruleAt + t]; s *= surfaceWindow(facts[min(u32(w.x), SURFACE_FACTS - 1u)], w.y, w.z, w.w); }
     return s;
 }
-fn surfaceScore(ruleAt: u32, rules: u32, facts: array<f32, 14>, score: f32) -> f32 {
+fn surfaceScore(ruleAt: u32, rules: u32, facts: array<f32, 18>, score: f32) -> f32 {
     var s = score;
     for (var t = 1u; t < rules; t++) { let w = u.materialTable[ruleAt + t]; s += w.y * facts[min(u32(w.x), SURFACE_FACTS - 1u)]; }
     return s;

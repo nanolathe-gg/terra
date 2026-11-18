@@ -11,7 +11,8 @@ const $ = id => document.getElementById(id);
 export const FACT_LABELS = {
   slope: ['Steepness'], aboveSea: ['Height above the sea'], abovePlain: ['Height above the plain'], wear: ['Worn by water'], deposit: ['Sediment laid down'],
   wetness: ['Wetness'], moisture: ['Moisture'], soilDepth: ['Soil depth'], light: ['Sunlight'], top: ['Lumps (1) and hollows (-1)'], convexity: ['Convexity'],
-  rockShare: ['Rock'], debrisShare: ['Debris'], sandShare: ['Sand'],
+  rockShare: ['Rock'], debrisShare: ['Debris'], sandShare: ['Sand'], north: ['Faces north (1) or south (-1)'], east: ['Faces east (1) or west (-1)'],
+  sheltered: ['Sheltered'], toWater: ['Distance to water (px)'],
 };
 export const BUILTIN_LABELS = {
   highland: 'Highland ground', slopeCover: 'Slope cover', soil: 'Bare soil', rock: 'Rock', beach: 'Beach', crown: 'Crown rock', baseBand: 'Base band',
@@ -447,7 +448,8 @@ export function mountSurfacePanel(host) {
     if (layer.plants) {
       wrap.append(slider('Plant density', layer.plants.amount ?? .6, 0, 1, .01, (v, c) => edit(i, l => { l.plants = {...l.plants, amount: v}; }, c), 'How many of them grow where the layer shows'));
       const facts = [...(layer.where || []).map(w => w.fact), ...(layer.score?.terms || []).map(t => t.fact)].filter(f => !PLANT_FACTS.includes(f));
-      if (facts.length) wrap.append(el('p', {className: 'small', textContent: `Plants are placed before ${[...new Set(facts)].join(', ')} ${facts.length > 1 ? 'are' : 'is'} known, so they grow as if ${facts.length > 1 ? 'those were' : 'it were'} 0.`}));
+      const names = [...new Set(facts)].map(factName);
+      if (names.length) wrap.append(el('p', {className: 'small', textContent: `Plants are placed before ${andList(names)} ${names.length > 1 ? 'are' : 'is'} known, so they grow as if ${names.length > 1 ? 'those were' : 'it were'} 0.`}));
     }
     return wrap;
   }
