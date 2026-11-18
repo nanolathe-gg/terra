@@ -223,7 +223,7 @@
    {"id":"step-7","type":"combine","kind":"multiply","name":"Multiply grain","params":{"amount":1,"offset":0},"in":{"a":"step-5","b":"step-6","mask":null},"x":1180,"y":38},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"step-7","height":null,"shine":null},"x":1416,"y":38}
   ],
-  "controls": [{"label":"Patch size","node":"step-2-broad","param":"size","min":4,"max":64},{"label":"Water colors","node":"step-5","param":"stops"}],
+  "controls": [{"label":"Water colors","node":"step-5","param":"stops"}],
   "palette": [137,138,135,136,134,133,139,140],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
