@@ -1047,12 +1047,10 @@ export class TerrainRenderer {
     }
     set('uReliefScale', number('reliefScale', 28));
     set('uReliefAmount', number('reliefAmount', 0.5));
-    set('uReliefBranch', number('reliefBranch', 2.0));
     set('uReliefLumps', number('reliefLumps', 0.7));
     set('uReliefGain', number('reliefGain', 0.55));
     set('uReliefWarp', number('reliefWarp', 10));
     set('uReliefPatchy', number('reliefPatchy', 1));
-    set('uReliefJitter', number('reliefJitter', 0.8));
     set('uFaceStreak', number('faceStreak', 0));
     for (const [key, fallback] of [['rockFace', 0], ['rockFaceFrom', 0.6], ['faceBed', 5.5], ['faceLedge', 2.2], ['faceRun', 90], ['faceLean', 28], ['faceScratch', 2.5],
       ['faceScratchSize', 7], ['faceBlock', 3], ['faceBlockSize', 11], ['faceGrass', 0.8], ['faceRock', 0.9], ['faceCrease', 2.5], ['faceCreaseSize', 6],
@@ -1098,7 +1096,6 @@ export class TerrainRenderer {
     set('uHasBeach', this.layers.has('beach'));
     set('uSandBanding', number('sandBanding', 0));
     set('uSandBandSpacing', number('sandBandSpacing', 2));
-    set('uReliefOctaves', number('reliefOctaves', 5));
     }
     {
     const column = this.config.column, v = this.variant;
