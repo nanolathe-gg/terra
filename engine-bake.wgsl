@@ -16,6 +16,7 @@
 // meanings, in the bake section of the Uniforms struct.
 
 const TAU = 6.28318530718;
+const RIB_IRREGULARITY: f32 = 0.8;
 
 // Returns (value, d/dx, d/dy) in the octave's own coordinates.
 fn gullies(q: vec2f, dir: vec2f, n: f32) -> vec3f {
@@ -32,8 +33,8 @@ fn gullies(q: vec2f, dir: vec2f, n: f32) -> vec3f {
             // A random phase and wavelength per kernel keep ribs on a straight
             // face from settling into evenly spaced teeth.
             let extra = cellHash(poolWrap(cell - o, n) + 91.7);
-            let freq = TAU * mix(1.0, 0.6 + 0.9 * extra.x, u.reliefJitter);
-            let phase = dot(point, dir) * freq + extra.y * TAU * u.reliefJitter;
+            let freq = TAU * mix(1.0, 0.6 + 0.9 * extra.x, RIB_IRREGULARITY);
+            let phase = dot(point, dir) * freq + extra.y * TAU * RIB_IRREGULARITY;
             sum += vec3f(cos(phase), -sin(phase) * dir * freq) * w;
             weight += w;
         }
@@ -1229,10 +1230,9 @@ fn bake(p: vec2f) -> vec4f {
     var frequency = cells / u.pool;
     var total = 0.0;
     var firstOctave = 0.0;
-    for (var k = 0; k < 6; k++) {
-        if (k >= u.reliefOctaves) { break; }
+    for (var k = 0; k < 5; k++) {
         // Contour direction, bent toward the accumulated gullies.
-        let steer = fall + acc.yz * u.reliefBranch;
+        let steer = fall + acc.yz * 2.0;
         var dir = vec2f(steer.y, -steer.x);
         let len = length(dir);
         dir = select(vec2f(1.0, 0.0), dir / len, len > 1e-5);
