@@ -2189,7 +2189,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             let pick = sampleMasks(maskPoint(p),2).b;
             if (pick > 0.5) { edgeHard = 1.0; } else if (pick < -0.5) { edgeHard = 0.0; }
         }
-        var deep = smoothstep(u.shallowDepth, u.deepDepth, colorDepth);
+        // Shallow until and Deep from are two sliders that may cross: waterRamp is defined for either order (smoothstep is not).
+        var deep = waterRamp(u.shallowDepth, u.deepDepth, colorDepth);
         if (edgeHard > 0.0) { deep = sharpDeepStep(p, pixel, bedDepth); }
         var grain = waterPigment(pixel) - waterMean();
         if (u.lowGrain < 1.0) { grain *= lowGrain; }
@@ -2229,7 +2230,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 // A Shallow until depth past the third colour's depth runs this ramp down: the third colour at the waterline,
                 // the lit bed between the two depths (a submerged shelf), deep beyond. smoothstep leaves reversed edges undefined.
                 let toMid = waterRamp(u.shallowDepth, u.waterMid.a, colorDepth);
-                let toDeep = smoothstep(u.waterMid.a, u.deepDepth, colorDepth);
+                let toDeep = waterRamp(u.waterMid.a, u.deepDepth, colorDepth);
                 var mid = waterMean() + u.waterMid.rgb + (deepWater - waterMean()) * 0.9;
                 water = mix(mix(shallow, mid, toMid), deepWater, toDeep);
             }
