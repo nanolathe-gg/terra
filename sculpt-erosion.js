@@ -261,14 +261,17 @@ export class GpuErosion {
   async materialField({heightBuffer, heightOffset = 0, grid, size, spacing: given, ox = 0, oy = 0, seaLevel = 0, baseHeight = 24, seed = 1, depositSpread = .65, profile = {}}) {
     await this.ready;
     const {device} = this, n = grid * grid, spacing = given ?? (size - 1) / (grid - 1), spread = clamp(depositSpread, 0, 1);
-    if (!this.field) {
+    // One build of the five pipelines, shared by calls that overlap (the preview lattice's and the canonical pass's): a call never sees the
+    // table before its pipelines exist. A failed build is tried again.
+    this.fieldReady ??= (async () => {
       const module = device.createShaderModule({label: 'engine-weather material field', code: this.renderer.timeSources.maps});
       const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
       if (errors.length) throw new Error('nanolathe: engine-weather.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
-      const entries = {source: 'mfSourceMain', drops: 'mfDropsMain', counts: 'mfCountsMain', blur: 'mfBlurMain', combine: 'mfCombineMain'};
-      this.field = {};
-      await Promise.all(Object.entries(entries).map(async ([k, entryPoint]) => { this.field[k] = await device.createComputePipelineAsync({label: entryPoint, layout: 'auto', compute: {module, entryPoint, constants: TIME_ROCK}}); }));
-    }
+      const entries = {source: 'mfSourceMain', drops: 'mfDropsMain', counts: 'mfCountsMain', blur: 'mfBlurMain', combine: 'mfCombineMain'}, field = {};
+      await Promise.all(Object.entries(entries).map(async ([k, entryPoint]) => { field[k] = await device.createComputePipelineAsync({label: entryPoint, layout: 'auto', compute: {module, entryPoint, constants: TIME_ROCK}}); }));
+      return field;
+    })().catch(err => { this.fieldReady = null; throw err; });
+    this.field = await this.fieldReady;
     const P = this.field, S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, made = [];
     const make = (bytes, usage = S) => { const b = device.createBuffer({size: Math.max(16, bytes), usage}); made.push(b); return b; };
     const heightBuf = make(n * 4);
