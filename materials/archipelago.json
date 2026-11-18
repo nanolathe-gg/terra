@@ -838,8 +838,6 @@
         "shoalRag": 4,
         "shoalShoreSoft": 4,
         "ringShift": 10.0,
-        "ringShiftDir": 225.0,
-        "ringScatter": 0.5,
         "ringWobble": 7.0,
         "ringLobe": 20,
         "ringContrast": 0.35,

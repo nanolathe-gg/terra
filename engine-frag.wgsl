@@ -1046,7 +1046,7 @@ fn fringeContours(p: vec2f, field: f32) -> vec4f {
 // hill in many thin crimson outlines, each a copy of the foot moved a few px from the last, so
 // they cross and scallop instead of nesting (the owner's "offset faded copies"). Copy j is the
 // same softened outline the concentric lines read, at its own level and at its own offset (a
-// hashed direction around ringShiftDir, wandering slowly across the map, a length up to
+// hashed direction around northwest, wandering slowly across the map, a length up to
 // ringShift), with scalloped lobes in its edge. The field is a Gaussian blur of the hill, whose
 // tail falls as exp(-d^2): the square root of its negative logarithm is therefore about
 // proportional to the distance from the hill, so levels at equal steps of that measure are
@@ -1099,7 +1099,7 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
         let vis = 1.0 - smoothstep(reach - 0.12, reach + 0.12, t);
         let level = mix(inner, far, (j + 0.5) / f32(count));
         let wander = (shelfNoise(p / 170.0 + j * 7.3) - 0.5) * 2.0;
-        let angle = radians(u.ringShiftDir) + ((ringHash(j + 1.0) - 0.5) * 2.0 + wander * 0.5) * u.ringScatter * 3.14159;
+        let angle = radians(225.0) + ((ringHash(j + 1.0) - 0.5) * 2.0 + wander * 0.5) * 0.5 * 3.14159;
         let shift = u.ringShift * (0.45 + 0.55 * ringHash(j + 41.0));
         let at = p - shift * vec2f(cos(angle), sin(angle));
         let waver = ringScallop(p, j) * u.ringWobble;

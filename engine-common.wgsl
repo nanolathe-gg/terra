@@ -360,8 +360,6 @@ struct Uniforms {
     // E6 (Ice mountains).
     // G3 (Archipelago rings): the fringe as stacked, offset copies of the hill's outline. Every default is the earlier look.
     ringShift: f32,       // px each copy sits from the hill's own outline (0: the earlier concentric lines; ringCount copies otherwise)
-    ringShiftDir: f32,    // degrees the copies drift towards on average, clockwise from east in the world (90: south)
-    ringScatter: f32,     // how far each copy's direction wanders from that mean, as a share of a half turn
     ringWobble: f32,      // px of waver in each copy's outline: lobes with inward cusps, the scalloped look (0: smooth)
     ringLobe: f32,        // px across one lobe
     ringFill: f32,        // the pale tint where every copy overlaps; each copy adds its share, so the skirt steps lighter outward (0: none)

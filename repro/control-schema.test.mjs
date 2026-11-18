@@ -155,9 +155,6 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  // facts of the world's material the panel passes in with the settings
  assert.match(requirement('ringContrast',{ringLayer:0}),/no mineral fringe/);
  shows('ringContrast',{ringLayer:1});
- assert.match(requirement('ringShiftDir',{ringLayer:1,ringShift:0}),/Offset between copies/);
- assert.match(requirement('ringScatter',{ringLayer:1,ringShift:0}),/Offset between copies/);
- shows('ringScatter',{ringLayer:1,ringShift:10});
  assert.match(requirement('beachWidth',{beachLayer:0}),/no beach of its own. Choose another world's Beach, above,/);
  shows('beachWidth',{beachLayer:1});
  assert.match(requirement('slopeTexture',{slopeSand:1}),/sand/);

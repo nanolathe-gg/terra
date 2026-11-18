@@ -2,7 +2,7 @@
 // world's three reproduction scenes (repro/scenes), on the real engine, and the render is compared with the unmoved one: repro/compare.py's
 // mean |diff| and share of pixels moved, and measure/impact.py's block share of the knob's class (decision 11: a kept control must move at least
 // 5% of its class at 1x, beside a noise floor of 1-3%). A zero is inactive on these scenes; check parent gates and variants before calling a control dead.
-//   node measure/geology_controls.mjs [--out DIR] [--only desert,lava] [--knobs banding,strata] [--probe archipelago.ringScatter=0] [--family geology|fractures|shores|bodies|impacts] [--scenes DIR] [--list]
+//   node measure/geology_controls.mjs [--out DIR] [--only desert,lava] [--knobs banding,strata] [--probe archipelago.ringShift=0] [--family geology|fractures|shores|bodies|impacts] [--scenes DIR] [--list]
 //        [--configs DIR] [--chrome --server http://127.0.0.1:<yours> --port <cdp>]
 // The renders are repro/render.mjs's: under Node on Dawn by default, from this checkout's files (the world configs dumped once), or in the page
 // with --chrome, which needs --server (your own Go development server; there is no default).

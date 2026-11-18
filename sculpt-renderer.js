@@ -973,8 +973,6 @@ export class TerrainRenderer {
     this.f('uIceCrest', variant.has('iceCrest') ? Number(variant.get('iceCrest')) : 0);
     // G3: the fringe's offset copies (ringShift 0: the earlier concentric lines).
     this.f('uRingShift', variant.has('ringShift') ? Number(variant.get('ringShift')) : 0);
-    this.f('uRingShiftDir', variant.has('ringShiftDir') ? Number(variant.get('ringShiftDir')) : 315);
-    this.f('uRingScatter', variant.has('ringScatter') ? Number(variant.get('ringScatter')) : 0.5);
     this.f('uRingWobble', variant.has('ringWobble') ? Number(variant.get('ringWobble')) : 3);
     this.f('uRingLobe', variant.has('ringLobe') ? Number(variant.get('ringLobe')) : 22);
     this.f('uRingFill', variant.has('ringFill') ? Number(variant.get('ringFill')) : 0);

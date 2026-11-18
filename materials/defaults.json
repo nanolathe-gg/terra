@@ -276,8 +276,6 @@
     "frostGapSize": 11,
     "frostGapDepth": 3,
     "ringShift": 0,
-    "ringShiftDir": 315,
-    "ringScatter": 0.5,
     "ringWobble": 3,
     "ringLobe": 22,
     "ringFill": 0,
