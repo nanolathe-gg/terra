@@ -84,7 +84,7 @@ jobs:
               mkdir -p "$keep/$(dirname "$name")"
               curl -fsS "https://terra.nanolathe.gg/b/$live/$name" -o "$keep/$name" || { ok=0; break; }
             done < "$keep/files.txt"
-            if [ "$ok" = 1 ]; then mkdir -p _site/b && mv "$keep" "_site/b/$live" && echo "kept b/$live"; else echo "could not copy b/$live; deploying without it"; fi
+            if [ "$ok" = 1 ]; then mkdir -p _site/b && mv "$keep" "_site/b/$live" && chmod -R a+rX "_site/b/$live" && echo "kept b/$live"; else echo "could not copy b/$live; deploying without it"; fi
           else echo "b/$live has no file list; deploying without it"; fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
