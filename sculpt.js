@@ -1562,6 +1562,7 @@ function nodePivot(n) {
 }
 function changeSelected(edit) {
   const n=nodes[selected]; if (!n?.points || stroke || moving || loading || !ready) return;
+  mapCanvas?.holdShapes?.([selected]);   // its path keeps its heights until the edit's land (sculpt-canvas.js heldShapes)
   const before=nodeBounds(n); cancelWeather(); edit(n);
   pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); pendingEval=pendingEval<0?selected:Math.min(pendingEval,selected);
   flushEval(); checkpoint(); queueWeather();const adding=pathAdding,mode=drawMode;selectNode(selected,true);pathAdding=adding;drawMode=mode;updateControls();schedule();
@@ -1570,7 +1571,7 @@ function moveSelectedShapes(dx,dy) {
   const group=selectedShapes(); if (!group.length || stroke || moving || loading || !ready) return;
   // The group stops at the edge together, keeping its layout.
   const m=fitToMap(group.flatMap(i => nodes[i].points),[1,0,0,1,dx,dy]); if (!m || isIdentity(m)) return;
-  cancelWeather();
+  mapCanvas?.holdShapes?.(group); cancelWeather();
   for (const i of group) { const n=nodes[i],before=nodeBounds(n); transformNode(n,nodeState(n),m); pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); }
   pendingEval=pendingEval<0?group[0]:Math.min(pendingEval,group[0]);
   flushEval(); checkpoint(); queueWeather();const adding=pathAdding,mode=drawMode;selectNode(selected,true);pathAdding=adding;drawMode=mode;updateControls();schedule();
@@ -1641,6 +1642,7 @@ const BASIC_ROWS={diameter:['radius',v => v/2],amount:['amount',v => v],roughnes
 // every row is written: Look and Defaults from world show a whole card. `overrides` are written as given.
 function editSelectedFromControls(overrides={},only=null) {
   const n=nodes[selected]; if (!n || !n.params) return;
+  mapCanvas?.holdShapes?.([selected]);
   controlsEditing=true;
   const before=nodeBounds(n),take=key => !only || only.includes(key);
   n.params={...n.params,...Object.fromEntries(Object.entries(BASIC_ROWS).filter(([id]) => take(id)).map(([id,[key,of]]) => [key,of(Number($(id).value))])),

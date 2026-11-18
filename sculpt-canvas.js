@@ -1,6 +1,7 @@
 import {createTerrainBudget,TerrainMemoryError,TERRAIN_BUDGET_MAX,deviceMemory} from './sculpt-memory.js';
 import {createPreviewFields,createPreviewLattice,planPreviewBlocks,previewQuality,previewPixels,createPreviewLoad} from './sculpt-preview.js';
 import {selectionGeometry,selectionTransform,hitSelection,drawSelection} from './sculpt-selection.js';
+import {landformElevation,landformGround} from './sculpt-shape-presets.js';
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {drawMapBounds,sampleField,cellHeights,cellHeightTiles} from './sculpt-map.js';
 import {mountMapExport} from './sculpt-export.js';
@@ -934,14 +935,25 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // A shape's points are drawn at the ground's height under them. While shapes are moved, turned or scaled or a point is dragged, and after,
   // until the fields hold the heights of their new place (api.heightKnown: the CPU copy waits for the release, then the Time pass's), each point
   // keeps the height it had when the gesture began, and the pivot its own. The path stays under the pointer and does not jump as the old ground
-  // at the new place, then the new heights, arrive (a landform's path brings its height with it). Per shape index: {heights, pivot}.
+  // at the new place, then the new heights, arrive (a landform's path brings its height with it). Per shape index: {heights, pivot, crest}.
+  // The editor's own edits (the transform bar, arrow nudges, PageUp / PageDown, the card) hold the same way (holdShapes, before they edit).
+  // A height edit moves the held heights with it: a landform's path stands (crest - plain) * along over the plain, so a held height's rise scales
+  // as its crest's does (with Height reference Ground the elevation is an offset, so it adds); another kind's held heights stay as they were.
   const heldShapes=new Map();
+  const crestOf=n=>n?.kind==='landform'&&Number.isFinite(n.params?.elevation)?{ground:landformGround(n.params),e:landformElevation(n.params,config.seaLevel)}:null;
   function holdShapes(indices){
     for(const i of indices){
       const n=nodeMetadata(i);if(!n?.points?.length)continue;
-      if(heldShapes.get(i)?.heights.length===n.points.length)continue;   // a gesture before this one has not landed: its heights stay
-      const c=selectionTransform(n).values;heldShapes.set(i,{heights:n.points.map(p=>groundAt(p.x,p.y)),pivot:groundAt(c.x,c.y)});
+      if(heldShapes.get(i)?.heights.length===n.points.length)continue;   // an edit before this one has not landed: its heights stay
+      const c=selectionTransform(n).values;heldShapes.set(i,{heights:n.points.map(p=>groundAt(p.x,p.y)),pivot:groundAt(c.x,c.y),crest:crestOf(n)});
     }
+  }
+  function heldHeight(held,n){
+    const was=held.crest,now=crestOf(n),b=config.baseHeight;
+    if(!was||!now||was.ground!==now.ground||was.e===now.e)return h=>h;
+    const sea=h=>Math.max(config.seaLevel,h);   // the view draws water at the sea's surface (groundAt)
+    if(now.ground)return h=>sea(h+now.e-was.e);
+    return Math.abs(was.e-b)<1e-6?h=>h:h=>sea(b+(h-b)*(now.e-b)/(was.e-b));
   }
   const known=(x,y)=>api.heightKnown?.(x,y,weatheredView)??true;   // as the view reads them (visibleSample)
   const settled=n=>{const c=selectionTransform(n).values;return known(c.x,c.y)&&n.points.every(p=>known(p.x,p.y));};
@@ -949,7 +961,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const n=nodeMetadata(index);let held=heldShapes.get(index);
     if(held&&(held.heights.length!==n?.points?.length||!gesture&&settled(n))){heldShapes.delete(index);held=null;}
     // selectionGeometry projects the points in order (map's index), then the pivot (no index).
-    return selectionGeometry(n,held?(p,i)=>({x:p.x,y:p.y-((Number.isInteger(i)?held.heights[i]:held.pivot)-config.baseHeight)/2}):project,state());
+    const lift=held&&heldHeight(held,n);
+    return selectionGeometry(n,held?(p,i)=>({x:p.x,y:p.y-(lift(Number.isInteger(i)?held.heights[i]:held.pivot)-config.baseHeight)/2}):project,state());
   }
   function refreshHover(event){
     if(gesture||pan||busy||features?.active||api.picking?.()||api.currentTool()!=='move'||api.drawMode?.()==='add'||api.pathAdding?.()){hoveredNode=-1;overlay.style.cursor=pan?'grabbing':'crosshair';return;}
@@ -987,7 +1000,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       // Shift + drag sets the shape's height setting (sculpt.js heightControl: a landform's Elevation); a shape without one (Reset ground) starts no drag.
       const action=hit?.action==='rotate'||hit?.action==='scale'||pointIndex>=0?hit.action:event.shiftKey&&!group?'height':'move',height=action==='height'?api.heightOf?.(index)??null:null;
       if(action==='height'&&height===null)return;
-      if(action!=='height')holdShapes(group?api.selectedShapes():[index]);
+      holdShapes(group?api.selectedShapes():[index]);
       const h=geometry(index);if(api.beginMove(index)===false)return;
       gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'move',index,start,p,screen:screenPoint,handles:h,height,pointIndex,point:pointIndex>=0?{...nodeMetadata(index).points[pointIndex]}:null,action};
     }else{
@@ -1101,6 +1114,6 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(gpuResident()+bytes>gpuBudget)previewLattice.clear();
     return true;
   }
-  const result={inspect,offMap,client,refineWhileHeld:()=>interacting()&&gesture?.type!=='stroke'&&performance.now()-lastInputAt>=250,artPoint:event=>{const p=screen(event);return {x:p.x,y:p.z};},setSuspended,get suspended(){return suspended;},renderer,passability,minimumBytes,prepareTime,foregroundPending,previewWorkPending:()=>Boolean(activeBake?.preview)||draftDue&&performance.now()-lastInputAt<DRAFT_LEAD,gpuWorkPending:()=>drawing||renderer.busy,prepareBackground:bytes=>{if(suspended||drawing||renderer.busy||foregroundPending())return false;if(gpuResident()+bytes>gpuBudget)renderer.evict();return gpuResident()+bytes<=gpuBudget;},schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await heldBake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty||e.weathered&&!(e.weatherRevB>=rev.B)||!colorCovers(e)),colorRect:e.colorRect,serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,finalCostMs:e.finalCostMs,finalCostBudget:e.finalCostBudget,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
+  const result={holdShapes,geometry,inspect,offMap,client,refineWhileHeld:()=>interacting()&&gesture?.type!=='stroke'&&performance.now()-lastInputAt>=250,artPoint:event=>{const p=screen(event);return {x:p.x,y:p.z};},setSuspended,get suspended(){return suspended;},renderer,passability,minimumBytes,prepareTime,foregroundPending,previewWorkPending:()=>Boolean(activeBake?.preview)||draftDue&&performance.now()-lastInputAt<DRAFT_LEAD,gpuWorkPending:()=>drawing||renderer.busy,prepareBackground:bytes=>{if(suspended||drawing||renderer.busy||foregroundPending())return false;if(gpuResident()+bytes>gpuBudget)renderer.evict();return gpuResident()+bytes<=gpuBudget;},schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await heldBake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty||e.weathered&&!(e.weatherRevB>=rev.B)||!colorCovers(e)),colorRect:e.colorRect,serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,finalCostMs:e.finalCostMs,finalCostBudget:e.finalCostBudget,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
   window.sculptCanvas=result;resize();budgets();return result;
 }
