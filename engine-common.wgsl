@@ -1034,10 +1034,14 @@ fn rockSlotAt(p:vec2f)->u32 {
 // The point being evaluated belongs to the rock at p: every rock number it reads from here on is its slot's.
 fn useRock(p:vec2f) { rs=rockSlotAt(p); }
 // Ground choices use the authored grid directly, with no world-space noise.
+// The ground slot a lattice cell's painted id names (the mask holds slot+1 over 127; 0 is the world's ground): any of the 32 slots.
+fn paintedSlot(cell:vec2i)->u32 {
+    let id=round(loadGroundMask(cell)*127.0);return select(u32(clamp(id-1.0,0.0,31.0)),u32(u.groundDefault),id<1.5);
+}
 fn groundSlotAt(p:vec2f)->u32 {
     if(u.groundIdOn==0){return u32(u.groundDefault);}
     let cell=clamp(vec2i(floor(p/(u.size-1.0)*(u.grid-1.0)+.5-u.chunkGridOrigin)),vec2i(0),vec2i(maskDimensions())-1);
-    let id=round(loadGroundMask(cell)*127.0);return select(u32(clamp(id-1.0,0.0,31.0)),u32(u.groundDefault),id<1.5);
+    return paintedSlot(cell);
 }
 // Highland ground: level raised ground takes the world's highland material in place of its ground material, by the rise above the plain
 // (u.highFrom, over u.highReach, its edge ragged by 20-px noise), times u.highland. 0 where there is no highland material.
@@ -1058,8 +1062,7 @@ fn ownGroundRelief(p:vec2f,slot:u32)->f32 {
 // Blend only art height across a two-art-pixel contact. The categorical slot
 // still chooses color and finish; no noise or gameplay height enters the edge.
 fn groundHeightFor(p:vec2f,cell:vec2i)->f32 {
-    let c=clamp(cell,vec2i(0),vec2i(maskDimensions())-1);
-    let id=round(loadGroundMask(c)*127.0);let slot=select(u32(clamp(id-1.0,0.0,15.0)),u32(u.groundDefault),id<1.5);
+    let slot=paintedSlot(clamp(cell,vec2i(0),vec2i(maskDimensions())-1));
     let layer=u.ground[slot & groundMask].cacheLayer;
     if(layer<0){return 0.0;}
     return ownGroundRelief(p,slot);
