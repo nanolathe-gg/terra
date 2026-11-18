@@ -1326,14 +1326,15 @@ function regionalHeightCell(x,y) {
   if (!refined || !refinedBase || !$('weather').checked || !refinementValid(refinedInvalidRect,x,y)) return h;
   return weatheredCell(h,regionalFields.cell(x,y,'r'),y*worldGrid+x,refined,refinedBase);
 }
-// Whether sampleRegional answers at (x, y) with the heights the map has now: the fields' CPU copy holds the last edit (a stroke or move leaves it
-// for its release, and a map just opened has none yet), and where Weathering is on, the Time pass's height there is read. The map's overlays
-// (a shape's path, the features) keep the height a point last had until it is, so they do not jump as old, coarse and final heights arrive.
-function heightKnown(x,y) {
+// Whether the map's heights at (x, y) are read as they are now: the fields' CPU copy holds the last edit (a stroke or move leaves it for its
+// release, and a map just opened has none yet), and for a weathered view (`weathered`, the canvas's Weathered view) where Weathering is on, the
+// Time pass's height there too. The map's overlays (a shape's path, the features) keep the height a point last had until it is, so they do not
+// jump as old, coarse and final heights arrive.
+function heightKnown(x,y,weathered=true) {
   if (stroke || moving) return false;
-  if (pagedOn()) return regionalFields.heightKnown?.(x,y)??true;
+  if (pagedOn()) return regionalFields.heightKnown?.(x,y,weathered)??true;
   if (regionalFields.pending?.()) return false;
-  if (!weatherOn()) return true;
+  if (!weathered || !weatherOn()) return true;
   return Boolean(refined && refinedBase && refinementValid(refinedInvalidRect,Math.round(x/spacing),Math.round(y/spacing)));
 }
 function sampleRegional(x,y) {

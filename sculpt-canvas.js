@@ -943,7 +943,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       const c=selectionTransform(n).values;heldShapes.set(i,{heights:n.points.map(p=>groundAt(p.x,p.y)),pivot:groundAt(c.x,c.y)});
     }
   }
-  const settled=n=>{const known=api.heightKnown??(()=>true),c=selectionTransform(n).values;return known(c.x,c.y)&&n.points.every(p=>known(p.x,p.y));};
+  const known=(x,y)=>api.heightKnown?.(x,y,weatheredView)??true;   // as the view reads them (visibleSample)
+  const settled=n=>{const c=selectionTransform(n).values;return known(c.x,c.y)&&n.points.every(p=>known(p.x,p.y));};
   function geometry(index){
     const n=nodeMetadata(index);let held=heldShapes.get(index);
     if(held&&(held.heights.length!==n?.points?.length||!gesture&&settled(n))){heldShapes.delete(index);held=null;}
@@ -1068,7 +1069,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const seq=serial,e=await(held?bake:heldBake)(rect,true),tile=new OffscreenCanvas(rect.width,rect.height),c=tile.getContext('2d');c.drawImage(e.bitmap,0,0);e.bitmap.close?.();
     return changedSince(seq,e.input)?null:{data:c.getImageData(0,0,rect.width,rect.height).data,input:e.input};
   }
-  features=await mountMapFeatures({config,canvas:overlay,exportCorners,bakeArt,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,known:(x,y)=>api.heightKnown?.(x,y)??true,change:()=>{api.mapChanged();schedule();},schedule,enabled:()=>api.ready()&&!busy,
+  features=await mountMapFeatures({config,canvas:overlay,exportCorners,bakeArt,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,known,change:()=>{api.mapChanged();schedule();},schedule,enabled:()=>api.ready()&&!busy,
     light:()=>renderer.worldSun,lightColors:()=>({sun:renderer.colorOverrides?.sun||null,sky:renderer.colorOverrides?.sky||null,ambient:renderer.variant?.has('ambient')?Number(renderer.variant.get('ambient')):.42}),groundColor:()=>renderer.means?.ground,deselectShapes:()=>{if(api.selection()>=0)api.select?.(-1);}});api.registerFeatures?.(features);
   metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks,bakeArt:rect=>bakeArt(rect,false)},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??serial,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
   passability=mountPassability({config,sampleHeightTiles,revision:()=>api.revision?.()??serial,ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!interacting()&&!busy&&!features.busy,mapData:api.mapData,schedule,checkMemory:bytes=>api.checkMemory?.(bytes)});
