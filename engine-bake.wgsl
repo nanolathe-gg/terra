@@ -1237,7 +1237,8 @@ fn bake(p: vec2f) -> vec4f {
     var frequency = cells / u.pool;
     var total = 0.0;
     var firstOctave = 0.0;
-    for (var k = 0; k < 5; k++) {
+    // Where gain is 0 (level ground, deep water, a route) the octaves' value is multiplied by 0 below: they are not computed.
+    for (var k = 0; k < select(0, 5, gain != 0.0); k++) {
         // Contour direction, bent toward the accumulated gullies.
         let steer = fall + acc.yz * 2.0;
         var dir = vec2f(steer.y, -steer.x);
