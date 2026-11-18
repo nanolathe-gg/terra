@@ -1805,10 +1805,20 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let source=rockSourceAt(p);
     // The debris is its source's rock (rock weather's strongest source here): its beds' colours as that recipe's Strata gives them.
     let ds=debrisSlotAt(p);
-    let sourceColor=mix(rock,source.rgb*mix(1.0,clamp(dot(grain,vec3f(.3333)),.82,1.12),u.rock[ds & rockMask].strataGrain),clamp(u.rock[ds & rockMask].strata*2.0,0.0,1.0)*u.rock[ds & rockMask].strataContrast);
+    let strataMix=clamp(u.rock[ds & rockMask].strata*2.0,0.0,1.0)*u.rock[ds & rockMask].strataContrast;
+    let bedColor=source.rgb*mix(1.0,clamp(dot(grain,vec3f(.3333)),.82,1.12),u.rock[ds & rockMask].strataGrain);
+    let sourceColor=mix(rock,bedColor,strataMix);
     // Its fines are the world's weathered sand tinted as its source's rock is tinted against the world's (the same where they share a colour).
-    let fines=sandWeathered()*clamp((slotRock(ds)+.01)/(slotRock(0u)+.01),vec3f(.25),vec3f(4.0));
-    let fineColor=mix(sourceColor,mix(fines,sourceColor*.9,clamp(u.rock[ds & rockMask].strata*2.0,0.0,1.0)*u.rock[ds & rockMask].strataContrast),lying.z*.65);
+    let finesTint=clamp((slotRock(ds)+.01)/(slotRock(0u)+.01),vec3f(.25),vec3f(4.0));
+    var fineColor=mix(sourceColor,mix(sandWeathered()*finesTint,sourceColor*.9,strataMix),lying.z*.65);
+    // The map's Debris material (worldDebris, Materials), where it has one: the debris is that material, its grain at the art pixel, in place of
+    // the rock's for the fragments and of the weathered sand for the fines (lightened as sand is, and tinted by the source rock alike). The
+    // source's beds still colour it through Strata, as they colour the rock's. Only where debris lies (depositCover): no debris, no change.
+    if(depositCover>0.0&&u.debrisGround>=0&&u.ground[u32(u.debrisGround) & groundMask].cacheLayer>=0){
+        let art=materialPigment(grainPixel(pixel),u32(u.debrisGround));
+        let coarse=mix(art,bedColor,strataMix);
+        fineColor=mix(coarse,mix(mix(art,vec3f(1.0),u.sandLight*.55)*finesTint,coarse*.9,strataMix),lying.z*.65);
+    }
     surfSrc[1]=fineColor;surfMask[1]=depositCover;
     // Painted masks (card C5), after the world's own beds and before sand,
     // which covers them. Painted rock is the rock face where the face is drawn (faceGate), and the plain rock material elsewhere.
