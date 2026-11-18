@@ -126,3 +126,10 @@ test('Show here and Not here answer only what the draw would do, Spread included
   assert.ok(shown > 10000 && hidden > 5000, `${shown} shown, ${hidden} hidden`);
 });
 
+test('a reason prints its limits as the facts print, and names a pixel in a window\'s soft edge', () => {
+  const state = {section: 'drawing', hidden: false};
+  assert.equal(absentReason({id: 'moss-1', material: 'm', where: [{fact: 'moisture', from: .4, to: .8, fade: .1}], spread: -.3}, state, facts({moisture: .1})),
+    'Moisture 0.10 here; the rule needs 0.48 to 0.73.');
+  const soft = absentReason({id: 'scree-1', material: 'm', where: [{fact: 'slope', from: .9, fade: .2}]}, state, facts({slope: .75}));
+  assert.match(soft, /^Steepness 0\.75 here is in the soft edge of the rule \(it needs above 0\.90\): the layer shows at about 4% strength here/);
+});

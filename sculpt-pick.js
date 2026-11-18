@@ -14,7 +14,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const ROCK_SHOWN = .02;
 
 const html = text => String(text).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
-const NO_BOUND = 1e8, fact = (name, v) => `${FACT_LABELS[name]?.[0] ?? name} ${Number(v).toFixed(2)}`;
+const NO_BOUND = 1e8, num = v => Number(v).toFixed(2), fact = (name, v) => `${FACT_LABELS[name]?.[0] ?? name} ${num(v)}`;
 // Why a layer of the world's list did not draw at the pixel: what World › Surface says of it (hidden while designing, cannot draw yet, only
 // where painted), else what its rule says there (ruleHere: the window that is 0, or the score short of its threshold), else its edge noise
 // or Coverage pattern. `state`: the layer as World › Surface places it (summary()).
@@ -24,10 +24,15 @@ export function absentReason(layer, state, facts) {
   if (state?.section === 'painted') return 'It draws only where Surface paint has painted.';
   const rule = ruleHere(layer, facts), late = t => t.late ? ' (the final share: this layer may have seen less)' : '';
   if (rule.kind === 'none') return 'Its World settings place it, and they leave this pixel out.';
+  const needs = t => t.from <= -NO_BOUND ? `below ${num(t.to)}` : t.to >= NO_BOUND ? `above ${num(t.from)}` : `${num(t.from)} to ${num(t.to)}`;
   if (rule.kind === 'where') {
-    const out = rule.terms.filter(t => t.share === 0).map(t => `${fact(t.fact, t.value)} here${late(t)}; the rule needs ${t.from <= -NO_BOUND ? `below ${t.to}` : t.to >= NO_BOUND ? `above ${t.from}` : `${t.from} to ${t.to}`}`);
+    const out = rule.terms.filter(t => t.share === 0).map(t => `${fact(t.fact, t.value)} here${late(t)}; the rule needs ${needs(t)}`);
     if (out.length) return out.join('. ') + '.';
-  } else if (rule.share === 0) return `Its score here is ${rule.score.toFixed(2)}; it needs about ${rule.from} (${rule.terms.map(t => `${t.weight} × ${fact(t.fact, t.value)}${late(t)}`).join(' + ')}).`;
+    // In a window's soft edge (its fade) the rule shows the layer at part strength, and the edge noise or Coverage leaves this pixel out.
+    const soft = rule.terms.filter(t => t.share < .995);
+    if (soft.length) return `${soft.map(t => `${fact(t.fact, t.value)} here${late(t)} is in the soft edge of the rule (it needs ${needs(t)})`).join('. ')}: the layer shows at about ${percent(rule.share)} strength here, and its edge noise or Coverage leaves this pixel out.`;
+  } else if (rule.share === 0) return `Its score here is ${num(rule.score)}; it needs about ${num(rule.from)} (${rule.terms.map(t => `${t.weight} × ${fact(t.fact, t.value)}${late(t)}`).join(' + ')}).`;
+  else if (rule.share < .995) return `Its score here is ${num(rule.score)}, at the soft edge of the ${num(rule.from)} it needs: the layer shows at about ${percent(rule.share)} strength here, and its edge noise or Coverage leaves this pixel out.`;
   return 'Its rule matches here; its edge noise or Coverage leaves this pixel out.';
 }
 
