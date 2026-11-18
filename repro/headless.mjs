@@ -226,10 +226,10 @@ async function timeHeights(s) {
   if (!s.time.cpu) { const n = s.worldGrid ** 2, raw = await s.fieldsModule.readBuffer(s.renderer.device, s.time.weather, 0, n * 8); s.time.cpu = {refinedBase: new Float32Array(raw, 0, n), refined: new Float32Array(raw, n * 4, n)}; }
   return s.time.cpu;
 }
-// The weathered field over a region, as the page's export reads it (sculpt.js readRegional): a paged map's pages, or the fields' CPU copy with
+// The weathered height over a region, as the page's export reads it (sculpt.js readHeights): a paged map's pages, or the fields' CPU copy with
 // the Time pass's height laid on (sculpt-scene.js weatheredHeights).
 async function readWeathered(s, request) {
-  if (s.paged) return s.fields.readAsync(request);
+  if (s.paged) return s.fields.readAsync(request, {heights: true});
   await s.fields.ready();
   const r = s.fields.read(request);
   return s.time ? {...r, fields: {...r.fields, h: s.engine.weatheredHeights(r, {...await timeHeights(s), grid: s.worldGrid, spacing: s.spacing})}} : r;
