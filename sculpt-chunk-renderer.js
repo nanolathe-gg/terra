@@ -137,11 +137,12 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   reaches(heightBounds=this.config.heightBounds??[-90,300]) {
     const n=(k,f)=>this.number(k,f),rock=(k,f)=>this.rockMax(k,n(k,f));   // rock: a recipe number's largest over the rocks in use
     // H1: the close shadow march (6 px) and the cavity rings (4 px) plus the gradient's 1.4 sit inside the far taps' reach.
-    // The shadow march (engine-frag.wgsl visibility) reads the surface out to its twelfth sample (12^2 x 1.4 + 2 px) and, as the sun goes down,
-    // the authored height from 238.6 px on while a sample tests a height under 240 above the pixel: those far samples need only the height
-    // grid (`far` widens the grid's apron, not the fields'). At every world's own sun there are none, and far is the twelfth sample's reach.
+    // The shadow march (engine-frag.wgsl visibility) reads the surface out to its ninth sample (9^2 x 1.4 + 2 px), the authored height at its
+    // tenth to twelfth (out to 12^2 x 1.4 + 2 px) and, as the sun goes down, from 238.6 px on while a sample tests a height under 240 above the
+    // pixel: those far samples need only the height grid (`far` widens the grid's apron, not the fields'). At every world's own sun there are
+    // none of the last, and far is the twelfth sample's reach.
     const sun=this.sunVector(),rise=sun[2]/Math.hypot(sun[0],sun[1]),far=238.6*rise<240+1e-3?240/rise:12**2*1.4+2;
-    const shadow=12**2*1.4+2,draw=Math.max(shadow,128,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,60,n('cavity',0)>0?4+1.4:0,n('crystalShallow',0)>0?48:0);   // H20: the shallow mosaic's fringe taps the crystal field 48 px out
+    const shadow=9**2*1.4+2,draw=Math.max(shadow,128,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,60,n('cavity',0)>0?4+1.4:0,n('crystalShallow',0)>0?48:0);   // H20: the shallow mosaic's fringe taps the crystal field 48 px out
     // P16: the largest class drawn has radius min(16, 3.3 x the median); a stone reaches 1.6 radii from its candidate (1.41 of a class radius at most) and a larger stone that suppresses it a little further, and the mask reads the heights 14 px out for a cliff's foot plus its gradient (5).
     const stones=n('boulders',0)>0?3.6*32+90:3.6*Math.min(16,3.3*rock('looseSize',6))+24;   // Boulders: a 32 px class, and the mask looks for the wall 80 px out
     const beach=Math.max(this.config.layers.includes('beach')?(this.config.material?.beachWidth??120)*n('beachWidth',.6):0,n('apron',0))*1.35*1.15;
@@ -160,7 +161,10 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
     const extra=relief+blocks+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(rock('looseSize',6))+Math.abs(n('rippleHeight',1.4))+(rock('debrisAmount',0)>0?1.5*rock('debrisDepth',4):0);
     const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4+this.groundRelief());
-    return {draw,bake,direct,far,projection:[(this.config.seaLevel-this.config.baseHeight)/2,(maxVisible-this.config.baseHeight)/2]};
+    // The surface facts read the authored height around a pixel in the color pass (engine-common.wgsl): distance to water out to
+    // SURFACE_WATER_REACH (192 px), plus the height grid's linear filter. The color record's lattice keeps them (colorLattice).
+    const look=192+2;
+    return {draw,bake,direct,far,look,projection:[(this.config.seaLevel-this.config.baseHeight)/2,(maxVisible-this.config.baseHeight)/2]};
   }
   requiredRegion(request) {
     const size=request.worldSize??this.config.worldSize??this.size,grid=request.worldGrid??this.config.worldGrid??this.grid,spacing=(size-1)/(grid-1);
@@ -173,7 +177,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     // which native height/material inputs a screen rectangle needs.
     const fieldsX=clamp(Math.floor(x-reach.draw)-1,0,size-1),fieldsY=clamp(Math.floor(y+shift+reach.projection[0]-reach.draw)-1,0,size-1);
     const fieldsEndX=clamp(Math.ceil(x+width+reach.draw)+1,0,size-1),fieldsEndY=clamp(Math.ceil(y+shift+height+reach.projection[1]+reach.draw)+1,0,size-1);
-    const input=Math.max(reach.bake,reach.direct-reach.draw,reach.far-reach.draw,5);
+    const input=Math.max(reach.bake,reach.direct-reach.draw,reach.far-reach.draw,reach.look-reach.draw,5);
     // One extra grid sample covers linear filtering, including weatherAt's
     // deliberately corner-based (rather than texel-centred) UVs.
     const gx0=clamp(Math.floor((fieldsX-input)/spacing)-1,0,grid-1),gy0=clamp(Math.floor((fieldsY-input)/spacing)-1,0,grid-1);
@@ -482,7 +486,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   // Color still needs the field window and its direct sampling reach, but none of the extra
   // lattice apron used to bake it or march distant shadows (those are in the geometry record).
   colorLattice(){
-    const r=this.colorRegion,spacing=r.gridSpacing,ox=Math.round(r.gridOrigin[0]/spacing),oy=Math.round(r.gridOrigin[1]/spacing),apron=Math.max(5,r.reach.direct-r.reach.draw);
+    const r=this.colorRegion,spacing=r.gridSpacing,ox=Math.round(r.gridOrigin[0]/spacing),oy=Math.round(r.gridOrigin[1]/spacing),apron=Math.max(5,r.reach.direct-r.reach.draw,r.reach.look-r.reach.draw);
     const first=(p,o,n)=>clamp(Math.floor((p-apron)/spacing)-1-o,0,n-1),last=(p,o,n)=>clamp(Math.ceil((p+apron)/spacing)+1-o,0,n-1);
     const x=first(r.fieldsX,ox,r.gridWidth),y=first(r.fieldsY,oy,r.gridHeight),width=last(r.fieldsX+r.fieldsWidth-1,ox,r.gridWidth)-x+1,height=last(r.fieldsY+r.fieldsHeight-1,oy,r.gridHeight)-y+1;
     return {x,y,width,height,origin:[ox+x,oy+y],bytes:width*height*28+this.layout.size+16};

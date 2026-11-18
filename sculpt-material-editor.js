@@ -78,7 +78,7 @@ export function mountMaterialEditor(host) {
     $('node-search').focus();
   }
   function closeMenu() { if ($('node-menu').hidden) return false; $('node-menu').hidden = true; menuAt = null; return true; }
-  // A search matches the entry's name or its search words: the names other editors use (Perlin, Voronoi, tile sampler, HSL ...).
+  // A search matches the entry's name or its search words: the names other editors use (Perlin, Voronoi, HSL ...).
   function filterMenu() { const q = $('node-search').value.trim().toLowerCase(); for (const b of menuItems) b.hidden = b.dataset.fits === 'false' || (q && !(b.textContent + ' ' + (b.dataset.keywords ?? '')).toLowerCase().includes(q)); }
   $('node-search').oninput = filterMenu;
   $('node-search').onkeydown = e => {

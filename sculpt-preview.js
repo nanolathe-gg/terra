@@ -1,4 +1,4 @@
-import {createShapeEngine,createNodePreparer,nodeContextKey,shapeScratchBytes,shapeRequestBytes} from './sculpt-gpu-fields.js';
+import {createShapeEngine,createNodePreparer,nodeContextKey,shapeScratchBytes,shapeRequestBytes,TIME_APRON} from './sculpt-gpu-fields.js';
 import {terrainAllocation} from './sculpt-memory.js';
 import {timePassBytes} from './sculpt-erosion.js';
 // Resolution is a display preference, separate from shape/voxel levels. Choose
@@ -92,7 +92,7 @@ export function createPreviewLattice(device,scene,memoryChanged=()=>{}){
     recipes.set(w.grid,{key:rk,recipe});return recipe;
   };
   const plan=(region,on=true,deferTime=false)=>{
-    const s=scene(),w=previewWindow(region,region.worldGrid,s.size,s.timeApron??128*s.spacing,deferTime?weatherWindow:null);
+    const s=scene(),w=previewWindow(region,region.worldGrid,s.size,s.timeApron??TIME_APRON*s.spacing,deferTime?weatherWindow:null);
     const tm=on?s.previewTime?.({size:w.spacing*(w.side-1)+1,spacing:w.spacing}):null;
     const geometry=[w.grid,w.x,w.y,w.side].join(','),sk=[geometry,s.revision].join('|'),wk=[geometry,tm?.key??'',tm?.revB??s.revB].join('|'),cache=sk+'|'+wk;
     // A gesture reuses the Time result it began with. One held while the scene was at rest (rest()) serves only if it was made for

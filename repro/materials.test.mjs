@@ -112,16 +112,16 @@ test('the cache budget counts the stage textures while a material in use needs t
   assert.ok(!materialStaged(graph([node('n', 'noise'), node('b', 'blur', {enabled: false, in: {in: 'n'}}), node('o', 'output', {in: {color: 'b'}})])), 'a Blur that is off needs none');
 });
 
-test('a Stamp stages only its Shape; its Base, Coordinates and Density are read where it stamps', () => {
-  const m = graph([node('w', 'warp'), node('b', 'noise'), node('f', 'noise', {kind: 'facets'}), node('g', 'gradient', {in: {in: 'f'}}), node('d', 'noise', {kind: 'smooth'}),
-    node('st', 'stamp', {in: {base: 'b', shape: 'g', in: 'w', density: 'd'}}), node('o', 'output', {in: {color: 'st'}})]);
-  const program = compileMaterial(m), at = id => program.nodes.findIndex(n => n.id === id), plan = stagePlan(program), source = programSource(program);
-  assert.deepEqual(plan.stages, [{step: at('st'), type: 'stamp', kind: '', links: [at('g')]}]); assert.equal(nodeTypes(m.nodes).get('st'), 'color');
-  assert.match(source.main, new RegExp(`nStamp\\(s${at('st')},v${at('w')}.xy,v${at('b')},v${at('d')},true,0\\)`));
-  for (const id of ['w', 'b', 'd']) assert.match(source.main, new RegExp(`let v${at(id)}=`), id + ' is read where it stamps');
-  assert.doesNotMatch(source.main, new RegExp(`let v${at('f')}=`), 'the Shape comes from its stage'); assert.match(source.taps, /fn nStamp/);
-  const open = graph([node('b', 'noise'), node('st', 'stamp', {in: {base: 'b'}}), node('o', 'output', {in: {color: 'st'}})]);
-  assert.match(programSource(compileMaterial(open)).main, /let v1=v0;/, 'without a Shape it is its Base');
+test('a saved graph drops a deferred Stamp and its published settings', () => {
+  const nodes = [node('grain', 'noise'), node('mark', 'stamp', {in: {shape: 'grain'}}),
+    node('o', 'output', {in: {color: 'mark', height: 'grain'}})];
+  const m = copyMaterial({nodes, controls: [{label: 'Size', node: 'mark', param: 'radius'}], frames: [{name: 'Marks', nodes: ['mark', 'grain']}]});
+  assert.deepEqual(m.nodes.map(n => n.id), ['grain', 'o']);
+  assert.equal(m.nodes[1].in.color, null);
+  assert.equal(m.nodes[1].in.height, 'grain');
+  assert.deepEqual(m.controls, []);
+  assert.deepEqual(m.frames[0].nodes, ['grain']);
+  assert.deepEqual(copyMaterial(m), m);
 });
 
 test('a Blur computes its input in a stage of its own; later passes read the stage, never the branch behind it', () => {
@@ -136,7 +136,7 @@ test('a Blur computes its input in a stage of its own; later passes read the sta
   assert.equal(programSource(compileMaterial(graph([node('n', 'noise'), node('o', 'output', {in: {color: 'n'}})]))).stages, null, 'no Blur, no stages');
   const off = graph([node('n', 'noise'), node('b', 'blur', {enabled: false, in: {in: 'n'}}), node('o', 'output', {in: {color: 'b'}})]);
   assert.deepEqual(stagePlan(compileMaterial(off)).stages, [], 'a Blur that is off passes its input through');
-  assert.throws(() => graph([node('n', 'noise'), ...Array.from({length: 5}, (_, i) => node('b' + i, 'blur', {in: {in: 'n'}}))]), /4 Blur, Slope blur or Stamp nodes/);
+  assert.throws(() => graph([node('n', 'noise'), ...Array.from({length: 5}, (_, i) => node('b' + i, 'blur', {in: {in: 'n'}}))]), /4 Blur or Slope blur nodes/);
   assert.equal(materialReliefBound(copyMaterial({nodes: [node('k', 'constant', {params: {value: .5}}), node('b', 'blur', {in: {in: 'k'}}), node('o', 'output', {in: {height: 'b'}, params: {relief: 4}})]})), 2);
 });
 
@@ -377,7 +377,7 @@ test('the add-node menu names real types, and other editors’ names find them',
   assert.ok(entries.length >= 25);
   for (const e of entries) { assert.ok(NODES[e.type], e.label); if (e.kind) assert.ok(Object.hasOwn(NODES[e.type].kinds ?? {}, e.kind), `${e.label}: ${e.kind}`); }
   const find = q => entries.filter(e => (e.label + ' ' + e.words).toLowerCase().includes(q)).map(e => `${e.type}:${e.kind ?? ''}`);
-  for (const [q, want] of [['perlin', 'noise:gradient'], ['voronoi', 'noise:cells'], ['worley', 'noise:cracks'], ['tile sampler', 'stamp:'], ['bomber', 'stamp:'], ['hsl', 'adjust:'], ['posterize', 'levels:'],
+  for (const [q, want] of [['perlin', 'noise:gradient'], ['voronoi', 'noise:cells'], ['worley', 'noise:cracks'], ['hsl', 'adjust:'], ['posterize', 'levels:'],
     ['displace', 'warp:turbulence'], ['pixelate', 'warp:snap'], ['motion blur', 'blur:directional'], ['emboss', 'light:'], ['curvature', 'cavity:'], ['gradient map', 'gradient:']])
     assert.ok(find(q).includes(want), `“${q}” finds ${want}`);
   for (const [type, spec] of Object.entries(NODES)) for (const kind of Object.keys(spec.kinds ?? {})) if (!['combine'].includes(type)) assert.ok(entries.some(e => e.type === type && (e.kind === kind || (!e.kind && kind === Object.keys(spec.kinds)[0]))), `the menu offers ${spec.label} · ${spec.kinds[kind]}`);

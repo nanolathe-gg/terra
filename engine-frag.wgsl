@@ -38,7 +38,11 @@ fn visibility(p: vec2f, h: f32) -> f32 {
         let d = f32(i * i) * 1.4 + 2.0;
         let q = p + toward * d;
         if (q.x < 0.0 || q.y < 0.0 || q.x >= u.size || q.y >= u.size) { continue; }
-        let blocker = surfaceHeight(q) - h - d * elevation;
+        // The last three samples (142 to 204 px out) read the authored height, as the far march does: the relief's few units barely move
+        // a shadow cast from that far, and the tile's fields then stop at 128 px (sculpt-chunk-renderer.js reaches).
+        var at = 0.0;
+        if (i >= 10) { at = baseHeight(q); } else { at = surfaceHeight(q); }
+        let blocker = at - h - d * elevation;
         shadow = max(shadow, smoothstep(-2.0, 4.0, blocker));
     }
     // A lower sun casts longer shadows (a wall's is its height over the tangent of the sun's height). Past the twelfth sample the march goes
@@ -70,7 +74,9 @@ fn shadowBlocker(p: vec2f, h: f32) -> vec3f {
         let d = f32(i * i) * 1.4 + 2.0;
         let q = p + toward * d;
         if (q.x < 0.0 || q.y < 0.0 || q.x >= u.size || q.y >= u.size) { continue; }
-        let s = smoothstep(-2.0, 4.0, surfaceHeight(q) - h - d * elevation);
+        var hq = 0.0;
+        if (i >= 10) { hq = baseHeight(q); } else { hq = surfaceHeight(q); }   // as visibility() reads them
+        let s = smoothstep(-2.0, 4.0, hq - h - d * elevation);
         if (s > most) { most = s; at = d; }
     }
     let farStep = 6.0 / elevation;
@@ -874,14 +880,16 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     var focus = 0.0;
     var rough = 0.0;
     var scale = 0.0;
+    let rockShine = u.rock[rs & rockMask].shineRock;
     for (var i = 0; i < 5; i++) {
-        var m = select(u.shine[i], u.rock[rs & rockMask].shineRock, i == 2);
+        var m = select(u.shine[i], rockShine, i == 2);
         if(i==0){m.x=max(m.x,materialShine(groundAt,gs));m.y=select(m.y,16.0,m.y<=0.0);}   // a material's own shine adds to the world's ground row
         if(i==2){let rm=rockMaterialOf(rs);if(rm>=0){m.x=max(m.x,materialShine(grainPixel(pixel),u32(rm)));}}   // and the rock material's to the rock's (read at the native pixel, as its grain)
         gloss += weight[i] * m.x;
         focus += weight[i] * m.x * m.y;
         rough += weight[i] * m.z;
-        scale += weight[i] * m.z * m.w;
+        let grainWidth = select(u.shine[0].w, rockShine.w, i == 2 || i == 4);
+        scale += weight[i] * m.z * grainWidth;
     }
     rough *= 1.0-mineralPatch*rock*.45;
     focus *= 1.0+max(0.0,mineralPatch)*rock*1.6;

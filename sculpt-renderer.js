@@ -871,10 +871,10 @@ export class TerrainRenderer {
     this.f('uSlopeMarks', variant.has('slopeMarks') ? Number(variant.get('slopeMarks')) : 0);
     this.f('uWrinkles', variant.has('wrinkles') ? Number(variant.get('wrinkles')) : 0);
     this.f('uCrystalSeam', variant.has('crystalSeam') ? Number(variant.get('crystalSeam')) : 0);
-    // Shine and roughness (card E2): per material gloss, sharpness, roughness amplitude and scale. All gloss and roughness 0 skips the shading.
+    // Each surface has its own gloss, sharpness and roughness. Only the world and rock rows carry grain widths.
     const shine = ['Ground', 'Slope', 'Rock', 'Sand', 'Crystal'].map(m => {
       const knob = (suffix, fallback) => variant.has(`shine${m}${suffix}`) ? Number(variant.get(`shine${m}${suffix}`)) : fallback;
-      return [knob('', 0), knob('Sharp', 24), knob('Rough', 0), knob('Scale', 6)];
+      return [knob('', 0), knob('Sharp', 24), knob('Rough', 0), m === 'Ground' || m === 'Rock' ? knob('Scale', 6) : 0];
     });
     // With no slope cover the slope group has no share, so its gloss does not wake the pass (worldControlRequirement says the same).
     const slopeShare = Number(variant.get('slopeTexture') ?? 0.3) > 0 || Boolean(this.config.material?.slopeSand);

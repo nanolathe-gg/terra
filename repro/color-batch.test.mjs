@@ -33,11 +33,15 @@ test('native color scissors round out to pixels and leave resampling aprons inta
 
 test('retained color lattice drops bake aprons but keeps direct reads and edge guards',()=>{
   const r=fixture();r.layout={size:256};
-  r.colorRegion={gridSpacing:2,gridOrigin:[100,200],gridWidth:1001,gridHeight:1001,fieldsX:500,fieldsY:600,fieldsWidth:513,fieldsHeight:513,reach:{draw:204,direct:61}};
+  r.colorRegion={gridSpacing:2,gridOrigin:[100,200],gridWidth:1001,gridHeight:1001,fieldsX:500,fieldsY:600,fieldsWidth:513,fieldsHeight:513,reach:{draw:204,direct:61,look:194}};
   const a=r.colorLattice();
   assert.deepEqual([a.x,a.y,a.width,a.height],[196,196,265,265]);
   assert.deepEqual(a.origin,[246,296]);
   assert.equal(a.bytes,265*265*28+272);
+  // The surface facts' look (distance to water, 194 px with its filter) reaches past a 128 px field window: the copy keeps it.
+  const narrow=r.colorRegion.reach;r.colorRegion.reach={...narrow,draw:128};const l=r.colorLattice();r.colorRegion.reach=narrow;
+  assert((l.origin[0])*2<=500-(194-128)&&(l.origin[1])*2<=600-(194-128),'the look reach stays in the copy');
+  assert((l.origin[0]+l.width-1)*2>=500+512+(194-128)&&(l.origin[1]+l.height-1)*2>=600+512+(194-128));
   // A long mineral-margin lookup must keep its part outside the field window.
   r.colorRegion.reach.direct=700;const b=r.colorLattice();
   assert.equal(b.x,0);assert.equal(b.y,0);
