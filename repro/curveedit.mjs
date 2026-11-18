@@ -88,9 +88,10 @@ async function editWorld(world, port) {
       const defaults = {...LANDFORM_DEFAULTS, ...LANDFORM_SHAPES.plateau, ...worldShapes[world].plateau};
       const baseH = await ev('sculptDebug.base');
       await stroke('plateau');
-      // The Wander slider snaps the reviewed 75 px to 76.
+      // The Wander slider (sculpt-scene.js SHAPE_FIELDS: steps of 2 px) snaps the world's number to its step (75 px to 76).
+      const wanderSnapped = Math.round(defaults.wander / 2) * 2;
       const fresh = (await nodes()).at(-1).params;
-      check('approved landform defaults reach a new stroke', same(fresh.curve, defaults.curve) && fresh.radius === defaults.diameter / 2 && fresh.wander === (world === 'desert' ? 76 : 90) && fresh.widthVary === defaults.widthVary / 100 && fresh.elevation === baseH + defaults.elevation && fresh.routeSmooth === 0 && fresh.crestTaper === 0, {curve:fresh.curve,radius:fresh.radius,wander:fresh.wander,elevation:fresh.elevation,baseH});
+      check('approved landform defaults reach a new stroke', same(fresh.curve, defaults.curve) && fresh.radius === defaults.diameter / 2 && fresh.wander === wanderSnapped && fresh.widthVary === defaults.widthVary / 100 && fresh.elevation === baseH + defaults.elevation && fresh.routeSmooth === 0 && fresh.crestTaper === 0, {curve:fresh.curve,radius:fresh.radius,wander:fresh.wander,elevation:fresh.elevation,baseH});
       await setValue('curve-form', 'lfTerraced', 'change'); await setValue('lf-wander', 0);   // a plateau form: the style restores the plateau
       await setValue('tool-style', world, 'change'); await ev('sculptCanvas.idle()');
       const styled = (await nodes()).at(-1).params;
