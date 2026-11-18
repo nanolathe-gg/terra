@@ -397,8 +397,8 @@ function updateControls() {
     $('tool-look-control').hidden=!toolById(id); if (toolById(id)) $('tool-look').value=id; }
   setToolHelp(toolById(entry)?.card?`Draw a landform with the settings, curves and rock of ${toolLabel(entry)}, a tool saved ${mapOwnsTool(toolById(entry))?'in this map':'in this world'}. Change any setting below.`:toolHelpLine(entry)||'',true);
   { const can=ready && resettable(); $('reset-strokes').disabled=!can; $('reset-strokes').title=can?'':'Draw a shape first: there is nothing to reset.'; }
-  $('undo').disabled=!ready || Boolean(stroke||moving) || historyIndex<=0;
-  $('redo').disabled=!ready || Boolean(stroke||moving) || historyIndex>=history.length-1;
+  $('undo').disabled=!ready || loading || Boolean(stroke||moving) || historyIndex<=0;
+  $('redo').disabled=!ready || loading || Boolean(stroke||moving) || historyIndex>=history.length-1;
   syncHistoryNames();
   $('export').disabled=!canExport(); mapUpdate();
   const view=mapCanvas?.view();$('fit').setAttribute('aria-pressed',String(view?view.overview:true));$('one').setAttribute('aria-pressed',String(view?!view.overview&&view.scale===1:false));
@@ -1448,6 +1448,7 @@ function setMapBusy(on) {
   loading=on; $('editor').disabled=on; $('world-editor').disabled=on;
   for (const id of ['new-map','weather','clay','light','feature-tool','starts-tool']) $(id).disabled=on;
   for(const input of document.querySelectorAll('#rendering-host input'))input.disabled=on;
+  for(const part of document.querySelectorAll('#pick-card .pick-part'))part.inert=on;   // Pick's settings, swatches and layer lines wait for the export
   renderLayers();updateControls();
   overlay.style.pointerEvents=on?'none':''; const panel=$('map-features-controls'); if (panel) panel.disabled=on;
 }
@@ -1694,7 +1695,7 @@ function checkpoint(mapOnly=false) {
   renderLayers(); updateControls(); persistLater(); pickCard?.refresh();   // a pinned pixel reads again after every committed change
 }
 function moveHistory(delta) {
-  const next=historyIndex+delta; if (!ready || stroke || moving || mapFeatures?.busy || next<0 || next>=history.length) return;
+  const next=historyIndex+delta; if (!ready || loading || stroke || moving || mapFeatures?.busy || next<0 || next>=history.length) return;
   const saved=history[next].world?.stored;worldStoreTransaction++;
   try{
   if(saved)configureStoredWorld(saved,history[next].world.beachFrom);

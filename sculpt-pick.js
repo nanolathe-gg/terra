@@ -48,6 +48,8 @@ export function mountPick(host) {
   let at = null, world = null, read = null, shape = -1, ticket = 0, state = 'reading', failure = '';
   // What each swatch and door acts on, as the card shows it now.
   let rockSlot = null, rockMaterial = null, groundSlot = null, waterSlot = null;
+  // The rows the artist moved at this pixel: they stay in the card at 0 (no longer acting), so a row dragged to 0 does not vanish on release.
+  const used = new Set();
 
   async function readHere() {
     const mine = ++ticket;
@@ -61,7 +63,7 @@ export function mountPick(host) {
     show();
   }
   function pick(art, ground) {
-    at = {x: Math.floor(art.x), y: Math.floor(art.y)}; world = ground; read = null; $('pick-layers-moved').hidden = true;
+    at = {x: Math.floor(art.x), y: Math.floor(art.y)}; world = ground; read = null; $('pick-layers-moved').hidden = true; used.clear();
     layer.hidden = false; readHere();
   }
   function close() {
@@ -94,7 +96,7 @@ export function mountPick(host) {
       const head = grouped && tab(r) !== last ? [Object.assign(document.createElement('p'), {className: 'pick-group', textContent: (last = tab(r))})] : [];
       const row = controlRow({id: 'pick-k-' + r.key, label: `${html(r.label)} <output>${html(r.value)}</output>`, range: `min="${r.min}" max="${r.max}" step="${r.step}" value="${r.value}"`});
       const range = row.querySelector('input[type=range]'); range.dataset.pickKey = r.key;
-      range.addEventListener('input', () => { row.querySelector('output').textContent = range.value; host.setSetting(r.key, range.value, false, slot); });
+      range.addEventListener('input', () => { used.add(r.key); row.querySelector('output').textContent = range.value; host.setSetting(r.key, range.value, false, slot); });
       range.addEventListener('change', () => host.setSetting(r.key, range.value, true, slot));
       return [...head, row];
     }));
@@ -104,7 +106,7 @@ export function mountPick(host) {
     $(id).hidden = !rows.length; if (!rows.length) return;
     $(id + '-label').textContent = label(rows.length); fillRows($(id + '-rows'), rows, slot);
   }
-  const acting = rows => rows.filter(r => r.active);
+  const acting = rows => rows.filter(r => r.active || used.has(r.key));
   const count = (n, what) => `${n} ${what}${n === 1 ? '' : 's'}`;
   function show() {
     if (layer.hidden) return;
@@ -180,9 +182,10 @@ export function mountPick(host) {
     if (!read) return;
     const layers = host.surface(), i = layers.findIndex(l => layerKeyOf(l) === key), name = host.layerStates().find(l => l.key === key)?.name ?? key;
     const note = $('pick-layers-moved'), result = i < 0 ? {reason: 'That layer is gone from the world.'} : (show ? ruleToShow : ruleToHide)(layers[i], read.facts);
+    if (result.reason) { note.hidden = false; note.textContent = `${name}: ${result.reason}`; return; }
+    // The note is shown after the change's own undo step (setSurface refreshes the card): the next change, Undo or Redo hides it (refresh).
+    if (!host.setSurface(layers.map((l, k) => k === i ? result.layer : l))) { note.hidden = false; note.textContent = `${name} could not be changed.`; return; }
     note.hidden = false;
-    if (result.reason) { note.textContent = `${name}: ${result.reason}`; return; }
-    if (!host.setSurface(layers.map((l, k) => k === i ? result.layer : l))) { note.textContent = `${name} could not be changed.`; return; }
     note.textContent = `${name}: its rule now ${show ? 'holds here' : 'leaves this pixel out'}: ${result.moved.map(m => `${limitName(m.fact, m.end)} ${limitValue(m.was)} → ${limitValue(m.now)}`).join(', ')}. Undo puts it back.`;
     readHere();
   }
@@ -223,5 +226,5 @@ export function mountPick(host) {
   $('pick-layers-open').onclick = () => { if (read) host.openSurface(at, read); };
   // pick(art, ground) answers a click; close() says whether a card was open (the editor's Escape chain); refresh() reads the pixel again
   // after an undo or redo; colors() shows the swatches again once the renderer has measured the materials; place() follows the view.
-  return {pick, close, place, refresh: () => { if (!layer.hidden && at) readHere(); }, colors: () => { if (!layer.hidden && read) show(); }, get open() { return !layer.hidden; }};
+  return {pick, close, place, refresh: () => { $('pick-layers-moved').hidden = true; if (!layer.hidden && at) readHere(); }, colors: () => { if (!layer.hidden && read) show(); }, get open() { return !layer.hidden; }};
 }
