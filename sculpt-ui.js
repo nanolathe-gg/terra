@@ -177,7 +177,7 @@ export const WORLD_HOMES={
  'Rock types/Cracks & bands':'crackSpacing crackMajor crackMinor crackHairline crackBlocks crackWidth crackNetwork crackDark banding',
  'Rock types/Special surfaces':'pockmark pockSize moonCups moonCupSize moonCupDepth cupStretch moonRibs moonRibDepth moonRibDark moonFolds moonFoldSpacing iceCrystal iceCrest iceSnow iceFall iceApron gougeWeb',
  'Cliffs & stones/Where rock shows':'rimReach shoreRock shoreShelf',
- 'Cliffs & stones/Loose stones':'looseSupply boulders looseKnoll',
+ 'Cliffs & stones/Loose stones':'looseSupply boulders',
  'Cliffs & stones/Bands':'bandSoftness sandBanding sandBandSpacing layerCrease desertCapFlat',
  'Cliffs & stones/Special surfaces':'iceFrost lavaCrust lavaPillow lavaChip lavaVeins lavaCalm lavaDusk iceSoft',
  'Sand/':'sandCrown sand sandLee wind sandDust sandGrass sandLight ripple rippleHeight',
