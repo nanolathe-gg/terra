@@ -1735,6 +1735,15 @@ export function createPagedFields(opts) {
     read: () => { throw new Error('nanolathe: a paged map is read with readAsync'); }, readCells: () => { throw new Error('nanolathe: a paged map is read with readAsync'); },
     sample: (x, y, k = 'h') => bilinear(x, y, (ix, iy) => cell(ix, iy, k)), cell: (ix, iy, k) => cell(ix, iy, k),
     sampleEroded: (x, y) => bilinear(x, y, erodedCell),
+    // Whether sampleEroded answers at (x, y) with the map as it is now: the page's CPU copy holds its last edit (where no page is resident, the
+    // coarse lattice holds the cell and no refill is queued), and where the page has a Time pass, the copy holds that pass's current result.
+    // The overlays hold a point's last height until it is (sculpt.js heightKnown).
+    heightKnown: (x, y) => {
+      const ix = clamp(Math.round(x / spacing), 0, worldGrid - 1), iy = clamp(Math.round(y / spacing), 0, worldGrid - 1), pg = pageAt(ix, iy);
+      if (pg?.target) { if (!pg.cpu || pg.cpuRev !== pg.rev) return false; }
+      else if (!coarseHave[Math.round(iy / COARSE) * coarseW + Math.round(ix / COARSE)] || (pg && coarseQueue.has(pg.key))) return false;
+      return !time || !pg?.weather || (!pg.stale && pg.cpuW?.source === pg.weather);
+    },
     changed, refit: () => { const before = RING; check(); if (RING !== before) changed(); }, ready: () => Promise.resolve(), pending: () => false,
     readAsync: async (request, o) => readRect(toCells(request), o),
     readRect: (rect, o) => readRect(clip(rect), o),

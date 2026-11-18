@@ -1,6 +1,6 @@
 import {createTerrainBudget,TerrainMemoryError,TERRAIN_BUDGET_MAX,deviceMemory} from './sculpt-memory.js';
 import {createPreviewFields,createPreviewLattice,planPreviewBlocks,previewQuality,previewPixels,createPreviewLoad} from './sculpt-preview.js';
-import {selectionGeometry,hitSelection,drawSelection} from './sculpt-selection.js';
+import {selectionGeometry,selectionTransform,hitSelection,drawSelection} from './sculpt-selection.js';
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {drawMapBounds,sampleField,cellHeights,cellHeightTiles} from './sculpt-map.js';
 import {mountMapExport} from './sculpt-export.js';
@@ -929,8 +929,27 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function client(at){const r=overlay.getBoundingClientRect(),v=state();return {x:r.left+(Math.floor(at.x)+.5-v.x)*scale,y:r.top+(Math.floor(at.y)+.5-v.y)*scale};}
   function localPoint(event){const p=screen(event),q=pickWorld(p);return {x:q[0],y:q[1]};}
   function nodeMetadata(index){return api.nodeMetadata?api.nodeMetadata(index):api.graph()[index];}
-  const project=p=>({x:p.x,y:p.y-(Math.max(config.seaLevel,visibleSample(p.x,p.y))-config.baseHeight)/2});
-  function geometry(index){return selectionGeometry(nodeMetadata(index),project,state());}
+  const groundAt=(x,y)=>Math.max(config.seaLevel,visibleSample(x,y));
+  const project=p=>({x:p.x,y:p.y-(groundAt(p.x,p.y)-config.baseHeight)/2});
+  // A shape's points are drawn at the ground's height under them. While shapes are moved, turned or scaled or a point is dragged, and after,
+  // until the fields hold the heights of their new place (api.heightKnown: the CPU copy waits for the release, then the Time pass's), each point
+  // keeps the height it had when the gesture began, and the pivot its own. The path stays under the pointer and does not jump as the old ground
+  // at the new place, then the new heights, arrive (a landform's path brings its height with it). Per shape index: {heights, pivot}.
+  const heldShapes=new Map();
+  function holdShapes(indices){
+    for(const i of indices){
+      const n=nodeMetadata(i);if(!n?.points?.length)continue;
+      if(heldShapes.get(i)?.heights.length===n.points.length)continue;   // a gesture before this one has not landed: its heights stay
+      const c=selectionTransform(n).values;heldShapes.set(i,{heights:n.points.map(p=>groundAt(p.x,p.y)),pivot:groundAt(c.x,c.y)});
+    }
+  }
+  const settled=n=>{const known=api.heightKnown??(()=>true),c=selectionTransform(n).values;return known(c.x,c.y)&&n.points.every(p=>known(p.x,p.y));};
+  function geometry(index){
+    const n=nodeMetadata(index);let held=heldShapes.get(index);
+    if(held&&(held.heights.length!==n?.points?.length||!gesture&&settled(n))){heldShapes.delete(index);held=null;}
+    // selectionGeometry projects the points in order (map's index), then the pivot (no index).
+    return selectionGeometry(n,held?(p,i)=>({x:p.x,y:p.y-((Number.isInteger(i)?held.heights[i]:held.pivot)-config.baseHeight)/2}):project,state());
+  }
   function refreshHover(event){
     if(gesture||pan||busy||features?.active||api.picking?.()||api.currentTool()!=='move'||api.drawMode?.()==='add'||api.pathAdding?.()){hoveredNode=-1;overlay.style.cursor=pan?'grabbing':'crosshair';return;}
     const q=screen(event),hit=hitSelection(geometry(api.selection()),{x:q.x,y:q.z},api.pathEditing?.());
@@ -967,6 +986,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       // Shift + drag sets the shape's height setting (sculpt.js heightControl: a landform's Elevation); a shape without one (Reset ground) starts no drag.
       const action=hit?.action==='rotate'||hit?.action==='scale'||pointIndex>=0?hit.action:event.shiftKey&&!group?'height':'move',height=action==='height'?api.heightOf?.(index)??null:null;
       if(action==='height'&&height===null)return;
+      if(action!=='height')holdShapes(group?api.selectedShapes():[index]);
       const h=geometry(index);if(api.beginMove(index)===false)return;
       gesture={id:event.pointerId,clientX:event.clientX,clientY:event.clientY,type:'move',index,start,p,screen:screenPoint,handles:h,height,pointIndex,point:pointIndex>=0?{...nodeMetadata(index).points[pointIndex]}:null,action};
     }else{

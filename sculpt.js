@@ -1326,6 +1326,16 @@ function regionalHeightCell(x,y) {
   if (!refined || !refinedBase || !$('weather').checked || !refinementValid(refinedInvalidRect,x,y)) return h;
   return weatheredCell(h,regionalFields.cell(x,y,'r'),y*worldGrid+x,refined,refinedBase);
 }
+// Whether sampleRegional answers at (x, y) with the heights the map has now: the fields' CPU copy holds the last edit (a stroke or move leaves it
+// for its release, and a map just opened has none yet), and where Weathering is on, the Time pass's height there is read. The map's overlays
+// (a shape's path, the features) keep the height a point last had until it is, so they do not jump as old, coarse and final heights arrive.
+function heightKnown(x,y) {
+  if (stroke || moving) return false;
+  if (pagedOn()) return regionalFields.heightKnown?.(x,y)??true;
+  if (regionalFields.pending?.()) return false;
+  if (!weatherOn()) return true;
+  return Boolean(refined && refinedBase && refinementValid(refinedInvalidRect,Math.round(x/spacing),Math.round(y/spacing)));
+}
 function sampleRegional(x,y) {
   if (pagedOn()) return regionalFields.sampleEroded(x,y);
   if (gpuWeather && !gpuWeather.cpuHeight && !stroke && !moving && $('weather').checked) gpuWeatherCpu(false).catch(() => {});   // H6b: the first CPU reader asks for the Time pass's height
@@ -1481,7 +1491,7 @@ const sculptRegion={
   setBudget:bytes => { fieldsHeapBudget=bytes; },evict:() => regionalFields?.evict?.()??[],
   releaseGpuStaging:()=>regionalFields?.releaseStaging?.()??0,
   setViewFocus:v=>{regionalFields?.setFocus?.({x:(v.x+v.width/2)/spacing,y:(v.y+v.height/2)/spacing});pickCard?.place();syncWorldHome(true);},
-  read:readRegional,readHeights,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:n.frame?.slice()}:undefined; },
+  read:readRegional,readHeights,gpuFeedSource,readAuthored:request => pagedOn()?regionalFields.readAsync(request,{weather:false}):regionalFields.pending?.()?regionalFields.ready().then(() => regionalFields.read(request)):regionalFields.read(request),uniformAuthored,sample:sampleRegional,heightKnown,sampleAuthored:(x,y,key) => regionalFields.sample(x,y,key),cell:(x,y,key) => regionalFields.cell(x,y,key),graph:() => serializeNodes(),serializeGraph:() => serializeNodes(),nodeMetadata:i => { const n=nodes[i]; return n?{kind:n.kind,hidden:n.hidden,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:n.frame?.slice()}:undefined; },
   loadGraph:list => { if (!Array.isArray(list)) throw new Error('A regional map requires a stroke graph.'); const next=deserializeNodes(list); cancelWeather(); nodes=next; selected=-1;alsoSelected=[];pathIndex=0;pathPoint=-1;pathAdding=false;drawMode=tool==='move'?'select':'new'; evaluate(0); renderLayers(); checkpoint(); queueWeather(); },
   sketch,loadSketch:s=>loadSketchFile(s,false),maskKeys:MASK_KEYS,stats:regionalStats,revision:() => revision+mapRevision+weatherJob,
   bounds:n => { const b=nodeBounds(typeof n==='number'?nodes[n]:n); return {x:b.x0*spacing,y:b.y0*spacing,width:(b.x1-b.x0)*spacing,height:(b.y1-b.y0)*spacing}; },
