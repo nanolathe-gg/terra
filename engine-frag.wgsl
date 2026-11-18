@@ -2383,10 +2383,11 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // far from shore; there is no fixed-width coastal blue collar.
         var submerged = smoothstep(-0.2, 2.8, depth);
         if (shoreHard > 0.0) {
-            // Vary the crisp edge over two-pixel blocks.
+            // Vary the crisp edge over two-pixel blocks. Only ground below the sea can be water: the jitter's low end (a threshold under 0)
+            // would paint dry ground up to a unit above the sea, and on a steep bank that is water stranded above the land under it.
             let block = floor(grainPixel(pixel) / 2.0);
             let jitter = fract(sin(dot(block, vec2f(12.9898, 78.233))) * 43758.5453) - 0.5;
-            var crisp = step(0.6 + jitter * 1.4, depth);
+            var crisp = select(0.0, step(0.6 + jitter * 1.4, depth), h < u.sea);
             if (u.shoalShoreSoft > 0.0) {
                 // G1: retail's Archipelago shore is not a clean line: 2-4 px of sand and water pixels mix at it. The
                 // depth is turned into a coverage over shoalShoreSoft px (the bank's gradient, floored for flat
