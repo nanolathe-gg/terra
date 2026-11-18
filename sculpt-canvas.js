@@ -1,4 +1,4 @@
-import {createTerrainBudget,TerrainMemoryError,TERRAIN_BUDGET_MAX} from './sculpt-memory.js';
+import {createTerrainBudget,TerrainMemoryError,TERRAIN_BUDGET_MAX,deviceMemory} from './sculpt-memory.js';
 import {createPreviewFields,createPreviewLattice,planPreviewBlocks,previewQuality,previewPixels,createPreviewLoad} from './sculpt-preview.js';
 import {selectionGeometry,hitSelection,drawSelection} from './sculpt-selection.js';
 import {TerrainRenderer} from './sculpt-renderer.js';
@@ -18,7 +18,7 @@ const number=(q,key,fallback,min,max)=>clamp(Number(q.get(key))||fallback,min,ma
 export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const map=config.map,query=new URLSearchParams(location.search),viewport=$('viewport'),stage=$('stage');
   config.maskKeys=api.maskKeys; config.gpuBudgetBytes=128*MB;
-  const terrainBudget=createTerrainBudget({explicit:query.has('gpuMB')?number(query,'gpuMB',2048,128,TERRAIN_BUDGET_MAX):undefined,deviceMemory:navigator.deviceMemory,preference:api.terrainBudgetPreference?.(),save:value=>api.saveTerrainBudget?.(value)});terrainBudget.begin();addEventListener('pagehide',()=>terrainBudget.leave());
+  const terrainBudget=createTerrainBudget({explicit:query.has('gpuMB')?number(query,'gpuMB',2048,128,TERRAIN_BUDGET_MAX):undefined,deviceMemory:deviceMemory().gb,memoryGuessed:deviceMemory().guessed,preference:api.terrainBudgetPreference?.(),save:value=>api.saveTerrainBudget?.(value)});terrainBudget.begin();addEventListener('pagehide',()=>terrainBudget.leave());
   let restarting=false, suspended=false;
   const restartForMemory=why=>{
     if(restarting)return true;
@@ -104,14 +104,26 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function gpuResident() { return renderer.stats().residentBytes+cacheBytes+fixedGPU(); }
   function ownedBytes(extra=[]){const buffers=new Set(api.residentBuffers?.()||[]);for(const e of cache.values())if(e.heightPatch)buffers.add(e.heightPatch.fields.h.buffer);for(const a of extra)if(ArrayBuffer.isView(a))buffers.add(a.buffer);const r=renderer.stats();return [...buffers].reduce((n,b)=>n+b.byteLength,0)+r.cpuRetainedBytes+(r.cpuWorkingBytes??0)+(api.workingBytes?.()??0);}
   function fieldArrays(r){return [...Object.values(r.fields),...Object.values(r.weather??{}),r.materialField??r.material].filter(ArrayBuffer.isView);}
-  function checkHeap(r,upload=0){const arrays=fieldArrays(r),used=()=> (performance.memory?.usedJSHeapSize??0)+ownedBytes(arrays)+upload;if(used()>heapBudget){api.evict?.();for(const e of cache.values())e.heightPatch=null;if(used()>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}}
-  api.checkMemory=(extra=0)=>{let m=metrics();if(m.accountedHeapBytes+extra>heapBudget){api.evict?.();for(const e of cache.values())e.heightPatch=null;m=metrics();if(m.accountedHeapBytes+extra>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}};
+  // The page heap counts each byte once: our own arrays (ownedBytes), and the rest of the JS heap where the browser reports one. Chrome's usedJSHeapSize
+  // already holds ArrayBuffers (measured in Chrome 157, with and without --enable-precise-memory-info; without it the figure lags by up to about two
+  // seconds), so the rest is what it reports beyond our arrays. Safari and Firefox report none: the figure is our arrays alone.
+  // Arrays let go under pressure (relieve) leave usedJSHeapSize only once they are collected; until then (a FinalizationRegistry says when) they are
+  // not counted as the rest of the heap. Without that, the next check after an eviction saw them there and threw (measured, heapMB=256). Without
+  // --enable-precise-memory-info Chrome's figure is a cached one that lags the collection (by up to about two seconds, measured): collected bytes
+  // stay deducted until the figure changes from the one it showed when they were collected.
+  let unreclaimed=0,collected=[];
+  const reclaimed=typeof FinalizationRegistry==='function'?new FinalizationRegistry(bytes=>{unreclaimed-=bytes;collected.push({bytes,used:performance.memory?.usedJSHeapSize});}):null;
+  const otherHeap=owned=>{const used=performance.memory?.usedJSHeapSize;if(!Number.isFinite(used))return 0;collected=collected.filter(c=>c.used===used);return Math.max(0,used-owned-unreclaimed-collected.reduce((n,c)=>n+c.bytes,0));};
+  // Over the budget, the fields let go of what they can (api.evict: the spill's copies) and the tiles their height patches.
+  function relieve(){const gone=new Set(api.evict?.()||[]);for(const e of cache.values()){if(e.heightPatch)gone.add(e.heightPatch.fields.h.buffer);e.heightPatch=null;}if(reclaimed)for(const b of gone){unreclaimed+=b.byteLength;reclaimed.register(b,b.byteLength);}}
+  function checkHeap(r,upload=0){const arrays=fieldArrays(r),owned=ownedBytes(arrays),other=otherHeap(owned);if(owned+other+upload>heapBudget){relieve();if(ownedBytes(arrays)+other+upload>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}}
+  api.checkMemory=(extra=0)=>{const m=metrics();if(m.accountedHeapBytes+extra>heapBudget){relieve();if(ownedBytes()+(passability?.stats().bytes||0)+m.otherHeapBytes+extra>heapBudget)throw new Error('The regional field and weather working set exceeds the JS memory budget.');}};
   function metrics() {
     const fields=api.stats?.()??{},render=renderer.stats(),heap=performance.memory?.usedJSHeapSize??0,gpu=gpuResident();
-    const heightBytes=[...new Set([...cache.values()].map(e=>e.heightPatch?.fields.h.buffer).filter(Boolean))].reduce((n,b)=>n+b.byteLength,0),owned=ownedBytes()+(passability?.stats().bytes||0),accounted=heap+owned;
+    const heightBytes=[...new Set([...cache.values()].map(e=>e.heightPatch?.fields.h.buffer).filter(Boolean))].reduce((n,b)=>n+b.byteLength,0),owned=ownedBytes()+(passability?.stats().bytes||0),other=otherHeap(owned),accounted=owned+other;
     peakGPU=Math.max(peakGPU,gpu);peakHeap=Math.max(peakHeap,heap);peakAccountedHeap=Math.max(peakAccountedHeap,accounted);
     find('[data-memory]').textContent=`Terrain ${(gpu/MB).toFixed(1)} / ${gpuBudget/MB} MiB · heap ${(accounted/MB).toFixed(1)} / ${heapBudget/MB} MiB · ${cache.size} cached · ${evictions} evictions · ${canonicalSize}px bake${terrainBudget.reason?' · '+terrainBudget.reason:''}`;
-    return {reusedBakes:reused,gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,gpuBudget,budgetReason:terrainBudget.reason,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,previewQuality:quality,previewPixels:gesture?.previewPixels??null,previewLoad:previewLoad.stats(),previewBlocks:blocks.size,previewBlockBytes:blockBytes,preview:previewFields.stats(),previewLattice:previewLattice?.stats()??null,finalizing,dirtyChunks:[...cache.values()].filter(e=>e.dirty).length,dirtyMarks,retainedInvalidations,evictions,bakes,hits,rebakes,levels:{quarter:[...cache.values()].filter(e=>(e.scale??1)>1).length,final:[...cache.values()].filter(e=>(e.scale??1)===1).length,quarterBytes:[...cache.values()].filter(e=>(e.scale??1)>1).reduce((n,e)=>n+e.bytes,0)},canonicalChunkSize:canonicalSize,displayChunkSize:viewChunkSize(),field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
+    return {reusedBakes:reused,gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,otherHeapBytes:other,gpuBudget,budgetReason:terrainBudget.reason,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,previewQuality:quality,previewPixels:gesture?.previewPixels??null,previewLoad:previewLoad.stats(),previewBlocks:blocks.size,previewBlockBytes:blockBytes,preview:previewFields.stats(),previewLattice:previewLattice?.stats()??null,finalizing,dirtyChunks:[...cache.values()].filter(e=>e.dirty).length,dirtyMarks,retainedInvalidations,evictions,bakes,hits,rebakes,levels:{quarter:[...cache.values()].filter(e=>(e.scale??1)>1).length,final:[...cache.values()].filter(e=>(e.scale??1)===1).length,quarterBytes:[...cache.values()].filter(e=>(e.scale??1)>1).reduce((n,e)=>n+e.bytes,0)},canonicalChunkSize:canonicalSize,displayChunkSize:viewChunkSize(),field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
   }
   function remove(key) { const e=cache.get(key);if(!e)return;renderer.releaseColorTile(e.color);e.bitmap.close?.();cacheBytes-=e.bytes;cache.delete(key);evictions++; }
   // H6b: a bake from the GPU buffers records how many changes had been announced when it took them; it is still good if none announced since touched
