@@ -135,7 +135,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   const common = {worldSize, worldGrid, baseHeight: config.baseHeight, maskKeys: engine.MASK_KEYS, nodes: () => nodes, device: () => renderer.device, context, gesture: () => false};
   const paged = worldGrid > 1168 || settings.get('gpuPages') === 'force';
   const fields = paged
-    ? fieldsModule.createPagedFields({...common, budget: () => engine.pagedBudget({gpuMB, renderer, chunk: Math.min(512, renderer.chunkSize()), maskCount: engine.MASK_KEYS.length, view}), foregroundPending: () => false, apron: Number(settings.get('timeApron') || 128), forceRing: Number(settings.get('pageRing') || 0)})
+    ? fieldsModule.createPagedFields({...common, budget: () => engine.pagedBudget({gpuMB, renderer, chunk: Math.min(512, renderer.chunkSize()), maskCount: engine.MASK_KEYS.length, view}), foregroundPending: () => false, apron: Number(settings.get('timeApron') || fieldsModule.TIME_APRON), forceRing: Number(settings.get('pageRing') || 0)})
     : fieldsModule.createGpuFields(common);
   // sculpt.js scriptedScene: the scene's nodes replace the map's, and the fields evaluate them.
   // sculpt.js syncRocks: the renderer's rock table holds the presets strokes choose, and no other.
