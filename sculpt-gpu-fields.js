@@ -628,7 +628,8 @@ async function sharedShapePipelines(device,pages){
   let variants=shapePipelineCache.get(device);if(!variants){variants=new Map();shapePipelineCache.set(device,variants);}
   if(!variants.has(pages)){
     const pending=(async()=>{
-      const raw = await (await fetch('engine-shape.wgsl')).text();
+      const r = await fetch('engine-shape.wgsl'); if (!r.ok) throw new Error(`nanolathe: engine-shape.wgsl could not be read (HTTP ${r.status})`);
+      const raw = await r.text();
       const S = GPUShaderStage.COMPUTE, rw = {type: 'storage'}, ro = {type: 'read-only-storage'};
       const layout = device.createBindGroupLayout({entries: [
         {binding: 0, visibility: S, buffer: {type: 'uniform', hasDynamicOffset: true}}, {binding: 1, visibility: S, buffer: rw}, {binding: 2, visibility: S, buffer: rw},
@@ -956,7 +957,7 @@ export function createGpuFields(opts) {
     if (!d) throw new Error('nanolathe: the GPU device is not ready for the shape passes');
     const c = context();
     return engine = await createShapeEngine({device: d, grid: worldGrid, spacing, baseHeight, sea: c.sea, minH: c.minH, maxH: c.maxH});
-  })();
+  })().catch(err => { enginePromise = null; throw err; });   // a failed start (a shader fetch that failed) is tried again on the next call
   // Land a read: copy the rectangle into the CPU planes, in order, then tell the listeners (the first whole copy is announced too, since readers that
   // sampled before it read the base height).
   function land(h, whole, report, wasValid, gen) {
@@ -1276,7 +1277,7 @@ export function createPagedFields(opts) {
     if (!d) throw new Error('nanolathe: the GPU device is not ready for the shape passes');
     const c = context();
     return engine = await createShapeEngine({device: d, grid: worldGrid, spacing, baseHeight, sea: c.sea, minH: c.minH, maxH: c.maxH, pages: true});
-  })();
+  })().catch(err => { enginePromise = null; throw err; });   // a failed start is tried again on the next call
   // One preparation of each node for a revision; a node the revision did not change keeps the last one's (createNodePreparer).
   const keptPrepare = createNodePreparer();
   const prepare = (n, geom, c) => { let p = prep.get(n); if (!p) { p = keptPrepare(n, geom, c, prepContext ??= nodeContextKey(c)); prep.set(n, p); } return p; };
@@ -1792,7 +1793,8 @@ export function feedPasses(device) {
   let cached = feedCache.get(device);
   if (cached) return cached;
   cached = (async () => {
-    const module = device.createShaderModule({label: 'engine-feed', code: await (await fetch('engine-feed.wgsl')).text()});
+    const r = await fetch('engine-feed.wgsl'); if (!r.ok) throw new Error(`nanolathe: engine-feed.wgsl could not be read (HTTP ${r.status})`);
+    const module = device.createShaderModule({label: 'engine-feed', code: await r.text()});
     const info = await module.getCompilationInfo(), errors = info.messages.filter(m => m.type === 'error');
     if (errors.length) throw new Error('nanolathe: engine-feed.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
     const pipes = {};
@@ -1809,7 +1811,7 @@ export function feedPasses(device) {
     };
     return {pipes, groups};
   })();
-  feedCache.set(device, cached);
+  feedCache.set(device, cached); cached.catch(() => { if (feedCache.get(device) === cached) feedCache.delete(device); });   // a failed build is tried again
   return cached;
 }
 // The feed passes' uniform (struct FU of engine-feed.wgsl): 20 words.
