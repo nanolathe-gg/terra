@@ -30,7 +30,7 @@ struct FU {
     spacing: f32,
     envelope: f32,      // the erosion budget's envelope (erosionEnvelope)
     tilesWide: u32,
-    pad0: u32,
+    maskStride: u32,    // seedMain: seven authored mask words or one selected word per Time cell
     pad1: u32,
     invalidRect: vec4i, // authored edits since this refinement result; empty when current
 }
@@ -57,8 +57,7 @@ const SHORE_BUDGET = 0.35;
 const BUDGET = 3.0;
 
 fn sm(a: f32, b: f32, v: f32) -> f32 { let t = clamp((v - a) / (b - a), 0.0, 1.0); return t * t * (3.0 - 2.0 * t); }
-fn maskByte(i: u32, p: u32) -> i32 {
-    let w = Mk[i * 7u + (p >> 2u)];
+fn signedByte(w: u32, p: u32) -> i32 {
     return (i32(w << (24u - (p & 3u) * 8u))) >> 24u;
 }
 fn height(x: i32, y: i32) -> f32 { return F[u32(y) * fu.grid + u32(x)]; }
@@ -91,7 +90,8 @@ fn seedMain(@builtin(global_invocation_id) id: vec3u) {
     out.x = max(max(sea - 90.0, min(h, sea + 1.0)), h - (4.0 + 8.0 * steep) * budget * weight);
     out.y = min(sea + 300.0, h + (2.5 + 2.5 * steep) * budget * weight);
     // The erosion override plane is a rate: 1 + v / 127 (no erosion at -1).
-    let rate = 1.0 + f32(maskByte(i, fu.rateMask)) / 127.0;
+    let word = Mk[i * fu.maskStride + (fu.rateMask >> 2u)];
+    let rate = 1.0 + f32(signedByte(word, fu.rateMask)) / 127.0;
     out.z = weight * max(0.0, rate);
     // The same plane scales the thermal repose by the same rate (a share of 0 where nothing is painted), read by thermalMain through the pair's mean.
     totals[i].z = max(0.0, rate) - 1.0;
@@ -147,7 +147,7 @@ fn refinedMain(@builtin(global_invocation_id) id: vec3u) {
 @group(2) @binding(6) var outRoutes: texture_storage_2d<rgba8unorm, write>;
 @group(2) @binding(7) var outGrid: texture_storage_2d_array<rgba8unorm, write>;
 @group(2) @binding(8) var outMasks: texture_storage_2d_array<rgba8snorm, write>;
-@group(2) @binding(9) var<storage, read> fieldIn: array<vec4f>;   // the material field (engine-weather.wgsl mf*): arrival, soil, softened source, source
+@group(2) @binding(9) var<storage, read> fieldIn: array<u32>;   // the material field (engine-weather.wgsl mf*): arrival, soil, softened source, source
 
 var<workgroup> groupPainted: atomic<u32>;
 
@@ -175,7 +175,7 @@ fn feedMain(@builtin(global_invocation_id) id: vec3u, @builtin(local_invocation_
         textureStore(outHeight, xy, vec4f(h - fu.sea, 0.0, 0.0, 0.0));
         textureStore(outRoutes, xy, vec4f(toByte(r), toByte(F[3u * fu.cells + i]), floor((clamp(F[4u * fu.cells + i], -1.0, 1.0) * 0.5 + 0.5) * 255.0 + 0.5) / 255.0, toByte(F[5u * fu.cells + i])));
         textureStore(outGrid, xy, 0, select(vec4f(0.0), unpack4x8unorm(map0[i]), (fu.mode & 2u) != 0u && valid));
-        if ((fu.mode & 8u) != 0u && valid) { let m = fieldIn[i]; textureStore(outGrid, xy, 1, vec4f(toByte(m.x), toByte(m.y), toByte(m.z), toByte(m.w))); } else { textureStore(outGrid, xy, 1, vec4f(0.0)); }
+        if ((fu.mode & 8u) != 0u && valid) { textureStore(outGrid, xy, 1, unpack4x8unorm(fieldIn[i])); } else { textureStore(outGrid, xy, 1, vec4f(0.0)); }
         textureStore(outGrid, xy, 2, select(vec4f(0.0), unpack4x8unorm(map1[i]), (fu.mode & 2u) != 0u && valid));
         textureStore(outGrid, xy, 3, select(vec4f(0.0), unpack4x8unorm(map2[i]), (fu.mode & 2u) != 0u && valid));
         for (var l = 0u; l < 7u; l++) {
@@ -255,14 +255,14 @@ fn gatherHeight(@builtin(global_invocation_id) id: vec3u) {
     for (var p = 0u; p < 2u; p++) { gdW[p * dc + di] = select(0.0, gsW[p * sc + si], gatherRefinementValid(id)); }
 }
 
-@group(3) @binding(13) var<storage, read> gsFd: array<vec4f>;
-@group(3) @binding(14) var<storage, read_write> gdFd: array<vec4f>;
+@group(3) @binding(13) var<storage, read> gsFd: array<u32>;
+@group(3) @binding(14) var<storage, read_write> gdFd: array<u32>;
 
 @compute @workgroup_size(8, 8)
 fn gatherField(@builtin(global_invocation_id) id: vec3u) {
     let a = gatherAt(id);
     if (a.z == 0) { return; }
-    gdFd[u32(a.y)] = select(vec4f(0.0), gsFd[u32(a.x)], gatherRefinementValid(id));
+    gdFd[u32(a.y)] = select(0u, gsFd[u32(a.x)], gatherRefinementValid(id));
 }
 
 @compute @workgroup_size(8, 8)
@@ -280,7 +280,7 @@ fn gatherMaps(@builtin(global_invocation_id) id: vec3u) {
 // as a change of the lattice's own heights. Here fu.grid and fu.cells are the fine lattice's, fu.gw is the coarse side, fu.gh the step in fine
 // cells, and (fu.ox, fu.oy) the fine cell of the first coarse one (chosen so coarse cells sit on the same world cells in every window).
 @group(3) @binding(15) var<storage, read_write> tcF: array<f32>;    // coarse h and p, two planes
-@group(3) @binding(16) var<storage, read_write> tcMk: array<u32>;   // coarse masks, 7 words a cell
+@group(3) @binding(16) var<storage, read_write> tcRate: array<u32>; // one packed word containing the erosion override per coarse cell
 @group(3) @binding(17) var<storage, read> tcW: array<f32>;          // the coarse pass's weather: authored, eroded
 @group(3) @binding(18) var<storage, read> tcM0: array<u32>;
 @group(3) @binding(19) var<storage, read> tcM1: array<u32>;
@@ -306,7 +306,7 @@ fn timeDownMain(@builtin(global_invocation_id) id: vec3u) {
     } }
     let i = u32(f.y) * fu.grid + u32(f.x);
     tcF[j] = h; tcF[gc * gc + j] = F[fu.cells + i];
-    for (var k = 0u; k < 7u; k++) { tcMk[j * 7u + k] = Mk[i * 7u + k]; }
+    tcRate[j] = Mk[i * 7u + (fu.rateMask >> 2u)];
 }
 // Where a fine cell sits among the coarse ones: the four around it and its weights.
 struct TcAt { i: array<u32, 4>, w: vec4f }

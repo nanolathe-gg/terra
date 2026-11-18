@@ -1700,10 +1700,10 @@ async function yieldToPreview(job,bytes=0){
 }
 async function runFedWeather(job) {
   try {
-    const {erosionOf}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer);
+    const {erosionOf,timePassBytes}=await import('./sculpt-erosion.js'),erosion=await erosionOf(renderer);
     while (timePass) { await timePass; if (job!==weatherJob) return; }
-    await regionalFields.gpuQuiet();   // the shape runs' own scratch (whole-map noise: peak 259 MB) is gone before the pass allocates its 120 B a cell
-    const workingBytes=grid*grid*120+Math.ceil(grid/8)**2*12;
+    await regionalFields.gpuQuiet();   // Let the shape pass release its scratch before reserving the Time pass.
+    const workingBytes=timePassBytes(grid,spacing,Boolean(materialKnobs()));
     await yieldToPreview(job,workingBytes);
     const b=regionalFields.gpuBuffers();
     if (!b || job!==weatherJob) return;
@@ -1721,7 +1721,7 @@ async function runFedWeather(job) {
     if(job!==weatherJob||stroke||moving){retireGpuWeather(result);return;}
     const invalid=previous?.invalidRect;
     dropGpuWeather();
-    gpuWeather={revB,weather:result.weather,maps:result.maps,field:result.field??null,bytes:result.bytes+(result.field?grid*grid*16:0),mapsOn:true,grid,cpuHeight:false,cpuMaps:false,loading:null};
+    gpuWeather={revB,weather:result.weather,maps:result.maps,field:result.field??null,bytes:result.bytes+(result.field?.size??0),mapsOn:true,grid,cpuHeight:false,cpuMaps:false,loading:null};
     gpuErosionMs=result.milliseconds; window.lastErosionParts=result.parts;
     weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`;
     if (!stroke && !moving) gpuWeatherCpu(false).catch(() => {});   // picking and the cursor read heights at once; the maps stay lazy

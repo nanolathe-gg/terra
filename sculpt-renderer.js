@@ -992,7 +992,6 @@ export class TerrainRenderer {
     // Low ground: its tint and reach (0: none, as before); its color is set with the others (setColors).
     this.f('uLowReach', variant.has('lowReach') ? Number(variant.get('lowReach')) : 6);
     this.f('uLowGrain', variant.has('lowGrain') ? Number(variant.get('lowGrain')) : 1);
-    this.f('uLooseKnoll', variant.has('looseKnoll') ? Number(variant.get('looseKnoll')) : 0);
     this.f('uGougeWeb', variant.has('gougeWeb') ? Number(variant.get('gougeWeb')) : 0);
     this.f('uCreaseShade', variant.has('creaseShade') ? Number(variant.get('creaseShade')) : 0);
     this.fieldsDirty = true;
