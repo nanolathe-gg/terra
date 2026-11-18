@@ -17,6 +17,20 @@
 Mean of the tuning windows at the base: shape .25, look .24 (measured,
 trial-000 on main 2f1bbeaf).
 
+### Which rock each window's strokes use
+
+A rock type changes only the windows whose strokes use its slot (PLAYBOOK.md,
+"Rock types"). From the scenes' `rockPreset`:
+
+| Window | Rock slot used | Rock type |
+| --- | --- | --- |
+| green-1 | 2 | `evad` |
+| green-3 | 2 | `evad` |
+| green-2, green-4, green-5, green-6, green-7 | none set (0) | the world's own rock (the rock keys in `knobDefaults`) |
+
+Re-check with `grep -o '"rockPreset": [-0-9]*' repro/scenes/green-<n>.json`
+after any shape-lane edit.
+
 ## What Green's retail looks like at 1x
 
 These notes are by eye, from the base crops in
@@ -74,6 +88,17 @@ for trial-000, holdout-000 and trial-004.
     rock);
   - retail's ragged ledges may be terraces (stroke Steps, a shape lane
     question) rather than painted bands.
+- **Cold-test run (a fresh agent, branch `match-green`)**, measured, on top
+  of the `evad` edit:
+  - `wrinkles=1`: green-5 .70 to .49, clearing `slope:lines`; but green-1
+    .10 to .20 (slope lines 538x retail) and green-3 +.04;
+  - `wrinkles=0.6`: mean .22 (green-5 .62, green-1 .12);
+  - `wrinkles=0.3`: mean .23.
+  
+  `wrinkles` is world-wide and helps green-5's hills while it scars
+  green-1's: it fits one window, not the world. A green-5-only gain points
+  at its hill strokes (rock slot 0, the world's own rock) or its shape, not
+  at a world control.
 - **Control trial** `--query banding=0.6` (Green's own value) rendered
   exactly as the base (trial-007), so the query path itself changes
   nothing.

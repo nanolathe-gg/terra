@@ -75,6 +75,9 @@ Change nothing else:
    `<out>/trial-000/classes/classes.md`. Open the crops of the largest
    findings (`<out>/trial-000/classes/crops/<window>/<class>.png`, retail
    left, ours right, at 2x) and each window's `scenes/<window>/pair.png`.
+   There is one crop per class that retail has enough of: `water`,
+   `shore`, `level`, `slope` and `steep`. Each trial's printout ends a
+   window with a `look:` line naming the crops of its largest findings.
    For each window, write down what differs most. Shape comes first: does
    our ground rise where retail's does? Then where things show: rock, sand,
    grass. Then texture, then color.
@@ -91,7 +94,15 @@ Change nothing else:
      --note "what and why"`.
    
    Every trial is validated, rendered, scored and logged with its diff.
-4. **Keep or revert.** Keep a change only when all of these hold:
+
+   **A trial or probe renders the files as they are now, uncommitted edits
+   included.** A probe after an uncommitted edit measures both together.
+   To measure one control alone, commit or revert your edits first. Its
+   printout's `renders:` line says which. Compare with "vs previous", not
+   just "vs base", when trials build on each other.
+4. **Keep or revert.** Open the trial's crops for the classes you aimed at
+   (the `look:` lines) before you decide. A keep without that look is not
+   allowed. Keep a change only when all of these hold:
    - the finding you aimed at clears or shrinks ("cleared since base" in the
      printout, or a smaller number in `classes.md`);
    - the crops look closer by eye;

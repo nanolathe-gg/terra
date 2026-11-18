@@ -92,6 +92,8 @@ def record(a):
     with open(a.ledger, 'a') as fh:
         fh.write(json.dumps(e) + '\n')
     print(f"\n{e['trial']} ({a.kind}) {a.note!r}{'  query ' + a.query if a.query else ''}")
+    print(f"  renders: the world files {'as committed at the base' if not diff else f'with {e["diff_lines"]} diff lines against the base (candidate.diff)'}"
+          f"{' plus the query' if a.query else ''}. A query or probe is on top of every uncommitted edit.")
     if base and base is not e and all(abs(w['look'] - base['windows'].get(n, {}).get('look', -1)) < 1e-9 and abs(w['shape'] - base['windows'].get(n, {}).get('shape', -1)) < 1e-9 for n, w in windows.items()):
         print('  NOTE: renders exactly as the base on every window: this change reaches none of these windows (check gates, which rock the strokes use, or a scene query that overrides it).')
     if prev and prev.get('diff_sha') == e['diff_sha'] and prev.get('query', '') == e['query']:
@@ -117,6 +119,11 @@ def record(a):
                 print(f"      new since base:     {', '.join(sorted(now - then))}")
         for f in w['findings'][:3]:
             print(f"      {f['size']:4.1f} {f['text']}")
+        crops = classes.get(name, {}).get('crops', {})
+        look_at = [f['key'].split(':')[0] for f in w['findings'][:3]] + [k.split(':')[0] for k in (now - then if b else set())]
+        shown = [c for c in dict.fromkeys(look_at) if c in crops]
+        if shown:
+            print('      look: ' + ', '.join(crops[c] for c in shown))
         moved = class_moves(a.base, t, name) if a.base and Path(a.base).resolve() != t.resolve() else []
         if moved:
             print('      moved vs base (ours): ' + '; '.join(moved))
