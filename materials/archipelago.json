@@ -846,7 +846,6 @@
         "ringCount": 30.0,
         "ringSize": 0.8,
         "ringFill": 0.1,
-        "ringPatchSize": 160,
         "faceFill": 0.25,
         "shallowDepth": 4,
         "deepDepth": 52

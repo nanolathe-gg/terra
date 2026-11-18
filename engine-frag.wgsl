@@ -1087,7 +1087,8 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
     // lighter outward) and the reach of the stack varies along the outline.
     let fillStep = 1.0 - pow(1.0 - clamp(u.ringFill, 0.0, 0.95), 1.0 / f32(count));
     let fillTone = vec3f(0.70, 0.70, 0.50);
-    let span = (shelfNoise(p / max(u.ringPatchSize, 20.0) + 53.0) * 0.65 + shelfNoise(p / (0.37 * max(u.ringPatchSize, 20.0)) + 11.0) * 0.35);
+    const PATCH_SIZE = 160.0;   // length in art pixels over which the mineral fringe thins and widens
+    let span = shelfNoise(p / PATCH_SIZE + 53.0) * 0.65 + shelfNoise(p / (0.37 * PATCH_SIZE) + 11.0) * 0.35;
     let reach = mix(2.0, smoothstep(0.3, 0.7, span) * 1.05, 0.8);
     var rgb = base;
     for (var n = 0; n < count; n++) {

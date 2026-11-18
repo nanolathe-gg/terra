@@ -157,7 +157,7 @@ export function worldControlRequirement(key,v){
  if(key==='shoalShoreSoft')return needs('crispShore','Crisp waterline');
  if(/^ring[A-Z]/.test(key)&&n('ringLayer')<=0)return 'This world draws no mineral fringe.';
  if(key==='beachWidth'&&n('beachLayer')<=0)return 'This world has no beach of its own. Choose another world\'s Beach, above, to use this setting.';
- if(['ringShiftDir','ringScatter','ringPatchSize'].includes(key))return needs('ringShift','Offset between copies');
+ if(key==='ringShiftDir'||key==='ringScatter')return needs('ringShift','Offset between copies');
  if(key==='bedCrackSize')return needs('bedCracks','Cracked bed');
  return '';
 }
