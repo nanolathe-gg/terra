@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {surfaceRows, copySurface, spreadRule, ruleHere, SURFACE_SPREAD_STEP, SURFACE_FACT_RANGE, SURFACE_FACT_GRAY, SURFACE_BUILTINS, SURFACE_STAGES, SURFACE_FACTS, SURFACE_FLAGS_ROW, SURFACE_DRAWABLE} from '../sculpt-material-model.js';
+import {surfaceRows, copySurface, spreadRule, ruleHere, SURFACE_SPREAD_STEP, SURFACE_FACT_RANGE, SURFACE_FACT_GRAY, SURFACE_FACT_ROOT, factPosition, factAtPosition, SURFACE_BUILTINS, SURFACE_STAGES, SURFACE_FACTS, SURFACE_FLAGS_ROW, SURFACE_DRAWABLE} from '../sculpt-material-model.js';
 import {withWorldMaterials, materialsInUse, copyMaterials, roleOf, LIBRARY, surfaceMaterials, deleteMaterial, assignMaterial, worldMaterials, worldOwnMaterials, keptWorldMaterials, worldKept} from '../sculpt-materials.js';
 
 const defaults = JSON.parse(readFileSync(new URL('../materials/defaults.json', import.meta.url), 'utf8'));
@@ -232,8 +232,17 @@ test('a surface keeps a layer’s Spread through a save, clamped, and Highland g
 
 test('the fact view’s ranges in the shader are the model’s', () => {
   const wgsl = readFileSync(new URL('../engine-common.wgsl', import.meta.url), 'utf8');
-  const list = name => wgsl.match(new RegExp(`const ${name} = array<f32, 14>\\(([^)]*)\\)`))[1].split(',').map(Number);
+  const list = name => wgsl.match(new RegExp(`const ${name} = array<f32, ${SURFACE_FACTS.length}>\\(([^)]*)\\)`))[1].split(',').map(Number);
   assert.deepEqual(list('SURFACE_FACT_LO'), SURFACE_FACTS.map(f => SURFACE_FACT_RANGE[f][0]));
   assert.deepEqual(list('SURFACE_FACT_HI'), SURFACE_FACTS.map(f => SURFACE_FACT_RANGE[f][1]));
   assert.deepEqual(['LO', 'HI'].map(end => Number(wgsl.match(new RegExp(`const SURFACE_FACT_GRAY_${end} = ([0-9.]+);`))[1])), SURFACE_FACT_GRAY);
+  assert.deepEqual(list('SURFACE_FACT_ROOT'), SURFACE_FACTS.map(f => SURFACE_FACT_ROOT.includes(f) ? 1 : 0));
+});
+
+test('Steepness spreads its low end across the fact view, and a position maps back to its value', () => {
+  assert.ok(factPosition('slope', 1) > .2, 'a slope of 1 sits past a fifth of the gray');
+  assert.equal(factPosition('slope', 20), 1);
+  assert.equal(factPosition('slope', 40), 1);
+  assert.equal(factPosition('moisture', .25), .25);
+  for (const [fact, v] of [['slope', 3], ['slope', .4], ['moisture', .7], ['aboveSea', 50]]) assert.ok(Math.abs(factAtPosition(fact, factPosition(fact, v)) - v) < 1e-9);
 });

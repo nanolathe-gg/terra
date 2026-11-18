@@ -783,11 +783,13 @@ const SURFACE_FACTS = 14u;
 // Each fact's range for the Surface section's fact view (diagnostic views 14 to 17), SURFACE_FACTS order: sculpt-material-model.js
 // SURFACE_FACT_RANGE holds the same numbers (repro/surface.test.mjs compares them).
 const SURFACE_FACT_LO = array<f32, 14>(0.0, -20.0, -60.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.0);
-const SURFACE_FACT_HI = array<f32, 14>(3.0, 200.0, 200.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.6, 1.0, 1.0, 1.0, 1.0, 1.0);
+const SURFACE_FACT_HI = array<f32, 14>(20.0, 200.0, 200.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.6, 1.0, 1.0, 1.0, 1.0, 1.0);
 // The fact view's gray at a range's low and high ends (sculpt-material-model.js SURFACE_FACT_GRAY): over black, which is the canvas outside the
 // map, and under white, so the magenta where a condition holds stays apart from the gray at both ends.
 const SURFACE_FACT_GRAY_LO = 0.1;
 const SURFACE_FACT_GRAY_HI = 0.85;
+// 1 for a fact the fact view draws on a square-root scale (sculpt-material-model.js SURFACE_FACT_ROOT: Steepness, whose limits bunch low).
+const SURFACE_FACT_ROOT = array<f32, 14>(1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
 fn surfaceWindow(v: f32, lo: f32, hi: f32, fade: f32) -> f32 {
     let f = max(fade, 0.0001);
     return smoothstep(lo - f, lo + f, v) * (1.0 - smoothstep(hi - f, hi + f, v));

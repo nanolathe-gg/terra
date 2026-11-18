@@ -2459,7 +2459,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if ((at.x + at.y) % 6u < 2u && cover > 0.0) { color = mix(color, (vec3f(1.0, 0.1, 0.9) * seen + vec3f(0.1, 0.9, 1.0) * (cover - seen)) / cover, min(cover * 1.5, 1.0)); }
     }
     // The Surface section's fact view: the fact one condition of the previewed layer reads (views 14 to 17: its term 0 to 3, the layer at
-    // u.surfacePreview), in gray from its range's low end (dark gray) to its high end (light gray, SURFACE_FACT_GRAY_LO and _HI), magenta where that condition holds (a score: where
+    // u.surfacePreview), in gray from its range's low end (dark gray) to its high end (light gray, SURFACE_FACT_GRAY_LO and _HI; a square root of the way across
+    // for SURFACE_FACT_ROOT's facts), magenta where that condition holds (a score: where
     // the whole score passes, without its edge noise). Green stays the gray alone, so the page reads the view's own pixels for its histogram.
     // The rock, debris and sand shares are their final values here, not what an earlier stage's layer saw.
     if (u.diagnosticView >= 14 && u.diagnosticView <= 17 && u.surfacePreview >= 0) {
@@ -2470,7 +2471,8 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             let head = u.materialTable[at + 2u];
             let term = u.materialTable[at + 3u + k];
             let f = min(u32(term.x), SURFACE_FACTS - 1u);
-            let g = mix(SURFACE_FACT_GRAY_LO, SURFACE_FACT_GRAY_HI, clamp((surfaceFacts[f] - SURFACE_FACT_LO[f]) / (SURFACE_FACT_HI[f] - SURFACE_FACT_LO[f]), 0.0, 1.0));
+            let t = clamp((surfaceFacts[f] - SURFACE_FACT_LO[f]) / (SURFACE_FACT_HI[f] - SURFACE_FACT_LO[f]), 0.0, 1.0);
+            let g = mix(SURFACE_FACT_GRAY_LO, SURFACE_FACT_GRAY_HI, select(t, sqrt(t), SURFACE_FACT_ROOT[f] > 0.5));
             var holds = 0.0;
             if (head.x < 1.5) { holds = surfaceWindow(surfaceFacts[f], term.y, term.z, term.w); }
             else { holds = smoothstep(head.y - head.z, head.y + head.z, surfaceScore(at + 2u, rules, surfaceFacts, 0.0)); }
