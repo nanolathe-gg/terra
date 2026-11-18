@@ -3,7 +3,7 @@ import {MATERIAL_SLOTS} from './sculpt-materials.js';
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {isRiver, isBraided, riverWidth, riverCurvature} from './sculpt-river.js';
-import {strokeCurve, scatterSize, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, landformDigs, impactOn, bucklingOn, secondaryNear, impactSetup, impactPoint, impactEnd, impactSpread, impactWeight, landformPeak} from './sculpt-shape-presets.js';
+import {strokeCurve, scatterSize, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, landformDigs, impactOn, bucklingOn, secondaryNear, impactSetup, impactPoint, impactEnd, impactSpread, impactWeight, landformPeak, rockClaimMargin} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -140,6 +140,8 @@ const NODE_FIELDS = [
   ...['talusLumps'].map(k => [k, 'f']),
   // lfcrater: an impact's groove: the along curve's value at its end (the groove's width is scaled by the curve over it); 0: none.
   ...['grooveEnd'].map(k => [k, 'f']),
+  // How far past the ground it moves a landform claims its rock (rockClaimMargin, sculpt-shape-presets.js); 0: it claims none.
+  ...['lfClaim'].map(k => [k, 'f']),
   // lfimpact2: the buckled ground's height (Buckling x .3 of the relief; BK_AMP in engine-shape.wgsl scales it), apart from the ejecta's; 0: none.
   ...['bkAmt'].map(k => [k, 'f']),
   // lfcrystal: a landform's faceted structure (Facet shape, the share of sites with an element, its polygon's sides, how square it turns to the path, corner cuts).
@@ -489,7 +491,7 @@ export function prepareNode(n, geom, c) {
       // Face steepness: a raised section (Raise to, above the plain or its ground; not a crater's signed section or a river's valley).
       lfFace: Math.round(q.combine || 0) === 0 && !landformSigned(q) && !isRiver(q) && (Math.round(q.heightReference || 0) === 2 ? q.elevation > 0 : landformElevation(q, c.sea) > c.baseHeight) ? clamp(c.faceSteep ?? 1, 1, 4) : 1,
       // lfcrater: an impact's groove (its first segment the landing): the along curve's value at the end, which the groove's width is scaled by; 0: no groove.
-      grooveEnd: grooved ? impactEnd(q) : 0});
+      grooveEnd: grooved ? impactEnd(q) : 0, lfClaim: rockClaimMargin(q)});
     if (impact) Object.assign(main.u, impactUniforms(q, sd, impact, c));
   }
   const satellites = kind === 'landform' && !n.satellite ? [...(impact && Math.round(q.secondaries || 0) >= 1 ? secondaryNodes(n, q, impact, seed, geom, c) : []), ...(Math.round(q.scatterCount || 0) >= 1 ? scatterNodes(n, q, seed, geom, c) : [])] : [];
