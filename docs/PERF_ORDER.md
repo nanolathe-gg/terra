@@ -104,21 +104,29 @@ final picture (2026-11-16).
 
 ## Status (2026-11-17, evening)
 
-Each item is on its own branch from this one; none is on main.
+Each item is on its own branch from this one; none is on main. The owner
+judged both look changes the same by eye.
 
 - **1, done:** `perf/palette-table`. Output stage 5.4 to 0.25 ms a 512 px
   final tile; GPU per tile 41 to 31 ms (Node/Dawn); Chrome release to final
-  on the 16 x 16 Green map 976-993 to 921-960 ms. 9.5-12% of pixels move,
-  by eye the same. Look change for the owner.
+  on the 16 x 16 Green map 976-993 to 921-960 ms. 9.5-12% of pixels move;
+  distinct colors in a window rise 5-9%. Checks: quick, engine, digest,
+  export-bytes, browser smoke.
 - **2, done:** `perf/height-read`. 16 x 16 corner heights 2.0-3.0 to
-  1.1-2.3 s (Node/Dawn); heights and the exported `.ufo` byte-identical.
+  1.1-2.3 s (Node/Dawn); heights and the exported `.ufo` byte-identical;
+  passability on a paged 8 x 8 map in Chrome matches. A 16 x 16 export in
+  headless Chrome fails on main and on this branch ("exceeds the JS memory
+  budget"); with `mem-pages` it completes, also merged with this branch.
 - **3, reviewed:** `mem-pages-review` merges `mem-pages` with main (review in
   `~/terraform-assets/agent-memory-2026-11-16/HANDOFF.md`). 16 x 16 after a
   pan: renderer process 916 to 387 MB, GPU process 1,272 to 1,110 MB, same
-  pictures. Waits on the owner: the iPhone/iPad 4 GB guess and the 24-page
-  cap. `088b94c4` waits on the owner too.
-- **4, material textures done:** `perf/material-pack`. 84.3 to 48.3 MiB;
-  42-49% of pixels pick another dither dot, by eye the same. Look change.
+  pictures; fixes the 16 x 16 Chrome export. Waits on the owner: the
+  iPhone/iPad 4 GB guess and the 24-page cap. `088b94c4` waits on the owner.
+- **4, material textures done:** `perf/material-pack`. 84.3 to 48.3 MiB.
+  With the palette off the picture is within one level per channel of main
+  (shine published or not); with it, 42-49% of pixels pick another dot.
+  The 128 MiB cache cap now admits 32 layers instead of 18 (the owner's
+  call). Checks: quick, engine, digest, browser smoke, material editor.
 - **4, undo sharing dropped:** on the owner's busiest map (8 x 8, 101
   features) the parts it would share are under 20 KB a checkpoint, under
   1 MB over 48 checkpoints.
