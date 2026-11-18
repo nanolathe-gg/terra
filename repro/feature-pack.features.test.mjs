@@ -30,6 +30,7 @@ function element() {
   return Object.assign(e, {replaceChildren(...c) { e.children = c; }, append() {}, setAttribute() {}, getAttribute() { return null; }, addEventListener() {},
     closest() { return null; }, querySelector() { return null; }, querySelectorAll() { return []; }, focus() {}, click() {}});
 }
+let changes = 0;
 async function mount(world) {
   const elements = new Map();
   globalThis.document = {getElementById: id => { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); }, querySelector: () => element(),
@@ -42,7 +43,7 @@ async function mount(world) {
   const map = {unitsX: 4, unitsY: 4, widthCells, heightCells, width: widthCells * 16, height: heightCells * 16, playRight: 4 * 512, playBottom: 4 * 512};
   const config = {biome: world, biomeId: world, map, baseHeight: 128, seaLevel: 64, features: data.features, featureCatalog: []};
   const canvas = {ownerDocument: globalThis.document, addEventListener() {}, hasPointerCapture() { return false; }, style: {}};
-  const features = await mountMapFeatures({config, canvas, sample: () => 100, enabled: () => true, change() {}, schedule() {}, light: () => [-0.5, -0.5, 0.7071], pick: (x, z) => [x, z]});
+  const features = await mountMapFeatures({config, canvas, sample: () => 100, enabled: () => true, change() { changes++; }, schedule() {}, light: () => [-0.5, -0.5, 0.7071], pick: (x, z) => [x, z]});
   return {features, config, map};
 }
 
@@ -63,4 +64,18 @@ test('a scar exports translucent exactly when the editor draws it translucent', 
       assert.equal(def.animtrans, drawn < 1 ? '1' : '0', `${world} scar ${v.index + 1} (${v.params.type}): drawn at ${drawn}, exported animtrans ${def.animtrans}`);
     }
   }
+});
+
+test('a map open keeps the first of overlapping features, in the list order, and a fill change that changes nothing is no undo step', async () => {
+  const {features} = await mount('green');
+  const rock = {kind: 'rock', v: 0};
+  // Three rocks: the second overlaps the first, the third overlaps neither; the fourth repeats the first's cell.
+  features.load({features: [{...rock, x: 10, z: 10}, {...rock, x: 10, z: 10}, {...rock, x: 40, z: 40}, {...rock, x: 10, z: 10}], starts: [{x: 100, z: 100}]});
+  assert.deepEqual(features.placements.map(p => [p.x, p.z]), [[10, 10], [40, 40]]);
+  const before = changes;
+  features.setFill({density: 16});
+  features.setFill({density: 16});
+  assert.equal(changes - before, 1, 'the second, identical change makes no undo step');
+  const data = features.serialize();
+  assert.equal(features.serialize().features, data.features, 'an unchanged map shares its feature list between undo steps');
 });

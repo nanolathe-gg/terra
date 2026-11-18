@@ -1676,7 +1676,7 @@ function changeName(prev,next) {
   if (!same('world')||!same('surface')||!same('rock')) changes.push(`${activeWorld().name} (every map in it)`);
   else if (!same('materials')||!same('rocks')||!same('column')) changes.push('this map’s materials and rock types');
   // The map's data: its features and starts (sculpt-features.js serialize), its name, description and game settings (sculpt-export.js serialize).
-  const data=keys => keys.some(k => JSON.stringify(prev.mapData?.[k])!==JSON.stringify(next.mapData?.[k]));
+  const data=keys => keys.some(k => prev.mapData?.[k]!==next.mapData?.[k] && JSON.stringify(prev.mapData?.[k])!==JSON.stringify(next.mapData?.[k]));   // shared when unchanged (sculpt-features.js serialize)
   if (data(['name'])) acts.push('renaming the map');
   if (data(['description'])) changes.push('the map’s description');
   if (data(['settings'])) changes.push('the map’s game settings');

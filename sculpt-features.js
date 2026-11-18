@@ -67,7 +67,10 @@ export async function mountMapFeatures(api) {
   const panPointers=new Set(),controls=$('map-features-controls'),kindTabs=[...doc.querySelectorAll('[data-feature-kind]')],buttons=new Map([...doc.querySelectorAll('[data-feature-mode]')].map(b => [b.dataset.featureMode,b]));
   const enabled=() => api.enabled();
   const status=text => { message=text; $('feature-state').textContent=text; };
-  const guard=() => { if (enabled()) return true; status('Map editing is unavailable while terrain is loading or export is running.'); return false; };
+  // serialize()'s answer, kept until the next edit (guard: every edit starts there), change or load: every undo step of the map holds it, so a
+  // step that did not touch the features shares the list instead of copying it, and an undo to such a step has nothing to load.
+  let serialized=null;
+  const guard=() => { serialized=null; if (enabled()) return true; status('Map editing is unavailable while terrain is loading or export is running.'); return false; };
 
   // ---- the set's variants ----
   // Each set edit makes a new `set`, so a kind's list is kept until the set object changes (draw asks for it per feature, per frame).
@@ -87,13 +90,14 @@ export async function mountMapFeatures(api) {
   function overlaps(a,b,gap=0) { const [aw,az]=footprint(a),[bw,bz]=footprint(b); return a.x<b.x+bw+gap && a.x+aw+gap>b.x && a.z<b.z+bz+gap && a.z+az+gap>b.z; }
   const deposit=p => p.kind==='deposit';
   const scatter=p => FILL_KINDS.includes(p.kind);
-  function nearMargin(p,margin,list=placements,bases=starts) {
+  // `depots`: the deposits' rectangles, when the caller tests many placements against the same list (trimGenerated).
+  function nearMargin(p,margin,list=placements,bases=starts,depots=null) {
     const rect=rectangle(p);
-    return bases.some(s => pointDistance(s,rect)<margin) || list.some(q => deposit(q) && rectDistance(rect,rectangle(q))<margin);
+    return bases.some(s => pointDistance(s,rect)<margin) || (depots ?? list.filter(deposit).map(rectangle)).some(r => rectDistance(rect,r)<margin);
   }
   function trimGenerated(margin=fill.margin,list=placements,bases=starts) {
-    let removed=0;
-    const kept=list.filter(p => { const drop=generated.has(key(p)) && scatter(p) && nearMargin(p,margin,list,bases); if (drop) { generated.delete(key(p)); selection.delete(p); removed++; } return !drop; });
+    let removed=0;const depots=list.filter(deposit).map(rectangle);
+    const kept=list.filter(p => { const drop=generated.has(key(p)) && scatter(p) && nearMargin(p,margin,list,bases,depots); if (drop) { generated.delete(key(p)); selection.delete(p); removed++; } return !drop; });
     return {kept,removed};
   }
   // ---- pixels: a worker draws sprites and paints deposits and vents ----
@@ -408,7 +412,7 @@ export async function mountMapFeatures(api) {
     $('feature-reroll').title=$('feature-reroll').disabled?(list.length?'Each selected feature’s style has one variant: raise its Variants to re-roll it.':'Select a feature to re-roll it.'):'Swap for another variant of the same kind';
   }
   function selectionChanged() { refreshSelection(); doc.dispatchEvent(new Event('terraform-feature-mode')); api.schedule(); }
-  function changed(text) { status(text); prune(); refreshSelection(); update(); api.change(); doc.dispatchEvent(new Event('terraform-feature-mode')); }
+  function changed(text) { serialized=null; status(text); prune(); refreshSelection(); update(); api.change(); doc.dispatchEvent(new Event('terraform-feature-mode')); }
   function activate(next) {
     if (!guard()) return false;
     finishGesture(false);
@@ -582,8 +586,10 @@ export async function mountMapFeatures(api) {
   function setFill(value) {
     if (!guard()) return false;
     if (value.kind && !kinds.includes(value.kind)) { status(`This world has no generated ${PLURALS[value.kind]} yet.`); update(); return false; }
+    const before=JSON.stringify(fill);
     fill=fillOptions(value,fill);
     const trimmed=trimGenerated(); placements=trimmed.kept;
+    if (!trimmed.removed && JSON.stringify(fill)===before) { update(); return true; }   // nothing changed: no undo step
     changed(trimmed.removed?`Updated fill; cleared ${trimmed.removed} generated features inside the margin.`:'Updated fill controls.'); return true;
   }
 
@@ -655,30 +661,37 @@ export async function mountMapFeatures(api) {
     return {added};
   }
 
+  // Its parts are shared, never changed: a reader that wants to edit them copies them (load does).
   function serialize() {
+    if (serialized) return {...serialized};
     const plain=p => { const out={kind:p.kind,v:p.v,x:p.x,z:p.z}; if (deposit(p)) out.metal=p.metal; return out; };
-    return {features:placements.map(plain).sort(ordered),featureSet:structuredClone(set),starts:starts.map(p => ({...p})),fill:{...fill,generated:placements.filter(p => generated.has(key(p))).map(plain).sort(ordered)}};
+    serialized={features:placements.map(plain).sort(ordered),featureSet:structuredClone(set),starts:starts.map(p => ({...p})),fill:{...fill,generated:placements.filter(p => generated.has(key(p))).map(plain).sort(ordered)}};
+    return {...serialized};
   }
   // A saved feature that does not fit this world or map is left out, said once.
   function load(data={}) {
+    if (serialized && ['features','featureSet','starts','fill'].every(k => data[k]===serialized[k])) return;   // what this module holds now
     const nextSet=normalizeSet(data.featureSet ?? config.featureSet,config),nextStarts=(data.starts===undefined?defaults():data.starts),nextFill=fillOptions(data.fill||{});
     if (!Array.isArray(data.features??[]) || !Array.isArray(nextStarts) || nextStarts.length<1 || nextStarts.length>10) throw new Error('Map placements need a feature list and 1–10 starts.');
     const bases=nextStarts.map(p => ({x:p?.x,z:p?.z}));
     if (bases.some((p,i) => !validStart(p) || bases.some((q,j) => j<i && p.x===q.x && p.z===q.z))) throw new Error('Every start must be a distinct pixel position inside the play area.');
     set=nextSet;
-    const next=[]; let unfit=0;
+    // The cells the features kept so far cover: a feature that overlaps one of them is left out, in the list's order (as testing it against each).
+    const next=[],taken=new Uint8Array(cols*rows); let unfit=0;
+    const free=p => { const [fw,fz]=footprint(p); for (let z=p.z;z<p.z+fz;z++) for (let x=p.x;x<p.x+fw;x++) if (taken[z*cols+x]) return false; return true; };
     for (const raw of data.features||[]) {
       const p=normalizePlacement(raw);
       if (!p) { unfit++; continue; }
       if (!kinds.includes(p.kind)) { unfit++; continue; }
       const list=variantList(p.kind); if (!list.some(v => v.index===p.v)) { unfit++; continue; }
-      if (!inBounds(p) || next.some(q => overlaps(p,q))) { unfit++; continue; }
+      if (!inBounds(p) || !free(p)) { unfit++; continue; }
+      const [fw,fz]=footprint(p); for (let z=p.z;z<p.z+fz;z++) taken.fill(1,z*cols+p.x,z*cols+p.x+fw);
       next.push(p);
     }
     const recorded=new Set((Array.isArray(data.fill?.generated)?data.fill.generated:[]).map(normalizePlacement).filter(Boolean).map(key));
     const previousGesture=gesture; gesture=null;
     if (previousGesture && canvas.hasPointerCapture?.(previousGesture.id)) canvas.releasePointerCapture(previousGesture.id);
-    placements=next; starts=bases; fill=nextFill; generated=new Set(next.filter(p => scatter(p) && recorded.has(key(p))).map(key));
+    serialized=null; placements=next; starts=bases; fill=nextFill; generated=new Set(next.filter(p => scatter(p) && recorded.has(key(p))).map(key));
     selection=new Set(); selectedStart=Math.min(Math.max(0,selectedStart),starts.length-1); hover=null;
     if (!activeList().some(v => v.index===placeVariant)) placeVariant=-1;
     if (unfit) { status(`${unfit} saved ${unfit===1?'feature does':'features do'} not fit this world or map and ${unfit===1?'was':'were'} left out.`); doc.dispatchEvent(new CustomEvent('terraform-status',{detail:message})); }
