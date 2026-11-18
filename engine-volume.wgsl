@@ -519,10 +519,10 @@ fn voxelShadow(p:vec3f,n:vec3f)->f32 {
     }return 1.0;
 }
 // Signed surface curvature at one, two, and four voxels. This keeps the
-// artist's cavity accent attached to real grooves, including vertical faces.
-fn voxelCavity(p:vec3f,n:vec3f)->f32 {
+// artist's cavity accent attached to real grooves, including vertical faces. gradientLength is length(voxelGradient(p)), which the caller has.
+fn voxelCavity(p:vec3f,n:vec3f,gradientLength:f32)->f32 {
     let axis=select(vec3f(0,0,1),vec3f(1,0,0),abs(n.z)>.9);let t=normalize(cross(n,axis));let b=cross(n,t);
-    let gradient=max(.05,length(voxelGradient(p)));let weights=array<f32,3>(.5,.3,.2);var curvature=0.0;
+    let gradient=max(.05,gradientLength);let weights=array<f32,3>(.5,.3,.2);var curvature=0.0;
     for(var i=0;i<3;i++){
         let reach=f32(1u<<u32(i))*vs.step;
         let mean=.25*(voxelField(voxelOffset(p,t*reach))+voxelField(voxelOffset(p,-t*reach))+voxelField(voxelOffset(p,b*reach))+voxelField(voxelOffset(p,-b*reach)));

@@ -1498,9 +1498,9 @@ fn geometryMain(v:VertexOut)->@location(0) vec4f {
     let pixel=v.position.xy-vec2f(1);
     let fragCoord=vec2f(pixel.x*u.chunkScale+u.chunkScreenOrigin.x,u.size-(pixel.y*u.chunkScale+u.chunkScreenOrigin.y));
     let hit=voxelHit(vec2f(fragCoord.x,u.size-fragCoord.y));
-    let p=round(hit.xy*64.0)/64.0;useRock(p);let normal=voxelNormal(hit);
+    let p=round(hit.xy*64.0)/64.0;useRock(p);let hitGradient=voxelGradient(hit);let normal=select(vec3f(0,0,1),normalize(hitGradient),dot(hitGradient,hitGradient)>1e-12);   // voxelNormal, keeping the gradient for voxelCavity
     let authored=voxelAuthored(p);let soft=-authored.yz/max(authored.w,.015);
-    var lit=normal;var sun=voxelShadow(hit,normal);var cavity=voxelCavity(hit,normal);
+    var lit=normal;var sun=voxelShadow(hit,normal);var cavity=voxelCavity(hit,normal,length(hitGradient));
     // Rock finer than the solid's voxels (rockDetail, a height outward), read as a 1 px solid's normal reads its field: it bends the normal the light reads,
     // deepens the cavity where it hollows (voxelCavity's first ring: its weight and its reach) and casts its own short shadow.
     // Keep fine rock when a pixel is at most half a voxel wide. At 3 px or coarser in a 4 px solid, it reads as single-pixel noise.
