@@ -149,11 +149,12 @@ test('an edit where an edge page\'s Time window reaches past its apron weathers 
     const {core, apron} = kept.pageInfo(), side = Math.min(s.worldGrid, core + 2 * apron);
     const near = {x0: 0, y0: 0, x1: core - 1, y1: core - 1};
     assert.equal((await pageBytes(kept, near)).runs, 1);
-    // Cells past the apron (core + apron, with the 12 cells an edit is grown by) and inside the window moved in (side cells from the edge).
+    // Cells past the apron (core + apron, with the 12 cells an edit is grown by) and inside the window moved in (side cells from the edge):
+    // 24 cells at the 64-cell apron (TIME_APRON), which a hill 20 px across on a 20 px path fits.
     const band = {x0: core + apron + 20, x1: side - 20};
-    assert(band.x1 - band.x0 >= 40, `the band is ${band.x1 - band.x0} cells wide`);
+    assert(band.x1 - band.x0 >= 24, `the band is ${band.x1 - band.x0} cells wide`);
     const mid = (band.x0 + band.x1) / 2 * s.spacing;
-    nodes = [...nodes, ...engine.sceneNodes(config, [['landform', [[mid - 20, 200], [mid + 20, 260]], {card: {diameter: 30, elevation: 120}}]], {ground: false, seed: s.seed, settings: s.settings})];
+    nodes = [...nodes, ...engine.sceneNodes(config, [['landform', [[mid - 10, 200], [mid + 10, 260]], {card: {diameter: 20, elevation: 120}}]], {ground: false, seed: s.seed, settings: s.settings})];
     kept.changed({x0: band.x0, y0: 60, x1: band.x1, y1: 160});
     const again = await pageBytes(kept, near);
     assert.equal(again.runs, 1, 'the near page is weathered again');
