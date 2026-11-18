@@ -1,20 +1,22 @@
 // Retail match harness: check a world's files before a trial renders, with messages that say what to fix.
-//   node repro/match_validate.mjs <world>
+//   node repro/match_validate.mjs <world> [--query 'key=v&key=v']
 // Reads this checkout's materials/<world>.json, materials/textures.json and materials/defaults.json, and checks what a matching agent edits:
 //  - JSON that parses (with the line of the error);
 //  - world.knobDefaults: each key a World control, a rock setting or a known engine default, and inside its range;
 //  - world.materials and every material a layer, rock type or tool names: present in textures.json, and a graph the editor accepts
 //    (sculpt-materials.js copyMaterial, the same check the material editor runs) or a `like` copy of one;
 //  - world.surface: a list the editor accepts (sculpt-material-model.js copySurface), with known facts, stages and materials;
-//  - world.rock: recipes whose knobs are rock settings, presets that name a recipe.
+//  - world.rock: recipes whose knobs are rock settings, presets that name a recipe;
+//  - with --query, each key a setting the page reads, inside its range.
 // Exit 1 on an error, 0 with warnings. repro/match.sh runs it before every trial.
 import {readdirSync, readFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
-const world = process.argv[2];
-if (!world) { console.error('usage: node repro/match_validate.mjs <world>'); process.exit(2); }
+const argv = process.argv.slice(2), qAt = argv.indexOf('--query'), query = qAt >= 0 ? argv.splice(qAt, 2)[1] ?? '' : '';
+const world = argv[0];
+if (!world) { console.error('usage: node repro/match_validate.mjs <world> [--query \'key=v&key=v\']'); process.exit(2); }
 const errors = [], warnings = [];
 function load(file) {
   const text = readFileSync(join(repo, file), 'utf8');
@@ -81,6 +83,16 @@ for (const p of w.rock?.presets ?? []) if (!recipes[p] && !rock.STARTING_RECIPES
 for (const t of w.tools ?? []) {
   if (t.material) checkMaterial(t.material, `world.tools ${t.id}.material`);
   if (t.rock && !recipes[t.rock] && !rock.STARTING_RECIPES[t.rock]) errors.push(`world.tools ${t.id}: rock "${t.rock}" is not a recipe of this world or a starting one.`);
+}
+
+// A trial's --query: a key the page does not read renders the base unchanged, which would pass for a control that does nothing.
+const colorKeys = new Set(['sunColor', 'skyColor']);   // the light colors the address reads (sculpt-scene.js hexColors)
+for (const [k, v] of new URLSearchParams(query)) {
+  if (colorKeys.has(k)) { if (!/^[0-9a-f]{6}$/i.test(v)) errors.push(`--query ${k}=${v}: a color is six hex digits (rrggbb).`); continue; }
+  if (!known.has(k)) { errors.push(`--query ${k}: not a World control or known setting, so it would change nothing. See section 1 of the reference.`); continue; }
+  const r = ranges.get(k), x = Number(v);
+  if (!Number.isFinite(x)) errors.push(`--query ${k}=${v}: not a number.`);
+  else if (r && (x < r[0] || x > r[1])) errors.push(`--query ${k}=${v} is outside its range ${r[0]} to ${r[1]}.`);
 }
 
 for (const m of warnings) console.log(`warning: ${m}`);

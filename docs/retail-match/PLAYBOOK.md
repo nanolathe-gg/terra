@@ -100,7 +100,7 @@ A rock type may name its own rock material.
     `elongation`.
   - **Start from a near material:** copy a material from another world that
     already looks closer (`like` copies a graph and recolors it:
-    `{"name": "...", "like": "<key>", "color": [r, g, b]}`). Snippets in
+    `{"name": "...", "like": "<key>", "color": "#rrggbb"}`). Snippets in
     `materials/snippets.json` are tested starting graphs.
 - **Watch for:**
   - `textures.json` is shared by every world. Edit only materials no other
@@ -149,9 +149,13 @@ thins.
 
 ### 5. Colors
 
-Light and water colors are set by name: see section 1 of the reference,
-"Colors". Try them as `--query 'shallowTone=4a7c8f'` and keep them in the
-world file. Measured water colors live in `materials/<world>.json` → `water`.
+- **The light's colors:** try `--query 'sunColor=ffd9a8&skyColor=8fb0ff'`
+  (six hex digits each). Where a world keeps its own sun and sky color is
+  not settled for this harness. If one helps, report the value; do not
+  persist it.
+- **Shallow water's tone:** `water.shallowTone` in `materials/<world>.json`,
+  three numbers that shift the water material's mean. The other measured
+  water colors live in the same `water` block.
 
 ### 6. Shapes: stroke cards and tool presets (the shape lane)
 
@@ -171,8 +175,17 @@ their help are in section 5 of the reference.
 
 Finding keys are `<class>:<metric>`. The classes are `water`, `shore`,
 `level`, `slope` and `steep`. The metrics are `share`, `luma`, `color`,
-`spread`, `band2`, `band8`, `band32`, `edges` and `lines`. Start with the
-first lever listed, and look at the crop before you choose.
+`spread`, `band2`, `band8`, `band32`, `edges` and `lines`.
+
+**These rows are starting guesses from how the engine is built, not
+measurements.** The pilot already found two that did not hold on Green:
+
+- `banding` moved green-2 but not green-5's hills;
+- `slopeMarks` helped green-5 and hurt green-1.
+
+Probe before you trust a row, and look at the crop before you choose. After
+a probe, the printout's "moved vs base" line shows what the control actually
+moved, class by class, beside retail's value.
 
 | Finding | First levers | Then |
 | --- | --- | --- |

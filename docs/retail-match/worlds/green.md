@@ -56,7 +56,9 @@ These notes are by eye, from the base crops in
 
 ## Pilot notes (2026-11-18)
 
-The harness's first run, by the agent that built it:
+The harness's first run, by the agent that built it. Its trials are in
+`/tmp/nanolathe-map-editor/match/terraform-wt-retail-harness/green/` (`--log` there, or read `ledger.jsonl`). Their pictures are kept
+for trial-000, holdout-000 and trial-004.
 
 - **Probe `slopeMarks=0.5,1`** (measured): mean look .24 to .23. green-5
   went .70 to .64 at 1, but green-1 got worse (.10 to .12). Not kept.
@@ -64,15 +66,22 @@ The harness's first run, by the agent that built it:
   .36 at 0 and .44 at 1.2, so .6 is near right for green-2. green-5 did not
   move at all (.70 at 0, .6 and 1.2). **Contour bands do not reach green-5's
   hill slopes.** Find out why before anything else on green-5 (PLAYBOOK.md,
-  "When a control moves nothing"). Leads:
-  - the slope fade (`bandFade`, `engine-bake.wgsl` `contourBands`);
+  "When a control moves nothing").
+- **Probe `bandFade=0.3,1.5`** (measured; the default is .75): green-5 went
+  .70 to .70 and .69. **The band slope fade is not the cause.** Leads left:
   - `terraceCalm`;
-  - which rock the library `hill` strokes use.
+  - which rock the library `hill` strokes use (none set: the world's own
+    rock);
+  - retail's ragged ledges may be terraces (stroke Steps, a shape lane
+    question) rather than painted bands.
+- **Control trial** `--query banding=0.6` (Green's own value) rendered
+  exactly as the base (trial-007), so the query path itself changes
+  nothing.
 - **Rock type `evad`** with `faceRock` .35, `faceGrass` .8 and `crackMajor`
   1 (trial-004, measured and by eye): green-1's solid gray rock band at the
   hill foot became cracks and small rock patches in the grass, much closer
-  to retail by eye. Compare `trial-000` and `trial-004`
-  `classes/crops/green-1/steep.png`. It cleared `steep:band2` and
+  to retail by eye. Compare `trial-000/classes/crops/green-1/steep.png`
+  and `trial-004/classes/crops/green-1/steep.png` in the pilot folder. It cleared `steep:band2` and
   `steep:band8` on green-1, but the look scores did not move (.10). It was
   reverted, because the pilot only tests the harness. **It is a strong lead:
   start here, and tune it.**

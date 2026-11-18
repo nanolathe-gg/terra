@@ -40,6 +40,38 @@ def delta(a, b):
     return f'{a - b:+.2f}' if all(isinstance(v, (int, float)) and math.isfinite(v) for v in (a, b)) else '   '
 
 
+LABELS = {'luma': 'luma', 'spread': 'spread', 'band2': 'grain 2px', 'band8': 'texture 8px', 'band32': 'patches 32px', 'edges': 'edges', 'lines': 'lines'}
+
+
+def class_moves(base_dir, trial_dir, window, top=4):
+    """The largest changes in ours' per-class numbers against the base, with retail's for reference, so a probe shows what a control
+    moves even when no finding crosses a threshold."""
+    try:
+        b = json.loads((Path(base_dir) / 'classes' / 'classes.json').read_text())[window]['classes']
+        n = json.loads((Path(trial_dir) / 'classes' / 'classes.json').read_text())[window]['classes']
+    except (OSError, KeyError, ValueError):
+        return []
+    out = []
+    for cls, v in n.items():
+        o, ob, r = v['ours'], b.get(cls, {}).get('ours', {}), v['retail']
+        for k, label in LABELS.items():
+            if k not in o or k not in ob:
+                continue
+            x, y = ob[k], o[k]
+            if k == 'luma':
+                size = abs(y - x) / 4.0
+                text = f"{cls} {label} {x:.0f}->{y:.0f} (retail {r.get(k, float('nan')):.0f})"
+            else:
+                if max(x, y) <= 1e-4:
+                    continue
+                size = abs(math.log((y + 1e-4) / (x + 1e-4))) / math.log(1.1)
+                text = f"{cls} {label} {x:.3g}->{y:.3g} (retail {r.get(k, float('nan')):.3g})"
+            if size >= 1:
+                out.append((size, text))
+    out.sort(key=lambda s: -s[0])
+    return [t for _, t in out[:top]]
+
+
 def record(a):
     t = Path(a.trial)
     stats = json.loads((t / 'stats' / 'stats.json').read_text())
@@ -60,6 +92,8 @@ def record(a):
     with open(a.ledger, 'a') as fh:
         fh.write(json.dumps(e) + '\n')
     print(f"\n{e['trial']} ({a.kind}) {a.note!r}{'  query ' + a.query if a.query else ''}")
+    if base and base is not e and all(abs(w['look'] - base['windows'].get(n, {}).get('look', -1)) < 1e-9 and abs(w['shape'] - base['windows'].get(n, {}).get('shape', -1)) < 1e-9 for n, w in windows.items()):
+        print('  NOTE: renders exactly as the base on every window: this change reaches none of these windows (check gates, which rock the strokes use, or a scene query that overrides it).')
     if prev and prev.get('diff_sha') == e['diff_sha'] and prev.get('query', '') == e['query']:
         print(f"  WARNING: nothing changed since {prev['trial']} (same file diff, same query). Did your edit save? `git diff` shows what a trial renders.")
     line = f"  mean      shape {fmt(e['shape'])}  look {fmt(e['look'])}"
@@ -83,6 +117,9 @@ def record(a):
                 print(f"      new since base:     {', '.join(sorted(now - then))}")
         for f in w['findings'][:3]:
             print(f"      {f['size']:4.1f} {f['text']}")
+        moved = class_moves(a.base, t, name) if a.base and Path(a.base).resolve() != t.resolve() else []
+        if moved:
+            print('      moved vs base (ours): ' + '; '.join(moved))
     print(f"  details: {t}/gap.txt, {t}/classes/classes.md, crops {t}/classes/crops/<window>/<class>.png, pairs {t}/scenes/<window>/pair.png")
 
 
@@ -110,6 +147,7 @@ def main():
     r.add_argument('--query', default='')
     r.add_argument('--commit', default='')
     r.add_argument('--diff', default='')
+    r.add_argument('--base', default='', help='the base trial folder, for per-class changes')
     s = sub.add_parser('show')
     s.add_argument('--ledger', required=True)
     s.add_argument('--last', type=int, default=0)

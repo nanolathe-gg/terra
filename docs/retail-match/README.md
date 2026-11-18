@@ -31,7 +31,8 @@ for this task: where they differ, follow the stricter one.
 ```sh
 git worktree add ../terraform-wt-match-<world> -b match-<world> main   # or retail-harness, until the harness lands on main
 cd ../terraform-wt-match-<world>
-sh repro/match.sh <world>             # the base trial, trial-000; about 40 s
+export PYTHON=/Users/daniel/src/terraform/.venv/bin/python   # numpy, scipy, Pillow
+sh repro/match.sh <world>             # the bases, trial-000 and holdout-000; about a minute
 ```
 
 The commands need:
@@ -40,8 +41,7 @@ The commands need:
   assets;
 - Dawn's Node binding, for headless rendering (`repro/headless.mjs` says how
   to install it);
-- the project's Python environment (`PYTHON`, default
-  `/Users/daniel/src/terraform/.venv/bin/python`);
+- the project's Python environment (`PYTHON`, as above);
 - Go.
 
 If the base trial fails, stop and report the error. Do not work around it.
@@ -104,15 +104,20 @@ Change nothing else:
    move. Do not wait for that score to fall before keeping a change that the
    class findings and your eye agree on.
    
-   To keep it, commit it with a message that says what changed, why, and
-   the scores before and after, with the trial id. To revert it, restore the
-   files (`git checkout -- <file>`).
+   To keep it:
+   - commit it with a message that says what changed, why, and the scores
+     before and after, with the trial id;
+   - run `sh repro/match.sh <world> --keep-trial <trial>`, so its pictures
+     survive pruning. Do the same for any trial your report cites. Only the
+     last three trials keep their pictures otherwise.
+   
+   To revert it, restore the files (`git checkout -- <file>`).
 5. **Checkpoint every 10 trials or so.**
    - Run `sh repro/match.sh <world> --log` and look at the trend.
    - Open the latest pairs at full size.
    - Run `sh repro/match.sh <world> --holdout --note "checkpoint after
-     <trial>"`. Its first run is the held-out window's base, so run it once
-     before your first commit. If your kept changes help the windows you
+     <trial>"`. It compares with `holdout-000`, which the first run renders
+     from the committed files. If your kept changes help the windows you
      tuned on but hurt the held-out one, they fit those windows rather than
      the world: reconsider them.
 6. **Stop** when you hit any of these:
@@ -126,6 +131,11 @@ Change nothing else:
 ## Rules of evidence
 
 - **Numbers come from the trial log**, not from memory. Quote the trial id.
+- **"Renders exactly as the base"** means your change reached none of the
+  windows. That is not the same as a control that does nothing. Find out
+  why (PLAYBOOK.md, "When a control moves nothing") before you write it
+  down as evidence. A `--query` key the page does not read is refused before
+  anything renders.
 - **Claims you make by eye cite a crop or pair path.** A model that sees
   pictures can be fooled into seeing a match. If the numbers and your eye
   disagree, say so, and do not keep the change.

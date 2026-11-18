@@ -36,13 +36,13 @@ your output folder.
 - **Cutting a 1x window of any map** into your output folder:
 
   ```sh
-  $PYTHON repro/retail_crop.py map $R/retail-<world>/<map> <x> <y> <out>/crops/<name>
+  "${PYTHON:-/Users/daniel/src/terraform/.venv/bin/python}" repro/retail_crop.py map "$R/retail-<world>/<map>" <x> <y> <out>/crops/<name>
   ```
 
   `x` and `y` are multiples of 16. You get `retail.png` (1024 px),
   `heights.npy` and `relief.png`. Use this to see a feature at 1x that your
   windows do not show.
-- **What is on this machine:** `$PYTHON repro/retail_sources.py --worlds
+- **What is on this machine:** `"$PYTHON" repro/retail_sources.py --worlds
   <world>` lists it.
 
 ## Building blocks and catalogs
@@ -67,19 +67,19 @@ your output folder.
 
 ## The worlds
 
-Your base trial prints each window's starting scores.
+Your base trial prints each window's starting scores. "Map exports here" counts the folders in `$R/retail-<world>/`. BIOME_CATALOG.md reviewed more maps from overview sheets (Green 37, for example).
 
-| World | Windows (held out) | Retail maps | Sections | Notes |
+| World | Windows (held out) | Map exports here | Sections | Notes |
 | --- | --- | --- | --- | --- |
-| green | 1-6 (7) | 37 | none | dossier: [worlds/green.md](worlds/green.md) |
-| red | 1-2 (3) | 17 | none | |
-| archipelago | 1-2 (3) | 14 | none | known tells: even fringe rings, rippled sand, banded shallows |
-| moon | 1-2 (3) | 12 | moon | |
+| green | 1-6 (7) | 13 | none | dossier: [worlds/green.md](worlds/green.md) |
+| red | 1-2 (3) | 9 | none | |
+| archipelago | 1-2 (3) | 10 | none | known tells: even fringe rings, rippled sand, banded shallows |
+| moon | 1-2 (3) | 13 | moon | |
 | zhon | 1-2 (3) | none | sections-zhon | the windows are map editor sections |
-| lava | 1-2 (3) | 19 | lava | |
-| desert | 1-2 (3) | 3 (+6 Wet Desert) | none | its shape gap is real: retail's ground rolls everywhere |
-| crystal | 1-2 (3) | 10 | sections-crystal and two more | |
-| ice | 1-2 (3) | 22 | sections-ice | |
+| lava | 1-2 (3) | 11 | lava | |
+| desert | 1-2 (3) | 3 | none | its shape gap is real: retail's ground rolls everywhere |
+| crystal | 1-2 (3) | 5 | sections-crystal and two more | |
+| ice | 1-2 (3) | 8 | sections-ice | |
 
 ## Writing a world's dossier
 
