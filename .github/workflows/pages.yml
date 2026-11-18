@@ -63,6 +63,23 @@ jobs:
           TERRAFORM_SITE_DIR="$site" node --test repro/site.build.test.mjs
           echo terra.nanolathe.gg > _site/CNAME
           touch _site/.nojekyll
+      # A deploy replaces the whole site, and a tab opened before it loads its build's later files (export worker, WASM, palette, feature
+      # worker) from its own b/<hash>/. The live build's folder is copied into this one (its files.txt lists them), so it lives one deploy
+      # more. A live build without the list, or a copy that fails, is left out; the deploy goes on.
+      - name: Keep the live build for open tabs
+        run: |
+          live=$(curl -fsS https://terra.nanolathe.gg/ | grep -o '<base href="b/[0-9a-f]*/">' | head -1 | sed 's/.*b\/\([0-9a-f]*\)\/.*/\1/') || live=''
+          if [ -z "$live" ] || [ -d "_site/b/$live" ]; then echo "nothing to keep (live: ${live:-none})"; exit 0; fi
+          keep=$(mktemp -d)
+          if curl -fsS "https://terra.nanolathe.gg/b/$live/files.txt" -o "$keep/files.txt"; then
+            ok=1
+            while IFS= read -r name; do
+              case "$name" in ''|/*|*..*) continue;; esac
+              mkdir -p "$keep/$(dirname "$name")"
+              curl -fsS "https://terra.nanolathe.gg/b/$live/$name" -o "$keep/$name" || { ok=0; break; }
+            done < "$keep/files.txt"
+            if [ "$ok" = 1 ]; then mkdir -p _site/b && mv "$keep" "_site/b/$live" && echo "kept b/$live"; else echo "could not copy b/$live; deploying without it"; fi
+          else echo "b/$live has no file list; deploying without it"; fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

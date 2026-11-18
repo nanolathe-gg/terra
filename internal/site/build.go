@@ -181,6 +181,11 @@ func (s *Site) Build(out, mapsURL string) (string, error) {
 	if err = WriteFiles(target, files); err != nil {
 		return "", err
 	}
+	// The build's own file list (not part of its hash): the next deploy copies this build forward from the live site, so a tab opened before
+	// that deploy still finds the files it loads later (the export worker, WASM, palette, feature worker) under its b/<hash>/.
+	if err = os.WriteFile(filepath.Join(target, "files.txt"), []byte(strings.Join(names, "\n")+"\n"), 0644); err != nil {
+		return "", err
+	}
 	// Keep the editor at the site root while all relative assets use this
 	// immutable build directory. Queries and fragments stay on the root URL.
 	index, ok := files["index.html"]
