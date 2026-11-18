@@ -87,10 +87,7 @@ test('world dependencies explain bypasses without biome gates',async()=>{
 test('H22b: rows that act only once another is on say so, and come back when it is',async()=>{
  const {worldControlRequirement:requirement}=await import('../sculpt-control-schema.js');
  const shows=(key,on)=>assert.equal(requirement(key,on),'',key);
- // the waterline: stairs and blur need a crisp waterline, and a blur replaces the stairs
- assert.match(requirement('shoalStairs',{crispShore:0}),/Crisp waterline/);
- assert.match(requirement('shoalStairs',{crispShore:1,shoalShoreSoft:4}),/Waterline blur replaces the stairs/);
- shows('shoalStairs',{crispShore:1,shoalShoreSoft:0});
+ // The blur needs a crisp waterline.
  assert.match(requirement('shoalShoreSoft',{crispShore:0}),/Crisp waterline/);
  shows('shoalShoreSoft',{crispShore:.5});
  // shine: a lobe needs its material's gloss, a grain its roughness, the shared rows any shining material
@@ -144,8 +141,8 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  shows('shelfWander',{waterTones:1,deepEdge:1});
  // the ramp: a third colour is cut by the depths whatever the step does; two colours need the step off, or a Faded stroke
  shows('waterSoft',{waterTones:3,rampWater:0});
- assert.match(requirement('bandWater',{waterTones:2,rampWater:0}),/Faded edge/);
- shows('bandWater',{waterTones:2,rampWater:1});
+ assert.match(requirement('waterSoft',{waterTones:2,rampWater:0}),/Faded edge/);
+ shows('waterSoft',{waterTones:2,rampWater:1});
  shows('waterSoft',{waterTones:1,rampWater:1});
  shows('shallowDepth',{waterTones:3});
  shows('deepDepth',{waterTones:2,rampWater:0,deepEdge:1});   // the hard step sits at their midpoint

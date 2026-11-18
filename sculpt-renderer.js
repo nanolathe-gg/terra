@@ -927,7 +927,6 @@ export class TerrainRenderer {
     this.f('uStrata', variant.has('strata') ? Number(variant.get('strata')) : 0);
     this.f('uStrataContrast', variant.has('strataContrast') ? Number(variant.get('strataContrast')) : 0.6);
     this.f('uStrataGrain', variant.has('strataGrain') ? Number(variant.get('strataGrain')) : 1);
-    this.f('uBandWater', variant.has('bandWater') ? Number(variant.get('bandWater')) : 0);
     this.f('uSandGrass', variant.has('sandGrass') ? Number(variant.get('sandGrass')) : 0.6);
     this.f('uSandDust', variant.has('sandDust') ? Number(variant.get('sandDust')) : 0.5);
     this.f('uPool', groundPool(this.config.material));   // card tilepool: the period level ground repeats with
@@ -989,7 +988,6 @@ export class TerrainRenderer {
     this.f('uIceFrost', variant.has('iceFrost') ? Number(variant.get('iceFrost')) : 0);
     // G1: shallow water round 3; every default is the earlier look.
     this.f('uShoalRag', variant.has('shoalRag') ? Number(variant.get('shoalRag')) : 0);
-    this.f('uShoalStairs', variant.has('shoalStairs') ? Number(variant.get('shoalStairs')) : 0);
     this.f('uShoalShoreSoft', variant.has('shoalShoreSoft') ? Number(variant.get('shoalShoreSoft')) : 0);
     // Low ground: its tint and reach (0: none, as before); its color is set with the others (setColors).
     this.f('uLowReach', variant.has('lowReach') ? Number(variant.get('lowReach')) : 6);
