@@ -224,6 +224,68 @@ export function ruleHere(layer, facts) {
   }
   return {kind: 'none'};
 }
+// Pick's "Show here" and "Not here" (sculpt-pick.js): the layer with its rule's limits moved so it holds at a pixel, or so it no longer does,
+// from the facts the draw recorded there (readProbe `facts`). Returns {layer, moved: [{fact, end, was, now}]} (a fresh layer; was/now as the
+// row shows them, null for no limit; a score's fact is null), or {reason} when there is nothing a limit can do: the layer has no rule, its rule already holds there
+// (its edge noise or Coverage leaves the pixel out), or what decides it is a share the draw finishes after the layer (Rock, Debris, Sand).
+// Show moves every window that fails to just past the value (a limit that would leave its fact's range goes); Not here moves the one limit whose move cuts least of its fact's range. A
+// score's threshold moves past the score. The limits stored are the drawn ones less the layer's Spread (spreadRule), so the layer draws
+// the new limit with Spread as it is. The new limit clears the value by a fiftieth of the fact view's gray and the window's fade (a score:
+// by its fade and 0.05), rounded to a thousandth of the range.
+export function ruleToShow(layer, facts) { return moveRule(layer, facts, true); }
+export function ruleToHide(layer, facts) { return moveRule(layer, facts, false); }
+function moveRule(layer, facts, show) {
+  if (!layer || (!isMaterialLayer(layer) && SURFACE_FIXED.includes(layer.builtin))) return {reason: 'Its World settings place it: change them in World › Surface.'};
+  const here = ruleHere(layer, facts), lateNames = terms => [...new Set(terms.filter(t => t.late).map(t => t.fact))].join(', ');
+  if (here.kind === 'none') return {reason: !isMaterialLayer(layer) ? 'Its World settings place it: change them in World › Surface.'
+    : show ? 'It has no rule, so nothing keeps it from here: its Coverage or edge noise leaves this pixel out.' : 'It has no rule to narrow: add a condition in World › Surface.'};
+  if (show && here.share >= .995) return {reason: 'Its rule already holds here: its edge noise or Coverage leaves this pixel out.'};
+  const s = Math.max(-1, Math.min(1, Number(layer.spread) || 0)), next = structuredClone(layer), moved = [];
+  const round = (fact, v) => { const [lo, hi] = SURFACE_FACT_RANGE[fact] ?? [0, 1], q = (hi - lo) / 1000; return Math.round(v / q) * q; };
+  const clean = v => +v.toFixed(6);
+  if (here.kind === 'score') {
+    if (here.terms.some(t => t.late)) return {reason: `Its score reads ${lateNames(here.terms)}, which the draw finishes after this layer: set its threshold in World › Surface.`};
+    const terms = layer.score.terms || [], step = s * terms.reduce((sum, t) => sum + Math.abs(Number(t.weight ?? 1)) * (SURFACE_SPREAD_STEP[t.fact] ?? 0), 0) / Math.max(terms.length, 1);
+    const pad = here.fade + .05, drawn = show ? here.score - pad : here.score + pad, now = clean(Math.round((drawn + step) * 1000) / 1000);
+    next.score.from = now; moved.push({fact: null, end: 'score', was: layer.score.from ?? .5, now});
+    return {layer: next, moved};
+  }
+  // A fiftieth of the fact view's gray past the value (factPosition: Steepness's low end spread out), and the window's fade.
+  const clear = (t, dir) => factAtPosition(t.fact, factPosition(t.fact, t.value) + dir * .02) + dir * t.fade;
+  // A limit moved past its fact's range (Show here at a value at either end) goes: no limit says the same and keeps the rule plain.
+  const store = (k, end, drawnValue) => {
+    const t = here.terms[k], [lo, hi] = SURFACE_FACT_RANGE[t.fact] ?? [-Infinity, Infinity], step = s * (SURFACE_SPREAD_STEP[t.fact] ?? 0);
+    const now = (end === 'from' ? drawnValue <= lo : drawnValue >= hi) ? null : clean(round(t.fact, end === 'from' ? drawnValue + step : drawnValue - step));
+    moved.push({fact: t.fact, end, was: layer.where[k][end] ?? null, now});
+    if (now == null) delete next.where[k][end]; else next.where[k][end] = now;
+  };
+  if (show) {
+    const failing = here.terms.map((t, k) => [t, k]).filter(([t]) => t.share < .995);
+    const late = failing.filter(([t]) => t.late);
+    if (late.length) return {reason: `${lateNames(late.map(([t]) => t))} here is the share the draw finishes after this layer, so its limit cannot be read from this pixel: set it in World › Surface.`};
+    for (const [t, k] of failing) {
+      if (t.value < t.from + t.fade) store(k, 'from', Math.min(t.value, clear(t, -1)));
+      if (t.value > t.to - t.fade) store(k, 'to', Math.max(t.value, clear(t, 1)));
+    }
+  } else {
+    // Each limit that could leave the value out, by how much of its fact's gray the move cuts away (factPosition): a limit by the distance it
+    // travels, a new limit by what lies past it.
+    const options = [];
+    here.terms.forEach((t, k) => {
+      if (t.late || t.share <= 0) return;
+      const pos = v => factPosition(t.fact, v), has = end => layer.where[k][end] != null;
+      const from = Math.max(t.value, clear(t, 1)), to = Math.min(t.value, clear(t, -1));
+      // A window narrowed past its other end would invert, drawn or as stored (Spread moves the stored limits apart): that limit is no option.
+      const step = s * (SURFACE_SPREAD_STEP[t.fact] ?? 0), w = layer.where[k];
+      if (from < t.to && !(has('to') && from + step > w.to)) options.push({k, end: 'from', drawn: from, cost: has('from') ? Math.abs(pos(from) - pos(t.from)) : pos(from)});
+      if (to > t.from && !(has('from') && to - step < w.from)) options.push({k, end: 'to', drawn: to, cost: has('to') ? Math.abs(pos(t.to) - pos(to)) : 1 - pos(to)});
+    });
+    if (!options.length) return {reason: here.terms.some(t => t.late) ? `What decides it here is ${lateNames(here.terms)}, the share the draw finishes after this layer: set its limits in World › Surface.` : 'No single limit can leave this pixel out without closing its window: change the rule in World › Surface.'};
+    const best = options.reduce((a, b) => b.cost < a.cost ? b : a);
+    store(best.k, best.end, best.drawn);
+  }
+  return {layer: next, moved};
+}
 // A surface read from a save, a world file or this browser's world store: only the fields a layer has, numbers checked, and the draw's
 // row limits (surfaceRows throws on anything it cannot draw). Returns a fresh list.
 const SURFACE_ID = /^[A-Za-z0-9_-]{1,40}$/;

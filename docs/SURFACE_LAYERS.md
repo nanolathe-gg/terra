@@ -388,6 +388,12 @@ here". Built on the branch, not landed.
   already holds every height they read and no margin moved. Plants know the facing facts; shelter and distance to water stay 0 for them
   (the panel says so). Measured headless on Dawn: a 1024 px window takes the same time with a rule on either of them as with one on
   Steepness (120 to 200 ms each way, within run-to-run noise); the color pass was not timed alone.
+- **Show here / Not here on Pick's card**: each layer with a rule gets a button on its line, Not here where it shows and Show here where its
+  rule keeps it out (`ruleToShow`, `ruleToHide`, from the facts the draw recorded at the pixel). Show moves each failing window just past
+  the value, and a limit that would leave its fact's range goes instead. Not here moves the one limit that cuts least of its fact's gray,
+  never one that would cross the window's other end, drawn or stored. A score moves its threshold. The stored limit is the drawn one less
+  the layer's Spread. The card says what moved, one undo step. It says why instead when no limit can help: no rule (Coverage or edge noise
+  decides), the rule already holds, or a Rock, Debris or Sand share decides it, since the draw finishes those after the layer.
 
 ## Sources (phase 1)
 

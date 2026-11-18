@@ -1039,6 +1039,8 @@ function pickHost() {
     // The world's layers as World › Surface places them (section, reasons, hidden while designing), and a door to one layer's row.
     layerStates:() => surfacePanel?.summary()??[],
     openLayer:key => { openWorldSection('wsec-surface'); surfacePanel?.open(key); },
+    // Show here / Not here: the world's layers with one rule's limits moved, one undo step.
+    setSurface:list => applySurface(list,{commit:true}),
   };
 }
 pickCard=mountPick(pickHost());
