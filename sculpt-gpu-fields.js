@@ -1124,9 +1124,12 @@ export function createPageSpill(cap) {
 // The same object as createGpuFields for the callers that read the fields (sample, cell, readAsync, changed, subscribe...), over pages that come and go
 // (an LRU by bytes); a CPU copy exists only for resident pages, and a coarse lattice of authored heights (every COARSE-th cell, filled in the background,
 // view first) answers everything else.
+// The Time pass's apron: a page's Time runs over its core and this many cells round it, and keeps the core (its window's edge is a sink).
+// At 64 cells (128 px) a page's eroded height is within 0.04 units of one whole-map run (at 128 cells it is equal), for 31% fewer cells a run.
+export const TIME_APRON = 64;
 export function createPagedFields(opts) {
   const {worldSize, worldGrid, baseHeight, maskKeys, nodes, device, context} = opts;
-  const CORE = opts.core ?? 512, APRON = opts.apron ?? 128, COARSE = 8, SHIFT = Math.log2(CORE);
+  const CORE = opts.core ?? 512, APRON = opts.apron ?? TIME_APRON, COARSE = 8, SHIFT = Math.log2(CORE);
   const spacing = (worldSize - 1) / (worldGrid - 1), np = Math.ceil(worldGrid / CORE), gesture = opts.gesture || (() => false);
   const foregroundPending = opts.foregroundPending || (() => false);
   // H6c: the ring is 4 cells (the hill's blur) plus the longest chain of overlapping smooth radii among the nodes, bucketed to RINGS; it follows the node list.
