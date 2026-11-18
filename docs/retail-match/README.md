@@ -26,10 +26,25 @@ Read, in this order:
 AGENTS.md (the repository's rules) applies in full. This brief narrows it
 for this task: where they differ, follow the stricter one.
 
+## Handing this to an agent
+
+Paste this into any coding agent started in the main checkout, with
+`<world>` and the budget filled in. If a worktree or branch with that name
+already exists, add a suffix (`match-green-2`): each worktree name gets its
+own output folder and trial log.
+
+```text
+Read docs/retail-match/README.md and follow it for world <world>.
+Make your worktree from main:
+  git worktree add ../terraform-wt-match-<world> -b match-<world> main
+Budget: 60 trials. Write your report to <out>/REPORT.md as the brief says,
+commit only on your branch, and do not land, merge or push.
+```
+
 ## Setup
 
 ```sh
-git worktree add ../terraform-wt-match-<world> -b match-<world> main   # or retail-harness, until the harness lands on main
+git worktree add ../terraform-wt-match-<world> -b match-<world> main
 cd ../terraform-wt-match-<world>
 export PYTHON=/Users/daniel/src/terraform/.venv/bin/python   # numpy, scipy, Pillow
 sh repro/match.sh <world>             # the bases, trial-000 and holdout-000; about a minute
