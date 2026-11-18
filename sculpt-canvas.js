@@ -792,7 +792,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   // H7b: during a gesture a change is answered at once, not at the next animation frame (a pointer move is already one event a frame): the bake of
   // the change's chunks starts as soon as the one in flight ends, and nothing waits for a frame between them.
-  let pendingFrame=null;
+  let pendingFrame=null,readWaiting=0;   // readWaiting: pixel reads waiting for the renderer (holdForRead)
   function setSuspended(on) {
     if(suspended===on)return;suspended=on;
     if(on){cancelBake();viewEpoch++;clearTimeout(ladderTimer);ladderTimer=null;if(pendingFrame!==null)cancelAnimationFrame(pendingFrame);pendingFrame=null;pending=false;rerun=false;}
@@ -802,7 +802,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(suspended)return;
     // Input may have queued a presentation while the last bake was pending.
     // Once it ends, start the latest interactive refresh immediately as well.
-    const immediate=levels&&interacting()&&!drawing;
+    // Not while a pixel read waits: a frame steps aside for it (readWaiting), and the read waits for an animation frame to take the
+    // renderer. Frames chained by microtasks never let one through, so a read during a World slider drag (Pick's card) hung the page.
+    const immediate=levels&&interacting()&&!drawing&&!readWaiting;
     if(pending&&(!immediate||pendingFrame===null))return;
     if(pendingFrame!==null){cancelAnimationFrame(pendingFrame);pendingFrame=null;}
     pending=true;
@@ -885,7 +887,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // starts under it; the frame it held off runs after it. A read that still meets the renderer busy (work outside the frames) tries once more
   // after that work ends; one that needs pipelines still compiling lets the frames run while it waits for them.
   const offMap=at=>{const x=Math.floor(at.x),y=Math.floor(at.y);return x<0||y<0||x>=Math.floor(map.width)||y>=Math.floor(map.height);};
-  let inspecting=Promise.resolve(),readWaiting=0;
+  let inspecting=Promise.resolve();
   // `current`: whether the asker still wants this read; one superseded while queued (another pick, an undo's refresh, the card closed) is
   // dropped before it takes the renderer, so a run of reads cannot hold the map's frames off.
   function inspect(at,current=()=>true){const run=inspecting.then(()=>current()?inspectNow(at):{superseded:true});inspecting=run.catch(()=>{});return run;}
