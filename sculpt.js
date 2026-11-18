@@ -2139,7 +2139,9 @@ $('weather').addEventListener('change',() => {
 });
 $('undo').addEventListener('click',() => moveHistory(-1)); $('redo').addEventListener('click',() => moveHistory(1));
 $('blank').addEventListener('click',() => { if (stroke) return; applySeedControl(); refinementSeed=seed; cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); nodes=[]; selected=-1;alsoSelected=[]; addGroundNode(); regionalFields.changed(); markChanged(); checkpoint(); status('Blank dry ground.'); schedule(); queueWeather(); });
-$('save').addEventListener('click',() => { if (!stroke) download(new Blob([JSON.stringify(sketch())],{type:'application/json'}),'terrain-sculpt-v3.json'); });
+// The downloaded file is named after the map (Map › Map name), as the exported .ufo is.
+const mapFileName=() => ($('map-name').value.trim().replace(/[^\w-]+/g,'_').replace(/^_+|_+$/g,'')||'map')+'.json';
+$('save').addEventListener('click',() => { if (!stroke) download(new Blob([JSON.stringify(sketch())],{type:'application/json'}),mapFileName()); });
 $('load').addEventListener('click',() => { if (!stroke) $('file').click(); });
 $('file').addEventListener('change',async () => {
   const file=$('file').files[0]; $('file').value=''; if (!file || stroke) return;
