@@ -69,3 +69,12 @@ test('share, open, share again gives the same id', async () => {
   assert.equal(shareText(JSON.parse(text)), text);
   assert.notEqual(shareText({...drawn, nodes: [{...drawn.nodes[0], hidden: true}]}), text);   // a hidden stroke is a real difference
 });
+test('a save-link request that gets no answer is given up after its time, and says so', async () => {
+  // A service that never answers: only the abort ends the request.
+  const silent = (url, init) => new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))));
+  await assert.rejects(getMap('w', 'abcdefghijklmnop', silent, {timeout: 20}), /did not answer within 0 seconds\. The shared map was not opened/);
+  await assert.rejects(postMap('w', new Uint8Array(3), silent, {timeout: 20}), /did not answer within 0 seconds\. Try again\./);
+  // An answer whose body never ends counts too.
+  const stalled = async (url, init) => ({ok: true, status: 200, json: () => new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))))});
+  await assert.rejects(getMap('w', 'abcdefghijklmnop', stalled, {timeout: 20}), /did not answer/);
+});

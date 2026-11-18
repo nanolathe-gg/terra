@@ -59,10 +59,20 @@ export function mapsService(services) {
 async function detail(response) {
   try { return (await response.json()).error || ''; } catch (_) { return ''; }
 }
-export async function postMap(base, gz, fetcher = fetch) {
+// The save-link service answers within this long, or the request is given up (the editor waits for a link it opens): a request and its
+// answer's body both count.
+export const SHARE_TIMEOUT_MS = 20000;
+async function timed(timeout, run) {
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeout);
+  try { return await run(controller.signal); }
+  catch (error) { if (controller.signal.aborted) throw Object.assign(new Error('timeout'), {timedOut: true}); throw error; }
+  finally { clearTimeout(timer); }
+}
+const late = seconds => `The save-link service did not answer within ${seconds} seconds.`;
+export async function postMap(base, gz, fetcher = fetch, {timeout = SHARE_TIMEOUT_MS} = {}) {
   let response;
-  try { response = await fetcher(base, {method: 'POST', body: gz, headers: {'Content-Type': 'application/octet-stream'}}); }
-  catch (_) { throw new Error('The save-link service could not be reached. Check your connection and try again.'); }
+  try { response = await timed(timeout, signal => fetcher(base, {method: 'POST', body: gz, headers: {'Content-Type': 'application/octet-stream'}, signal})); }
+  catch (error) { throw new Error(error.timedOut ? `${late(Math.round(timeout / 1000))} Try again.` : 'The save-link service could not be reached. Check your connection and try again.'); }
   if (!response.ok) {
     const why = await detail(response);
     throw new Error(response.status === 413 ? 'This map is too large to share as a link. Use Save to keep it as a file.' : `The save-link service refused this map${why ? ': ' + why.replace(/\.+$/, '') : ` (error ${response.status})`}.`);
@@ -71,14 +81,17 @@ export async function postMap(base, gz, fetcher = fetch) {
   if (!ID_RE.test(id || '')) throw new Error('The save-link service sent an answer this editor does not understand.');
   return id;
 }
-export async function getMap(base, id, fetcher = fetch) {
+export async function getMap(base, id, fetcher = fetch, {timeout = SHARE_TIMEOUT_MS} = {}) {
   if (!ID_RE.test(id)) throw new Error('This link is not a valid map link. Your current map was left as it was.');
+  const gone = `${late(Math.round(timeout / 1000))} The shared map was not opened; your current map was left as it was.`;
   let response;
-  try { response = await fetcher(`${base}/${id}`); }
-  catch (_) { throw new Error('The save-link service could not be reached, so the shared map was not opened. Your current map was left as it was.'); }
-  if (response.status === 404) throw new Error('No saved map has this link. Check that the whole link was copied. Your current map was left as it was.');
-  if (!response.ok) throw new Error(`The save-link service could not open this map (error ${response.status}). Your current map was left as it was.`);
-  try { return await response.json(); }
-  catch (_) { throw new Error('The shared map is damaged and could not be read. Your current map was left as it was.'); }
+  return timed(timeout, async signal => {
+    try { response = await fetcher(`${base}/${id}`, {signal}); }
+    catch (error) { if (signal.aborted) throw error; throw new Error('The save-link service could not be reached, so the shared map was not opened. Your current map was left as it was.'); }
+    if (response.status === 404) throw new Error('No saved map has this link. Check that the whole link was copied. Your current map was left as it was.');
+    if (!response.ok) throw new Error(`The save-link service could not open this map (error ${response.status}). Your current map was left as it was.`);
+    try { return await response.json(); }
+    catch (error) { if (signal.aborted) throw error; throw new Error('The shared map is damaged and could not be read. Your current map was left as it was.'); }
+  }).catch(error => { throw error.timedOut ? new Error(gone) : error; });
 }
 
