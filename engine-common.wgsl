@@ -237,13 +237,10 @@ struct Uniforms {
     // Bake (engine-bake.wgsl).
     reliefScale: f32,     // wavelength of the first octave, world px
     reliefAmount: f32,    // height per unit slope per wavelength
-    reliefBranch: f32,    // how strongly octaves follow earlier gullies
     reliefLumps: f32,     // share of isotropic lumps mixed in
-    reliefOctaves: i32,
     reliefGain: f32,      // amplitude ratio between octaves
     reliefWarp: f32,      // domain warp, world px
     reliefPatchy: f32,    // spatial variation of relief strength
-    reliefJitter: f32,    // per-kernel phase and wavelength variation
     faceStreak: f32,      // 0: ribs down steep faces; 1: ledges along the contours
     faceStreakFrom: f32,  // slope where the turn toward the contours starts
     gentleRelief: f32,    // relief on gentle slopes
