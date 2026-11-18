@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {planPreviewBlocks,previewGrid,previewWindow} from '../sculpt-preview.js';
+import {planPreviewBlocks,previewGrid,previewWindow,previewQuality,previewPixels,createPreviewLoad} from '../sculpt-preview.js';
 import {createCoverage} from './perf-coverage.mjs';
 const map={width:8192,height:8192},view={x:2048,y:2048,width:1728,height:1024};
 test('a whole-view preview is one block when it fits',()=>{
@@ -56,4 +56,49 @@ test('the 8 px first Time view keeps map edges and its full world-space apron',(
    assert(origin+w.side===grid||(origin+w.side-start-count)*sp>=apron);
   }
  }
+});
+
+
+test('automatic preview resolution uses edit size at the current zoom; manual choices override it',()=>{
+ const small={width:512,height:704},large={width:1280,height:1152};
+ assert.equal(previewPixels('auto',small),2);assert.equal(previewPixels('auto',large),4);
+ assert.equal(previewPixels('auto',{width:256,height:352},.5),2);
+ for(const choice of ['2','3','4','8'])for(const area of [small,large])assert.equal(previewPixels(choice,area),Number(choice));
+ for(const invalid of [undefined,null,'bad','0','1','9'])assert.equal(previewQuality(invalid),'auto');
+});
+
+
+test('Auto load backoff rejects isolated slow frames and requires stable recovery',()=>{
+ const load=createPreviewLoad();
+ load.observe(60,0);load.observe(15,20);load.observe(60,40);assert.equal(load.scale,1);
+ load.observe(60,100);assert.equal(load.observe(60,160),true);assert.equal(load.scale,2);
+ for(let i=0;i<8;i++)load.observe(8,180+i*20);assert.equal(load.scale,2,'minimum dwell prevents oscillation');
+ assert.equal(load.observe(8,700),true);assert.equal(load.scale,1);
+ for(const ms of [NaN,Infinity,0,-1])assert.equal(load.observe(ms,800),false);
+ assert.equal(load.stats().changes,2);
+});
+
+
+test('batched GPU completion callbacks measure cadence across every picture',()=>{
+ const load=createPreviewLoad();let at=0;
+ for(let i=0;i<30;i++){at+=i%2?30:0;load.complete(at);}
+ assert.equal(load.scale,1);assert.equal(load.stats().lastMs,15);
+ for(let i=0;i<16;i++){at+=i%2?100:0;load.complete(at);}
+ assert.equal(load.scale,2);
+ for(let i=0;i<80;i++){at+=i%2?20:0;load.complete(at);}
+ assert.equal(load.scale,1);assert.equal(load.stats().lastMs,10);
+ const n=load.stats().samples;load.complete(at+500,-Infinity,true);assert.equal(load.stats().samples,n,'a rebuilt Time source restarts the cadence window');
+});
+
+test('a slow pointer is not load, and each gesture starts sharp',()=>{
+ // Input arrives 25 ms after each completion and each picture takes 20 ms: completion gaps are 45 ms, the GPU's share 20 ms.
+ const load=createPreviewLoad();let at=0;
+ for(let i=0;i<40;i++){const start=at+25;at=start+20;load.complete(at,start);}
+ assert.equal(load.scale,1);assert.equal(load.stats().lastMs,20);
+ // Pictures queued behind each other at 60 ms each back off, as before.
+ for(let i=0;i<20;i++){at+=60;load.complete(at,at-120);}
+ assert.equal(load.scale,2);
+ load.reset();assert.equal(load.scale,1,'the next gesture starts at full detail');
+ for(let i=0;i<4;i++){at+=60;load.complete(at,at-120);}
+ assert.equal(load.scale,1,'one slow window is not enough after a reset');
 });

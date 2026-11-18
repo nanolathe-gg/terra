@@ -27,6 +27,8 @@ export const ROCK_PRESETS={
 // Rock surfaces a recipe may carry too (struct Rock): cracks, contour bands, moon pits and strokes, ice crystal strokes, crests, snow caps, fibres
 // and aprons, the crystal web and rock on level tops (Rock crown). A recipe that does not set one takes the world's.
 export const ROCK_SURFACE_KEYS=['crackSeverity','crackMajor','crackMinor','crackHairline','crackBlocks','crackSpacing','crackWidth','crackDark','crackNetwork','banding','pockmark','pockSize','moonCups','moonCupSize','moonCupDepth','cupStretch','moonRibs','moonRibDepth','moonRibDark','moonFolds','moonFoldSpacing','iceCrystal','iceCrest','iceSnow','iceFall','iceApron','gougeWeb','rockCrown'];
+// One ordered headline list for the rock page and Pick.
+export const ROCK_HEADLINES=['faceWhole','faceBlockSize','faceBed','faceWear','crackSeverity','faceScratch','runoff'];
 export const ROCK_KEYS=[...Object.keys(base),'strata','strataContrast','strataGrain','absorbDepth','shadowTint',...ROCK_SURFACE_KEYS];
 // The starting recipes' bed tones ({beds}, checkColors: shifts of the recipe's rock material's color): a preset made from one takes them. A world that names a recipe as its rock
 // keeps its own colors (applyWorldRock takes the numbers and beds only), so its slot 0 looks as it did. Each color is an entry of the game's
@@ -146,10 +148,10 @@ export function worldRocks(config){
 // recipe: config.rock.recipe), else -1, Rock beneath (a world's tool that names a rock the map does not hold draws on the rock beneath).
 export function rockByKey(rocks,key,worldKey=''){
  if(!key)return -1;
- const rock=rocks.find(r=>r.key===key);
+ const rock=rocks.find(r=>r.worldKey===key)??rocks.find(r=>r.key===key);
  return rock?rock.slot:key===worldKey?0:-1;
 }
-const NAME_MAX=40,ROCK_FIELDS=['slot','name','key','knobs','column','colors','material'],KEY=/^[a-z][a-z0-9_-]{0,39}$/;
+const NAME_MAX=40,ROCK_FIELDS=['slot','name','key','knobs','column','colors','material','worldKey'],KEY=/^[a-z][a-z0-9_-]{0,39}$/;
 // A preset's key: null, or a short lowercase name ('soil', 'basalt').
 function checkKey(key){if(key==null)return null;if(typeof key!=='string'||!KEY.test(key))throw Error('A rock preset\'s key is a short lowercase name, such as soil or basalt.');return key;}
 // A key for a preset made now: `key`, unless another preset of the map carries it (keys name one preset each).
@@ -176,17 +178,17 @@ export function checkColors(colors){
 export function copyRocks(value){
  if(value==null)return null;
  if(!Array.isArray(value)||value.length>=ROCK_SLOTS)throw Error('Invalid rock presets.');
- const seen=new Set(),keys=new Set();
+ const seen=new Set(),keys=new Set(),worldKeys=new Set();
  return value.map(r=>{
   if(!r||typeof r!=='object'||Array.isArray(r)||Object.keys(r).some(k=>!ROCK_FIELDS.includes(k)))throw Error('Invalid rock preset.');
   if(!Number.isInteger(r.slot)||r.slot<1||r.slot>=ROCK_SLOTS||seen.has(r.slot))throw Error('A rock preset needs its own slot, 1 to 15.');
   seen.add(r.slot);
-  const key=checkKey(r.key);
+  const key=checkKey(r.key);if(r.worldKey!==undefined){if(!checkKey(r.worldKey)||worldKeys.has(r.worldKey))throw Error('A world rock needs its own catalog key.');worldKeys.add(r.worldKey);}
   if(key&&keys.has(key))throw Error(`Two rock presets carry the key ${key}: a key names one preset.`);
   if(key)keys.add(key);
   // Its surface material: a map material's slot (1 to MATERIAL_SLOTS - 1), or none for the world's rock material.
   if(r.material!=null&&(!Number.isInteger(r.material)||r.material<0||r.material>=MATERIAL_SLOTS))throw Error(`A rock preset's material is a material slot, 1 to ${MATERIAL_SLOTS-1}.`);
-  return {slot:r.slot,name:checkName(r.name),key,knobs:copyRockSettings(r.knobs??{}),column:checkColumn(r.column),colors:checkColors(r.colors),...(r.material>0?{material:r.material}:{})};
+  return {slot:r.slot,name:checkName(r.name),key,...(r.worldKey?{worldKey:r.worldKey}:{}),knobs:copyRockSettings(r.knobs??{}),column:checkColumn(r.column),colors:checkColors(r.colors),...(r.material>0?{material:r.material}:{})};
  }).sort((a,b)=>a.slot-b.slot);
 }
 const freeSlot=rocks=>{for(let s=1;s<ROCK_SLOTS;s++)if(!rocks.some(r=>r.slot===s))return s;throw Error('A map holds at most 15 rock presets besides the world\'s own.');};
@@ -229,6 +231,16 @@ export function deleteRock(rocks,nodes,slot){
 export function strokeRock(n,rocks){
  const k=Math.round(n?.params?.rockPreset??-1);
  return k===0||rocks.some(r=>r.slot===k)?k:-1;
+}
+// The rock types a stroke on Rock beneath (at `index`; nodes.length for one not yet drawn) can show: a stroke claims its slot on the cells
+// it shapes and Rock beneath claims nothing, so each cell keeps the claim of the last shown landform before it that reached the cell, and an
+// unclaimed cell is the world's rock (engine-common.wgsl rockSlotAt). `reaches(n)` says whether an earlier stroke may reach this one's
+// cells; a box test that errs toward yes keeps the answer honest. One slot is what the stroke shows everywhere; more than one, it varies.
+// (Reset ground returns a cell to the world's rock, which is always in the list.)
+export function rocksBeneath(nodes,index,rocks,reaches){
+ const slots=new Set([0]);
+ for(let i=0;i<Math.min(index,nodes.length);i++){const n=nodes[i];if(n?.kind!=='landform'||n.hidden)continue;const k=strokeRock(n,rocks);if(k>0&&reaches(n))slots.add(k);}
+ return [...slots];
 }
 // Strokes whose choice the list does not hold go to Rock beneath (a stroke carried from another map, a preset deleted elsewhere).
 export const keepStrokeRocks=(nodes,rocks)=>nodes.map(n=>n.params&&n.params.rockPreset!==undefined&&strokeRock(n,rocks)!==Math.round(n.params.rockPreset)?{...n,params:{...n.params,rockPreset:-1}}:n);

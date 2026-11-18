@@ -1,10 +1,11 @@
 // Rock presets through the editor (B2): the World pane's list and a shape's Rock option, in Chrome on your own server.
 //   node repro/rock-presets-ui.mjs --server http://127.0.0.1:<yours> --port <cdp> [--out DIR]
 // On modern Green with three shapes: the list holds the world's rock and the presets the world ships, the first not deletable (and saying why);
-// Add a preset from Thin shale, pick it on the wall, edit one of its numbers, undo, redo, save and load it back (the same pixels each way);
-// Recolor it (its rock color, then World's colors), undo and redo; Copy and Paste a recipe between two presets; delete the preset (its shape goes
-// to Rock beneath) and undo that. Writes panel.png, colors.png and option.png (screenshots of the list, the colors and the shape's Rock option)
-// and report.json into DIR.
+// Add a preset from Thin shale, pick it on the wall (World's picker follows the selected wall and its Rock choice), edit one of its numbers,
+// undo, redo, save and load it back (the same pixels each way); Recolor it (its own material's Color, then its beds' World's colors), undo and
+// redo; Copy and Paste a recipe between two presets; delete the preset (its shape goes to Rock beneath) and undo that; draw a shape and undo it
+// with another rock type picked in World (the picker stays). Writes panel.png, colors.png and option.png (screenshots of the list, the colors and
+// the shape's Rock option) and report.json into DIR.
 import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -29,6 +30,7 @@ try {
   const ready = async () => { for (let i = 0; i < 480; i++) { if (await ev('!!window.sculptCanvas&&!document.getElementById("map-export").disabled')) { await ev('sculptCanvas.idle()'); return; } await sleep(150); } throw Error('Editor did not become ready: ' + errors.join('\n')); };
   const set = async (elementId, value) => { await ev(`(()=>{const e=document.getElementById(${JSON.stringify(elementId)});e.value=${JSON.stringify(String(value))};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`); await ready(); };
   const click = async elementId => { await ev(`document.getElementById(${JSON.stringify(elementId)}).click()`); await sleep(50); await ready(); };
+  const headlineKeys=['faceWhole','faceBlockSize','faceBed','faceWear','crackSeverity','faceScratch','runoff'];
   const rocks = () => ev('sculptDebug.sketch().rocks');
   const nodes = () => ev('sculptDebug.nodes()');
   const capture = () => ev(`(async()=>{const b=await sculptCanvas.debugBake({x:300,y:240,width:512,height:512}),c=document.createElement('canvas');c.width=c.height=512;c.getContext('2d').drawImage(b,0,0);return c.toDataURL();})()`);
@@ -48,14 +50,15 @@ try {
   await send('Page.navigate', {url: `${server}/?biome=green&mapX=4&mapY=4&gpuMB=512&heapMB=1536&sunHeight=25&flatShadow=1`}); await ready();
   // A wall, a dome and a hill, all on the rock beneath.
   await ev(`sculptDebug.scene([['plateau',[[260,330],[560,300]],{card:{diameter:420}}],['mountain',[[700,620]],{card:{diameter:260,elevation:120}}],['hill',[[420,700],[560,720]]]],{ground:true}); true`); await ready();
-  await click('tab-world');
+  await click('tab-world');await click('wsec-rock-types');assert.deepEqual(await ev(`[...document.querySelectorAll('#rock-headlines [data-knob]')].map(e=>e.dataset.knob)`),headlineKeys);
   // The list: the world's rock first (named after its recipe), then what the world ships.
   report.list = await ev(`[...document.getElementById('rock-presets').options].map(o=>o.textContent)`);
-  assert.deepEqual(report.list, ["Rounded granite (the world's rock)", 'Smooth soil', 'Jointed basalt', 'Pitted limestone']);
+  assert.deepEqual(report.list, ["World rock (the world's rock)", 'Smooth soil', 'Broken slopes', 'Greenstone', 'Dark escarpment']);
   assert.equal(await ev(`document.getElementById('rock-delete').disabled`), true);
   assert.match(await ev(`document.getElementById('rock-presets-note').textContent`), /cannot be deleted/);
-  assert.equal(await ev(`document.getElementById('rock-color').disabled`), true);
-  assert.match(await ev(`document.getElementById('rock-colors-note').textContent`), /world’s rock wears the world’s colors/);
+  // The world's rock's Color is the world's rock material's (it recolors every rock type without a material of its own); its beds are the column's.
+  assert.equal(await ev(`document.getElementById('rock-color').disabled`), false);
+  assert.match(await ev(`document.getElementById('rock-colors-note').textContent`), /Rock column’s material slot colors/);
   await shot('#rock-presets-control', 'panel.png');
   // Add a preset from Thin shale: it is selected, and the rock rows show its numbers.
   await set('rock-add', 'shale');
@@ -63,12 +66,16 @@ try {
   assert.ok(shale, 'Add makes a preset from the starting recipe');
   assert.equal(await ev(`document.getElementById('rock-presets').value`), String(shale.slot));
   assert.equal(Number(await ev(`document.getElementById('knob-faceStretch').value`)), 3.2, 'the rows show the selected preset’s numbers');
-  // Pick it on the wall (the shape's Rock option offers it by name).
+  // Pick it on the wall (the shape's Rock option offers it by name, before the Add a rock type group). Selecting the wall moves World's picker
+  // to the rock it shows (Rock beneath with nothing earlier under it: the world's rock), and choosing Thin shale on the card moves it to that.
   await ev(`document.querySelector('#layers li[data-index="0"] .layer-name').click()`); await ready(); await click('tab-tool');
-  report.option = await ev(`[...document.getElementById('lf-rock').options].map(o=>o.textContent)`);
-  assert.deepEqual(report.option, ['Rock beneath', 'Rounded granite', 'Smooth soil', 'Jointed basalt', 'Pitted limestone', 'Thin shale']);
+  assert.equal(await ev(`document.getElementById('rock-presets').value`), '0', 'World follows the selected shape');
+  assert.equal(await ev(`document.getElementById('lf-rock-name').textContent`), 'World rock', 'the card names the rock beneath');
+  report.option = await ev(`[...document.getElementById('lf-rock').options].filter(o=>o.parentElement.tagName!=='OPTGROUP').map(o=>o.textContent)`);
+  assert.deepEqual(report.option, ['Rock beneath', 'World rock', 'Smooth soil', 'Broken slopes', 'Greenstone', 'Dark escarpment', 'Thin shale']);
   await set('lf-rock', shale.slot);
   assert.equal((await nodes())[0].params.rockPreset, shale.slot);
+  assert.equal(await ev(`document.getElementById('rock-presets').value`), String(shale.slot), 'World follows the card’s Rock choice');
   await shot('#lf-rock-control', 'option.png', true);
   const picked = await capture();
   // Edit the preset: the wall changes, and the world's own number does not.
@@ -80,25 +87,38 @@ try {
   assert.notEqual(edited, picked, 'editing the preset re-renders the shape that uses it');
   await click('undo'); assert.equal((await rocks()).find(r => r.slot === shale.slot).knobs.faceJoint, .9); assert.equal(await capture(), picked, 'undo');
   await click('redo'); assert.equal((await rocks()).find(r => r.slot === shale.slot).knobs.faceJoint, 2.5); assert.equal(await capture(), edited, 'redo');
-  // Its colors: the recipe's own (Thin shale's gray rock), shown with the palette entry the game draws; recolored, undone, redone.
-  const shaleColors = (await rocks()).find(r => r.slot === shale.slot).colors;
-  assert.equal(shaleColors.rock, '#5b5b5b', 'a preset from a recipe wears the recipe’s colors');
-  assert.equal(await ev(`document.getElementById('rock-color-world').checked`), false);
+  // Its color: the Color of its surface material (setRockColor). Thin shale came with a material of its own (giveRockMaterials), so the
+  // color moves that material only, not the world's rock material; recolored, undone, redone, with the palette entry the game draws.
+  const sketchNow = () => ev('sculptDebug.sketch()');
+  const shaleMaterial = async () => { const s = await sketchNow(), slot = s.rocks.find(r => r.slot === shale.slot).material; return {slot, json: JSON.stringify(s.materials.find(m => m.slot === slot))}; };
+  const worldRockMaterial = async () => JSON.stringify((await sketchNow()).materials.find(m => m.worldRock));
+  const ownMaterial = await shaleMaterial(), worldMaterial = await worldRockMaterial();
+  assert.ok(ownMaterial.slot > 0 && ownMaterial.json, 'a preset from a recipe has a material of its own');
+  assert.equal(await ev(`document.getElementById('rock-color').disabled`), false);
   await set('rock-color', '#2f4b5f');
-  assert.deepEqual((await rocks()).find(r => r.slot === shale.slot).colors, {...shaleColors, rock: '#2f4b5f'});
+  const recoloredMaterial = await shaleMaterial();
+  assert.equal(recoloredMaterial.slot, ownMaterial.slot, 'its own material, not a copy');
+  assert.notEqual(recoloredMaterial.json, ownMaterial.json, 'the color moves its material');
+  assert.equal(await worldRockMaterial(), worldMaterial, 'the world’s rock material does not move');
   report.snap = await ev(`document.getElementById('rock-color-snap').title`);
   assert.equal(report.snap, 'Palette entry #2f4b5f', 'a palette entry snaps to itself');
   const recolored = await capture();
   assert.notEqual(recolored, edited, 'a preset recolored re-renders the shape that uses it');
   await shot('#rock-colors-control', 'colors.png');
-  await click('undo'); assert.equal((await rocks()).find(r => r.slot === shale.slot).colors.rock, '#5b5b5b'); assert.equal(await capture(), edited, 'undo a color');
-  await click('redo'); assert.equal((await rocks()).find(r => r.slot === shale.slot).colors.rock, '#2f4b5f'); assert.equal(await capture(), recolored, 'redo a color');
-  // World's colors: the rock takes the world's (null); undone, it is the preset's own again.
-  await click('rock-color-world');
-  assert.equal((await rocks()).find(r => r.slot === shale.slot).colors.rock, null);
-  assert.equal(await ev(`document.getElementById('rock-color').disabled`), true);
-  assert.match(await ev(`document.getElementById('rock-colors-note').textContent`), /clear World’s colors/);
-  await click('undo'); assert.equal((await rocks()).find(r => r.slot === shale.slot).colors.rock, '#2f4b5f'); assert.equal(await capture(), recolored, 'undo World’s colors');
+  await click('undo'); assert.equal((await shaleMaterial()).json, ownMaterial.json); assert.equal(await capture(), edited, 'undo a color');
+  await click('redo'); assert.equal((await shaleMaterial()).json, recoloredMaterial.json); assert.equal(await capture(), recolored, 'redo a color');
+  // Its beds: Thin shale's recipe gives it bed tones of its own (World's colors off). A bed recolored is its own, one undo step; World's
+  // colors on gives up its tones for the world column's, and undone it has them again, drawn as before.
+  const beds = async () => (await rocks()).find(r => r.slot === shale.slot).colors?.beds ?? null;
+  const ownBeds = await beds();
+  assert.equal(await ev(`document.getElementById('rock-beds-world').checked`), false);
+  assert.ok(Array.isArray(ownBeds) && ownBeds.length === 5, 'a preset from a recipe has the recipe’s five bed tones');
+  await set('rock-bed-1', '#7a3b2a');
+  assert.notDeepEqual(await beds(), ownBeds, 'a bed recolored');
+  await click('undo'); assert.deepEqual(await beds(), ownBeds); assert.equal(await capture(), recolored, 'undo a bed color');
+  await click('rock-beds-world'); assert.equal(await beds(), null, 'World’s colors: the world column’s tones');
+  assert.equal(await ev(`document.getElementById('rock-bed-1').disabled`), true);
+  await click('undo'); assert.deepEqual(await beds(), ownBeds); assert.equal(await capture(), recolored, 'undo World’s colors');
   edited = recolored;
   // Translucent (B4): Color deepens with thickness on the selected preset (a rock row), then its Absorption color, undone, redone.
   await set('knob-absorbDepth', .7);
@@ -138,8 +158,24 @@ try {
   await click('tab-world'); await set('rock-presets', shale.slot); await click('rock-delete');
   await click('tab-tool'); await tool('plateau');
   assert.equal(await ev(`document.getElementById('lf-rock').value`), '-1', 'a deleted preset shows as Rock beneath on the tool that chose it');
+  // World's picker follows what the artist picks, not a stroke drawn: with Smooth soil picked in World, a plateau drawn on the map (it is selected
+  // as it lands) and its undo leave the picker on Smooth soil; picking the wall again in the Shapes list moves it to the wall's rock.
+  await set('rock-presets', 1); await click('tab-tool'); await tool('plateau'); await click('fit');
+  const before = (await nodes()).length, view = await ev(`(()=>{const b=document.getElementById('viewport').getBoundingClientRect();return {x:b.x+b.width*.7,y:b.y+b.height*.7};})()`);
+  const press = (type, x, y) => send('Input.dispatchMouseEvent', {type, x, y, button: 'left', clickCount: 1});
+  await press('mouseMoved', view.x, view.y); await press('mousePressed', view.x, view.y);
+  for (let k = 1; k <= 6; k++) await press('mouseMoved', view.x + 8 * k, view.y + k);
+  await press('mouseReleased', view.x + 48, view.y + 6); await ready();
+  assert.equal((await nodes()).length, before + 1, 'a plateau was drawn');
+  assert.equal(await ev(`document.getElementById('rock-presets').value`), '1', 'a stroke drawn leaves World’s picker');
+  await click('undo'); assert.equal((await nodes()).length, before);
+  assert.equal(await ev(`document.getElementById('rock-presets').value`), '1', 'an undo leaves World’s picker');
+  if (await ev(`document.getElementById('pane-objects').hidden`)) await click('tab-objects');
+  await ev(`document.querySelector('#layers li[data-index="0"] .layer-name').click()`); await ready();
+  // The wall is the first shape: on Rock beneath (Thin shale was deleted again above) nothing lies under it, so it shows the world's rock.
+  assert.equal(await ev(`document.getElementById('rock-presets').value`), String(Math.max(0, (await nodes())[0].params.rockPreset)), 'selecting the wall follows its rock');
   assert.deepEqual(errors, []);
-  report.result = 'list, add, pick, edit, recolor, translucency and absorption color, undo, redo, save and load, copy and paste, delete and undo, a tool whose preset is gone: all as expected';
+  report.result = 'list, add, pick (World follows), edit, recolor, beds and translucency and absorption color, undo, redo, save and load, copy and paste, delete and undo, a tool whose preset is gone, World’s picker kept while drawing: all as expected';
 } finally {
   writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 2));
   try { ws?.close(); } catch {}

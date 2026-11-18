@@ -82,7 +82,7 @@ test('whole blocks and block regularity are saved rock settings with effective p
   assert.equal(reason(key,{rockFace:2}),'');
   assert.deepEqual(copyRockSettings({[key]:1.5}),{[key]:1});
  }
- assert.equal(reason('faceRegular',{rockFace:0,faceTone:.2}),'');   // it moves the blocks' colors too, as Joint spacing does
+ assert.equal(reason('faceRegular',{rockFace:0,faceTone:.2}),'');   // it moves the blocks' colors too, as Block size does
  for(const preset of Object.values(ROCK_PRESETS))for(const key of ['faceWhole','faceWholeLarge','faceRegular'])assert.ok(preset.knobs[key]>=0&&preset.knobs[key]<=1);
 });
 

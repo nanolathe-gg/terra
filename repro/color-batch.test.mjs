@@ -30,3 +30,19 @@ test('native color scissors round out to pixels and leave resampling aprons inta
   assert.deepEqual(colorScissor({...tile,outWidth:128,outHeight:128},{x:64,y:300,width:20,height:31}),[0,0,256,256]);
 });
 
+
+test('retained color lattice drops bake aprons but keeps direct reads and edge guards',()=>{
+  const r=fixture();r.layout={size:256};
+  r.colorRegion={gridSpacing:2,gridOrigin:[100,200],gridWidth:1001,gridHeight:1001,fieldsX:500,fieldsY:600,fieldsWidth:513,fieldsHeight:513,reach:{draw:204,direct:61}};
+  const a=r.colorLattice();
+  assert.deepEqual([a.x,a.y,a.width,a.height],[196,196,265,265]);
+  assert.deepEqual(a.origin,[246,296]);
+  assert.equal(a.bytes,265*265*28+272);
+  // A long mineral-margin lookup must keep its part outside the field window.
+  r.colorRegion.reach.direct=700;const b=r.colorLattice();
+  assert.equal(b.x,0);assert.equal(b.y,0);
+  assert(b.width>a.width&&b.height>a.height);
+  // Map boundaries clamp the copy without inventing or dropping samples.
+  r.colorRegion={...r.colorRegion,fieldsX:0,fieldsY:0,fieldsWidth:2049,fieldsHeight:2049,gridOrigin:[0,0],gridWidth:1025,gridHeight:1025};
+  const edge=r.colorLattice();assert.deepEqual([edge.x,edge.y,edge.width,edge.height],[0,0,1025,1025]);
+});

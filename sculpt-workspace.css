@@ -18,7 +18,6 @@
 #pane-world:not([hidden]){flex:1;min-width:0;min-height:0;display:flex}
 #world-editor{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;border:0;margin:0;padding:0}
 #world-control-search{position:static;display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line)}
-#world-control-search>label:first-child{display:none}#world-search{flex:1;min-width:0;padding:5px 7px;font-size:11px}
 #world-control-search .fine-controls{font-size:11px;margin:0;white-space:nowrap}#world-control-count{margin:0;font-size:10px;white-space:nowrap}
 .world-studio{flex:1;min-height:0;display:grid;grid-template-columns:118px minmax(0,1fr)}
 .world-nav{display:flex;flex-direction:column;gap:1px;padding:6px 4px;border-right:1px solid var(--line);overflow-y:auto;scrollbar-width:thin}
@@ -35,11 +34,6 @@
 .world-tab:not(:has([data-knob]:not([hidden]),.world-fixed))::after{content:"Only fine settings here. Turn on All to see them.";font-size:11px;color:var(--muted)}
 .world-tab #column-panel{margin:0 0 8px;padding:0;border:0}.world-tab details.panel[hidden]{display:none}
 /* A search lists every tab that holds a match under its name; the section list, the tabs and the fixed blocks step aside. */
-.world-studio.searching{grid-template-columns:minmax(0,1fr)}
-.searching .world-nav,.searching .world-tabs,.searching .world-fixed,.searching .world-tab.no-match{display:none}
-.searching .world-sections{display:block;overflow-y:auto;scrollbar-width:thin}.searching .world-section:not([hidden]){display:block}
-.searching .world-tab:not([hidden]){overflow:visible;padding-bottom:2px}.searching .world-tab::after{content:none}
-.searching .world-where{display:block;font-size:11px;font-weight:600;color:#c3d7ce;margin:4px 0}
 /* Rock types: the picker stays above the tabs, so the rock type being edited is always in view. */
 .rock-picker{margin:0;padding:8px 10px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px;position:relative}
 .rock-current{display:flex;align-items:center;gap:8px}.rock-current-text{flex:1;min-width:0}.rock-current-text b{font-size:12px}.rock-current-text p{margin:1px 0 0}
@@ -76,13 +70,35 @@
    The navigator and the zoom buttons sit on the map. The Map menu, Settings, Export and the Shapes list are surfaces in fixed places. */
 .app{--tools-width:56px;--inspector-width:320px;grid-template-columns:var(--tools-width) minmax(240px,1fr) var(--inspector-width);grid-template-rows:44px minmax(0,1fr) 24px}
 .app.palette-open{--tools-width:176px}.app.tools-collapsed{--tools-width:0px}.app.inspector-collapsed{--inspector-width:0px}
+/* Left to right: the brand, the Map menu, Undo and Redo; Build | World (with the world's name) and Materials; Find, View and Export. */
 .topbar{gap:10px;padding:0 10px}.top-actions,.view-tools{gap:4px}
-.mode-switch{display:flex;margin-left:auto;border:1px solid var(--line);border-radius:7px;overflow:hidden;flex:none}
-.mode-switch button{border:0;border-radius:0;background:transparent;padding:6px 16px;font-size:12px;font-weight:600;color:var(--muted)}
+.mode-switch{display:flex;margin-left:auto;border:1px solid var(--line);border-radius:7px;overflow:hidden;flex:none;min-width:0}
+.mode-switch button{border:0;border-radius:0;background:transparent;padding:6px 16px;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap;display:flex;align-items:baseline;min-width:0}
 .mode-switch button[aria-selected=true]{background:#344c42;color:#d9ffe5}
-.world-title{font-size:11px;font-weight:500;color:#b3c0c2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px;padding:4px 10px;border:1px solid var(--line);border-radius:12px;flex:0 1 auto}
+.world-sep{margin:0 5px;opacity:.6}
+.world-title{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
 .topbar .primary{background:#3f6b4c;border-color:#78ae8d;color:#f1ffe9;font-weight:600;padding-left:14px;padding-right:14px}.topbar .primary:hover:not(:disabled){background:#4a7d59}
-.topbar #toggle-tools,.topbar #toggle-inspector{padding:5px 6px}.topbar button[aria-expanded=false]#toggle-tools,.topbar button[aria-expanded=false]#toggle-inspector{color:var(--accent);border-color:#597a69}
+#open-graphics{white-space:nowrap}
+/* Find (sculpt-find.js): it takes the bar's free room up to a point, so it gives way before anything else shrinks; a box too narrow for its
+   word rests as the magnifier alone. In use it widens leftward over its neighbors, its results under it. */
+.find{position:relative;flex:1 1 0;min-width:28px;max-width:280px;height:28px;margin-left:auto;container-type:inline-size}
+.find-icon{position:absolute;left:7px;top:7px;width:14px;height:14px;color:var(--muted);pointer-events:none;z-index:31}
+#find-input{width:100%;height:28px;padding:4px 4px 4px 26px;font-size:11px;color:inherit;background:#141c20;border:1px solid var(--line);border-radius:5px}
+#find-input::placeholder{color:var(--muted)}#find-input:not(:focus)::-webkit-search-cancel-button{display:none}
+@container (max-width:64px){#find-input:not(:focus){padding:4px 0 4px 26px}#find-input:not(:focus)::placeholder{color:transparent}}
+#find-input:focus{position:absolute;right:0;top:0;width:max(100%,min(420px,calc(100vw - 24px)));z-index:30;border-color:#597a69}
+.find-results{position:absolute;top:34px;right:0;width:min(440px,calc(100vw - 24px));max-height:min(70vh,560px);overflow:auto;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 12px 40px #0008;z-index:30}
+.find-group+.find-group{margin-top:4px;padding-top:4px;border-top:1px solid var(--line)}
+.find-group-name{padding:4px 8px 2px;font-size:10px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+.find-option{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;align-items:center;padding:4px 8px;border-radius:5px;cursor:pointer}.find-option>.scope-tag{grid-column:2;grid-row:1}.find-path,.find-why{grid-column:1/-1}.find-option[aria-selected=true]{background:#344c42;color:#d9ffe5}
+.find-name,.find-path{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.find-path{font-size:10.5px;color:var(--muted)}.find-option[aria-selected=true] .find-path{color:#b9dcc6}
+.find-option.unavailable .find-name{color:var(--muted)}.find-why{display:block;font-size:10.5px;color:#b6adb5}
+.find-swatch{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:-1px;border-radius:3px;border:1px solid #0008}
+.find-hint{padding:6px 8px;color:var(--muted);font-size:11px}
+.find-flash{animation:find-flash 1.6s ease-out}
+@keyframes find-flash{0%,35%{box-shadow:inset 0 0 0 2px var(--accent);background-color:#9fd7b322}100%{box-shadow:inset 0 0 0 2px transparent;background-color:transparent}}
+/* Below 1440 px the brand's subtitle gives way. */
+@media(max-width:1439px){.version{display:none}}
 .top-menu{position:relative}.top-menu>summary{list-style:none;color:inherit;background:var(--raised);border:1px solid var(--line);border-radius:5px;padding:5px 8px;font-size:11px;white-space:nowrap}.top-menu>summary::-webkit-details-marker{display:none}.top-menu>summary:hover{background:#344047}
 .top-menu .popover{top:34px;right:0;width:230px;padding:10px 12px;display:flex;flex-direction:column;gap:9px}.top-menu .view-toggle{margin:0}
 .erosion-toggle{margin:10px 0 0}
@@ -102,7 +118,12 @@
 .rail-button[aria-expanded=true]{background:#2e3a40;border-color:#5a7465}
 .tool-groups .tool-flyout{display:none}#land-flyout{--flyout-top:100px}#water-flyout{--flyout-top:150px}#brushes-flyout{--flyout-top:200px}
 .tool-groups .rail-button[aria-expanded=true]+.tool-flyout{display:grid;position:absolute;left:52px;top:0;z-index:8;width:188px;max-height:calc(100vh - var(--flyout-top) - 46px);overflow-y:auto;scrollbar-width:thin;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;padding:8px;background:var(--panel);border:1px solid #5a7465;border-radius:8px;box-shadow:0 12px 40px #000a}
+/* Land holds the most tools (up to 26 under its families' headings): four columns of the same tool cards, so no world's list scrolls at 900 px tall. */
+.tool-groups .rail-button[aria-expanded=true]+#land-flyout{width:368px;grid-template-columns:repeat(4,minmax(0,1fr))}
 .tool-flyout .tool-group-label{grid-column:1/-1;display:block;font-size:9px;letter-spacing:1px;color:#81968e;text-transform:uppercase;padding:0 2px}
+/* Land's families (each world tool's family; Generic; this map's own): a heading across the grid over its tools, in the flyout and the palette. */
+.tool-family{display:contents}
+.tool-family-label{grid-column:1/-1;display:block;margin-top:2px;padding:0 2px;font-size:10px;font-weight:600;color:#b4c6be}
 /* A tool in a flyout or in the palette: its picture (or its icon) over its name. */
 .tool-flyout button{width:auto;height:auto;padding:0;gap:0;align-items:stretch;justify-content:flex-start;border-color:var(--line);background:#182024;overflow:hidden;position:relative}
 .tool-flyout button .tool-pic{display:block;width:100%;height:46px;object-fit:cover;background:#101a17}
@@ -143,8 +164,30 @@
 #path-row{flex:0 0 auto;width:0;min-width:100%;display:flex;align-items:center;gap:8px}
 #shape-path-list{display:flex;flex-wrap:wrap;gap:3px;max-height:52px;overflow-y:auto;scrollbar-width:thin;min-width:0}
 #path-help{margin:0;font-size:10px;color:#b9c4bf;white-space:normal;min-width:0}
+/* Pick (sculpt-pick.js): a ring at the picked pixel and the card beside it, over the map. The layer spans the workspace and lets the pointer
+   through; script places the ring and the card (left, top) and keeps the card inside the map view. */
+.pick-layer{position:absolute;inset:0;z-index:4;pointer-events:none;overflow:hidden}
+.pick-marker{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;box-sizing:border-box;border:2px solid #f0c36a;border-radius:50%;box-shadow:0 0 0 2px #000a,inset 0 0 0 1px #000a}
+.pick-card{position:absolute;box-sizing:border-box;width:340px;max-width:calc(100% - 16px);overflow-y:auto;scrollbar-width:thin;pointer-events:auto;display:grid;gap:6px;padding:8px 10px 10px;background:var(--panel);border:1px solid #8fd3a8;border-radius:9px;box-shadow:0 10px 30px #000a;font-size:11.5px}
+.pick-head{display:flex;align-items:center;gap:8px}.pick-where{flex:1;min-width:0;color:var(--muted);font-size:10.5px;font-variant-numeric:tabular-nums}
+.pick-close{padding:0 5px;font-size:15px;line-height:18px;background:none;border:0}
+.pick-note{margin:0;color:#e9d3a0}.pick-note button{margin-left:4px;padding:2px 8px;font-size:10.5px}
+.pick-part{display:grid;gap:4px;padding-top:6px;border-top:1px solid var(--line)}
+.pick-line{display:flex;flex-wrap:wrap;align-items:center;gap:4px 7px;margin:0;min-width:0}
+.pick-name{font-weight:600;min-width:0}.pick-kind,.pick-small{color:var(--muted)}.pick-small{font-size:10.5px}
+.pick-line .scope-tag{margin-left:auto}
+.pick-swatch{flex:none;width:26px;height:18px;padding:0;border:1px solid #0c1214;border-radius:3px;background:none;cursor:pointer}.pick-swatch:disabled{cursor:default;opacity:.5}
+.pick-chip{flex:none;width:14px;height:12px;border-radius:2px;border:1px solid #0c1214}
+.pick-door{border:0;background:none;padding:0;color:var(--accent);cursor:pointer;font-size:inherit;white-space:nowrap}.pick-door:hover:not(:disabled){background:none;text-decoration:underline}
+.pick-line .pick-door:last-child{margin-left:auto}
+#pick-select{padding:2px 9px;font-size:10.5px}
+.pick-reach{margin:0;color:var(--muted);font-size:10.5px;line-height:1.35}
 /* The shape card: its name and actions, the sections every shape has, then Details, where a closed part is a chip. */
 .card-head{display:flex;align-items:center;gap:8px}.card-head .panel-title{flex:1;min-width:0;margin:0}
+/* One scope tag, three values: what an edit changes. This shape (or the new shapes a tool draws), this map, or every map in the world. */
+.scope-tag{display:inline-flex;align-items:center;flex:none;padding:0 6px;border:1px solid;border-radius:8px;font-size:9.5px;font-weight:600;line-height:15px;letter-spacing:.2px;white-space:nowrap;vertical-align:middle}
+.scope-tag.scope-shape{color:#f1d58c;border-color:#6f6136;background:#2d281b}.scope-tag.scope-map{color:#a2ccf0;border-color:#3b5a76;background:#1b2935}.scope-tag.scope-world{color:#a6dbb7;border-color:#41684f;background:#1b2f24}
+.control>.scope-tag,.world-fixed>.scope-tag{margin-top:4px}.world-fixed>button+.scope-tag{margin:0 0 0 6px}
 .card-actions{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:6px 0 8px}.card-actions .top-menu{position:static}
 .card-actions button,.card-actions .top-menu>summary{padding:3px 8px;font-size:10px;min-height:24px;box-sizing:border-box;display:inline-flex;align-items:center}
 #shape-selection-actions,#tool-delete-control{display:contents}#selection-delete,#tool-delete{color:#e8afa2}
@@ -180,16 +223,31 @@
 #along-preview{height:64px!important;width:100%!important;margin:0!important;border:1px solid #394d40!important;background:#17241d!important;border-radius:3px!important}
 .curve-actions{flex-wrap:nowrap}.curve-editors #curve-lean{display:none}.curve-editors #along-block .curve-actions span{display:none}
 #editor:disabled .curve-editors canvas{pointer-events:none;opacity:.5}
-.app.curves-large .curve-editors{position:fixed;z-index:7;left:calc(var(--tools-width) + 12px);right:calc(var(--inspector-width) + 12px);top:56px;bottom:36px;margin:0;padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:#10171bf7;border:1px solid #5a7465;border-radius:9px;box-shadow:0 14px 60px #000b}
-.app.curves-large .curve-pane{display:flex;flex-direction:column;min-height:0}.app.curves-large .curve-pane:first-child{flex:2}.app.curves-large #along-block:not([hidden]){flex:1;display:flex}
+/* Full size: the curves take the workspace beside the tool rail, as the material editor does, under a header that names the shape and closes. */
+.curve-large-head{display:none}
+.app.curves-large .curve-editors{position:fixed;z-index:7;left:var(--tools-width);right:0;top:44px;bottom:24px;margin:0;padding:0;display:grid;grid-template-columns:minmax(0,1fr) 240px;grid-template-rows:auto minmax(0,2fr) minmax(0,1fr);background:var(--panel);border:0;border-radius:0;box-shadow:none}
+.app.curves-large .curve-large-head{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--line)}.curve-large-head h2{font-size:14px;margin:0}.curve-large-head #curve-close{margin-left:auto}.app.curves-large #curve-large{display:none}
+.app.curves-large .curve-pane{display:flex;flex-direction:column;min-height:0;grid-column:1;padding:10px 14px}.app.curves-large #along-block:not([hidden]){display:flex;border-top:1px solid var(--line)}.app.curves-large #along-block[hidden]+.curve-numbers{grid-row:2/3}
 .app.curves-large #section-preview,.app.curves-large #along-preview{flex:1;height:auto!important;min-height:0}
 .app.curves-large .curve-editors #curve-lean,.app.curves-large .curve-editors #along-block .curve-actions span{display:inline}
-.app.curves-large .curve-actions button{padding:4px 9px;font-size:11px}.app.curves-large .curve-heading h2{font-size:13px}
+.app.curves-large .curve-heading h2{font-size:13px}
 
 /* The surfaces. */
 .surface{position:fixed;z-index:15;background:var(--panel);border:1px solid #5a7465;border-radius:9px;box-shadow:0 14px 60px #000b;padding:12px 14px;overflow:auto;scrollbar-width:thin;max-height:calc(100dvh - 84px)}
-.surface-map{top:48px;left:118px;width:340px}
+.surface-map{top:48px;left:var(--map-menu-left,156px);width:340px}
 .surface-settings{top:48px;right:10px;width:330px}
+/* The Map menu: the map's file actions and Share link above its own settings. */
+.map-file-actions{display:flex;gap:5px}.map-file-actions button{flex:1}
+#pane-map .share-menu{margin-top:6px}#pane-map .share-menu>summary{text-align:center;padding:6px 9px}
+#pane-map .share-menu .popover{position:static;width:auto;margin-top:6px;padding:10px;box-shadow:none}
+#map-settings-host{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+/* The View menu: how the map shows, the panels, then the editor's settings. */
+.surface-settings .view-switch{display:flex;gap:0}.surface-settings .view-switch button{flex:1;border-radius:0;padding:5px 8px;font-size:11px}
+.surface-settings .view-switch button:first-child{border-radius:5px 0 0 5px}.surface-settings .view-switch button:last-child{border-radius:0 5px 5px 0}.surface-settings .view-switch button+button{border-left:0}
+.surface-settings .view-toggle{margin:10px 0 0}.surface-settings .view-image{display:block;width:100%;margin-top:12px}.surface-settings>h3{margin:16px 0 6px}
+.view-panels{display:flex;gap:4px}.view-panels button{flex:1;padding:5px 6px;font-size:11px;white-space:nowrap}
+.view-panels button[aria-expanded=true]{background:#344c42;border-color:#78ae8d;color:#d9ffe5}
+.surface-settings .editor-preferences{margin:16px 0 14px}.surface-settings>h2{padding-top:12px;margin-bottom:8px;border-top:1px solid var(--line)}
 .surface-export{top:60px;left:50%;transform:translateX(-50%);width:min(520px,calc(100vw - 40px))}
 /* The Shapes list ends above the navigator, which stays in reach under it. */
 .surface-shapes{top:52px;left:calc(var(--tools-width) + 8px);bottom:178px;width:244px;max-height:none;display:flex;flex-direction:column;padding:10px}
@@ -201,8 +259,9 @@ footer{grid-row:3;font-size:10px;gap:14px}
 .status-line{color:#cfe0d2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:32%;flex:0 1 auto}
 footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:nowrap}.status-details .popover{right:8px;bottom:28px}
 
-@media(max-width:1250px){.app{--inspector-width:290px}.version{display:none}.topbar{gap:6px}.brand{font-size:12px}.topbar button,.topbar select{padding:5px 6px}.top-actions{gap:3px}.share-menu>summary,.top-menu>summary{font-size:10px;padding:5px}.world-title{max-width:120px}footer #levels{display:none}}
-@media(max-width:1050px){.brand{font-size:0;gap:0}.brand-mark{font-size:22px}.topbar{padding:0 7px;gap:5px}.top-actions .divider,.view-tools .divider{display:none}.topbar #undo,.topbar #redo{font-size:0}.topbar #undo:first-letter,.topbar #redo:first-letter{font-size:13px}.world-title{display:none}.mode-switch button{padding:6px 9px}#focus-canvas span{display:none}.status-line{display:none}}
+@media(max-width:1439px){.app{--map-menu-left:82px}}
+@media(max-width:1250px){.app{--inspector-width:290px;--map-menu-left:73px}.version{display:none}.topbar{gap:6px}.brand{font-size:12px}.topbar button,.topbar select{padding:5px 6px}.top-actions{gap:3px}.top-menu>summary{font-size:10px;padding:5px}.mode-switch button{padding:6px 10px}.world-title{max-width:120px}footer #levels{display:none}}
+@media(max-width:1050px){.app{--map-menu-left:29px}.brand{font-size:0;gap:0}.brand-mark{font-size:22px}.topbar{padding:0 7px;gap:5px}.topbar #undo,.topbar #redo{font-size:0}.topbar #undo:first-letter,.topbar #redo:first-letter{font-size:13px}.mode-switch button{padding:6px 9px}.world-title{max-width:96px}.status-line{display:none}}
 /* Features and Starts: one tool behind two rail entries. The card's switch sits in its header; kinds are tabs over the list behind them. */
 .feature-head{margin:0 0 6px}.feature-head h3{flex:1;min-width:0;margin:0}
 .feature-head .feature-modes{display:flex;gap:2px;margin:0}.feature-head .feature-modes[hidden]{display:none}.feature-head .feature-modes button{width:auto;height:auto;padding:3px 9px;font-size:10.5px}
@@ -217,46 +276,84 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .tool-settings .control:has(>.feature-kinds),.tool-settings #feature-starts{display:block}
 #feature-starts>label{display:none}#feature-starts>select{width:100%;margin:0 0 6px}#feature-starts>button{width:100%}
 
-#new-map-dialog{color:var(--text,#dce4df);background:#151e22;border:1px solid #587265;border-radius:12px;width:min(560px,calc(100vw - 40px));padding:24px}#new-map-dialog::backdrop{background:#05090bbb}#new-map-dialog h2{margin-top:0}.new-map-worlds{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:20px 0}.new-map-worlds button{padding:16px 8px;white-space:normal;min-height:60px}.new-map-worlds button[aria-pressed=true]{border-color:#b4d589;background:#304a35}.new-map-size{display:flex;gap:16px}.new-map-size input{width:65px}#new-map-dialog .row{justify-content:flex-end}
+#new-map-dialog{color:var(--text,#dce4df);background:#151e22;border:1px solid #587265;border-radius:12px;width:min(680px,calc(100vw - 40px));padding:22px 24px}#new-map-dialog::backdrop{background:#05090bbb}#new-map-dialog h2{margin-top:0}.new-map-worlds{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0 6px}.new-map-worlds button{padding:16px 8px;white-space:normal;min-height:60px}.new-map-worlds button[aria-pressed=true]{border-color:#b4d589;background:#304a35}.new-map-size{display:flex;gap:16px;margin-top:9px}.new-map-size input{width:65px}#new-map-dialog .row{justify-content:flex-end}
+/* New world: a link under the cards; its name row in place under it. */
+.new-map-world-new{margin:0 0 12px}.link-button{border:0;background:none;padding:2px 0;color:var(--accent);font-size:11px}.link-button:hover:not(:disabled){background:none;text-decoration:underline}
+#new-map-world-row{justify-content:flex-start!important;max-width:360px}#new-map-world-row input{flex:2}#new-map-world-row button{flex:1}
+#new-map-sizes button{white-space:nowrap;font-size:11px}.new-map-name{display:block;margin-top:10px}.new-map-name input{margin-top:4px}
 
-.curve-numbers{display:none}.app.curves-large .curve-editors{display:grid;grid-template-columns:minmax(0,1fr) 210px;grid-template-rows:minmax(0,2fr) minmax(0,1fr);right:12px;background:#10171b}.app.curves-large .curve-pane{grid-column:1}.app.curves-large .curve-numbers{display:flex;flex-direction:column;gap:8px;grid-column:2;grid-row:1/3;overflow:auto;border-left:1px solid #3e5047;padding-left:12px}.curve-numbers h3{margin:8px 0 0}.curve-numbers label{display:flex;justify-content:space-between;align-items:center;gap:6px}.curve-numbers input{width:74px}.curve-numbers select{max-width:142px}#curve-shape-preview{width:100%;height:auto;background:#10171b;border:1px solid #3e5047}#map-progress{position:absolute;left:0;right:0;top:0;height:3px;z-index:8;overflow:hidden;background:#57745a55}#map-progress:after{content:'';display:block;width:35%;height:100%;background:#b4d589;animation:terrain-progress 1.4s ease-in-out infinite}@keyframes terrain-progress{from{transform:translateX(-100%)}to{transform:translateX(390%)}}.render-pending{position:relative}#render-stage{color:#e8bf72;white-space:nowrap}
+.curve-numbers{display:none}.app.curves-large .curve-numbers{display:flex;flex-direction:column;gap:8px;grid-column:2;grid-row:2/4;overflow:auto;border-left:1px solid var(--line);padding:10px 14px}.curve-numbers h3{margin:8px 0 0}.curve-numbers label{display:flex;justify-content:space-between;align-items:center;gap:6px}.curve-numbers input{width:74px}.curve-numbers select{max-width:142px}#curve-shape-preview{width:100%;height:auto;background:#10171b;border:1px solid #3e5047}#map-progress{position:absolute;left:0;right:0;top:0;height:3px;z-index:8;overflow:hidden;background:#57745a55}#map-progress:after{content:'';display:block;width:35%;height:100%;background:#b4d589;animation:terrain-progress 1.4s ease-in-out infinite}@keyframes terrain-progress{from{transform:translateX(-100%)}to{transform:translateX(390%)}}.render-pending{position:relative}#render-stage{color:#e8bf72;white-space:nowrap}
 
 .render-pending:after{content:'●';color:#e8bf72;position:absolute;right:3px;top:4px;font-size:8px}
 
 @media(max-width:850px){.topbar{gap:3px;padding:0 4px}.topbar button{padding:5px 4px;font-size:10px}.top-actions,.view-tools{gap:2px}.topbar .primary{padding-left:6px;padding-right:6px}.mode-switch button{padding:6px}.brand-mark{font-size:18px}#tab-map{max-width:135px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 
-/* Material design: graph first, persistent previews, shared inspector controls. */
-#material-editor{color:var(--text);background:var(--panel);border:0;border-radius:0;padding:0;width:100vw;max-width:none;height:100dvh;margin:0;max-height:none;overflow:hidden}
-#material-editor[open]{display:flex;flex-direction:column}#material-editor::backdrop{background:#05090b9e}
-.material-header{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--line);flex:none}.material-header h2{font-size:14px;margin:0}
-#material-select{width:230px;max-width:30vw}#material-used{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.material-note{margin:0 0 0 auto;color:#f0c98a;max-width:38vw;text-align:right}.material-actions{margin-left:auto;flex:none}.material-note:not([hidden])+.material-actions{margin-left:0}
-.material-menu{position:relative}.material-menu>summary{cursor:pointer;border:1px solid var(--line);border-radius:5px;padding:6px 10px;font-size:12px;list-style:none;user-select:none}.material-menu>summary::-webkit-details-marker{display:none}.material-menu>summary::after{content:" ▾";color:var(--muted)}
+/* Material workspace: fixed siblings in index.html share the app's content cell. The dialog leaves its lower-left cell
+   transparent to the live map below it. Only its real panels take pointer input, so the map keeps its own canvas and tools. */
+.app.material-docked{--material-header-height:56px;grid-template-columns:var(--tools-width) minmax(0,1fr)}
+.app.material-docked>.workspace{grid-column:2;grid-row:2;width:calc(100% / 3);height:calc((100% - var(--material-header-height)) / 2);align-self:end;justify-self:start;min-width:0;min-height:0}
+#material-editor{color:var(--text);background:transparent;border:0;border-radius:0;padding:0;margin:0;position:static;grid-column:2;grid-row:2;width:auto;height:auto;max-width:none;max-height:none;min-width:0;min-height:0;overflow:hidden;container-type:inline-size;z-index:4;pointer-events:none}
+#material-editor[open]{display:flex;flex-direction:column}
+#material-editor .material-header,#material-editor .material-graph-stage,#material-editor .material-preview,#material-editor .material-side,#material-editor .material-library{pointer-events:auto;background:var(--panel)}
+.app.material-full>.workspace{visibility:hidden}
+.app.material-full .material-graph-stage{grid-row:1/3}
+.app.material-full .material-preview{display:none}
+.material-header{height:var(--material-header-height);box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--line);flex:none}.material-header h2{font-size:14px;margin:0}
+/* The material's name opens the library drawer: the map's materials, then the library by world, each a tile with its swatch. */
+.material-choose{display:flex;align-items:baseline;min-width:0;max-width:min(320px,36cqw);padding:6px 10px;white-space:nowrap;text-align:left;flex:0 1 auto}
+.material-choose::after{content:"▾";color:var(--muted);flex:none;margin-left:6px}.material-choose[aria-expanded=true]{background:#344c42;border-color:#78ae8d}
+#material-choose-name,.material-choose-role{overflow:hidden;text-overflow:ellipsis;min-width:0}#material-choose-name{flex:0 1 auto}.material-choose-role{flex:0 100 auto;color:var(--muted);font-size:11px;margin-left:5px}.material-choose-role:empty{display:none}
+#material-new{flex:none;white-space:nowrap}
+#material-editor-fields{position:relative}
+.material-library{position:absolute;z-index:9;top:0;left:0;bottom:0;width:min(520px,100%);box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:10px 12px;background:var(--panel);border-right:1px solid #587265;box-shadow:10px 0 30px #0008}
+.material-library[hidden]{display:none}#library-search{width:100%;box-sizing:border-box}
+.library-scroll{flex:1;min-height:0;overflow:auto;scrollbar-width:thin}
+.library-part{font-size:12px;margin:4px 0 6px}.library-part .small{font-weight:400;color:var(--muted);margin-left:4px}.library-part:not(:first-child){margin-top:14px}
+.library-group h4{font-size:11px;font-weight:600;color:var(--muted);margin:10px 0 4px}
+.library-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px}
+.library-tile{display:grid;grid-template-columns:48px minmax(0,1fr);grid-template-rows:auto 1fr;column-gap:8px;align-items:start;min-width:0;padding:4px;text-align:left}
+.library-tile.current{border-color:#6fae86;background:#2d4a3a}
+.library-swatch{grid-row:1/3;width:48px;height:48px;border-radius:3px;background:#10171a}
+.library-name{font-size:12px;line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.library-role{font-size:10.5px;line-height:1.3;color:var(--muted);overflow-wrap:anywhere}#material-used{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.material-note{margin:0 0 0 auto;color:#f0c98a;max-width:38cqw;text-align:right}.material-actions{margin-left:auto;flex:none}.material-actions>*{flex:none;white-space:nowrap}.material-note:not([hidden])+.material-actions{margin-left:0}
+.material-menu{position:relative;flex:none}.material-menu>summary{white-space:nowrap;cursor:pointer;border:1px solid var(--line);border-radius:5px;padding:6px 10px;font-size:12px;list-style:none;user-select:none}.material-menu>summary::-webkit-details-marker{display:none}.material-menu>summary::after{content:" ▾";color:var(--muted)}
 .material-menu[open]>summary{background:#344c42;border-color:#78ae8d}
-.material-menu-body{position:absolute;z-index:12;top:calc(100% + 6px);left:0;width:320px;max-width:calc(100vw - 24px);max-height:70dvh;overflow:auto;padding:12px;border:1px solid #587265;border-radius:8px;background:var(--panel);box-shadow:0 10px 30px #0009}
+.material-menu-body{position:absolute;z-index:12;top:calc(100% + 6px);left:0;width:320px;max-width:calc(100cqw - 24px);max-height:70dvh;overflow:auto;padding:12px;border:1px solid #587265;border-radius:8px;background:var(--panel);box-shadow:0 10px 30px #0009}
 .material-menu-body>.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:0 0 8px}.material-menu-body input,.material-menu-body select{width:100%;min-width:0}.material-menu-body p{margin:10px 0 0;line-height:1.5}
 #material-editor-fields{display:flex;flex:1;min-height:0;overflow:hidden;padding:0;border:0;margin:0}
-.material-layout{flex:1;min-width:0;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 412px}
-.material-graph-stage{position:relative;min-width:0;min-height:0;background:#141d20;overflow:hidden}
+.material-layout{flex:1;min-width:0;min-height:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,minmax(0,1fr))}
+.material-graph-stage{grid-column:1/3;grid-row:1;position:relative;min-width:0;min-height:0;background:#141d20;overflow:hidden}
 #material-graph{display:block;width:100%;height:100%;touch-action:none;outline-offset:-3px}
-.material-graph-tools{position:absolute;top:10px;left:12px;display:flex;gap:6px}.material-graph-tools button{padding:6px 10px;background:#202c30ee}#graph-node-select{max-width:170px;font-size:11px;background:#202c30ee}
+.material-graph-tools{position:absolute;top:10px;left:12px;display:flex;gap:6px}.material-graph-tools button{padding:6px 10px;background:#202c30ee;white-space:nowrap}#graph-node-select{max-width:170px;font-size:11px;background:#202c30ee}
 #graph-help{position:absolute;left:12px;bottom:8px;margin:0;color:#7f9398;pointer-events:none;max-width:calc(100% - 24px)}
 .node-menu{position:absolute;z-index:8;width:230px;padding:8px;border:1px solid #587265;border-radius:8px;background:var(--panel);box-shadow:0 10px 30px #0009}.node-menu input{width:100%;margin-bottom:6px}
 #node-list{display:flex;flex-direction:column;max-height:300px;overflow:auto}#node-list button{text-align:left;border:0;background:none;padding:5px 8px;border-radius:4px;font-size:12px}#node-list button:hover,#node-list button:focus{background:#344c42;outline:0}
-.material-side{display:flex;flex-direction:column;min-height:0;overflow:auto;border-left:1px solid var(--line);background:var(--panel);padding:10px 14px 16px}
-.material-preview{flex:none}.material-view{display:flex;gap:4px;margin-bottom:8px}.material-view .spacer{flex:1}.material-view button{padding:5px 9px;font-size:11px}.material-view [aria-pressed=true],.material-tabs [aria-selected=true]{background:#344c42;border-color:#78ae8d}
-#material-preview{display:block;width:min(384px,100%,42dvh);aspect-ratio:1;height:auto;background:#10171a;image-rendering:pixelated;border:1px solid var(--line)}#material-preview[aria-busy=true]{border-color:#6f8f7b}
+.material-side{grid-column:3;grid-row:1/3;display:flex;flex-direction:column;min-height:0;overflow:auto;border-left:1px solid var(--line);background:var(--panel);padding:10px 14px 16px}
+.material-preview{grid-column:2;grid-row:2;display:grid;grid-template-rows:auto minmax(0,1fr) auto;min-width:0;min-height:0;padding:10px 14px;border-top:1px solid var(--line);border-left:1px solid var(--line)}.material-view{display:flex;gap:4px;margin-bottom:8px}.material-view .spacer{flex:1}.material-view button{padding:5px 9px;font-size:11px;white-space:nowrap}.material-view [aria-pressed=true],.material-tabs [aria-selected=true]{background:#344c42;border-color:#78ae8d}
+/* The picture has its own size container. A whole number of 32 px tiles fits between the existing view controls and note;
+   drawPicture crops it at true 1x or 2x, never shrinking an art pixel to fit the panel. */
+.material-picture{display:grid;place-items:center;min-width:0;min-height:0;overflow:hidden;container-type:size}
+#material-preview{display:block;width:calc(clamp(32px,round(down,calc(min(100cqw,100cqh) - 2px),32px),384px) + 2px);aspect-ratio:1;height:auto;background:#10171a;image-rendering:pixelated;border:1px solid var(--line)}
+#material-preview[aria-busy=true]{border-color:#6f8f7b}
 #material-preview-note{margin:6px 0 0;min-height:16px}
-.material-tabs{display:flex;gap:5px;padding:12px 0 10px;position:sticky;top:-10px;background:var(--panel);z-index:1}.material-tabs button{padding:6px 12px}
+.material-tabs{display:flex;gap:5px;padding:0 0 10px;position:sticky;top:-10px;background:var(--panel);z-index:1}.material-tabs button{padding:6px 12px}
 .material-pane .control{margin-top:7px}.material-pane p.small{line-height:1.55;margin:0 0 10px}
 .material-pick{display:flex;gap:6px;align-items:center}.material-pick select{flex:1;min-width:0}.material-chip{flex:none;width:22px;height:22px;border-radius:4px;border:1px solid #0c1214;background:#555}.material-world-controls{margin:2px 0 8px}
-#lf-ground-control{display:block}#lf-ground-control>label{display:block;margin-bottom:4px}.material-choices{display:grid;grid-template-columns:1fr 1fr;gap:4px}.material-choice{display:flex;align-items:center;gap:6px;min-width:0;padding:3px 6px;text-align:left}.material-choice .material-chip{width:16px;height:16px}.material-choice-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.material-choice[aria-checked=true]{border-color:#6fae86;background:#2d4a3a;color:#eaf7ee}.material-choice[data-value="-1"] .material-chip{background:repeating-linear-gradient(45deg,#3a4a44 0 3px,#222c2a 3px 6px)}
+#lf-ground-control{display:block}.control-head{display:flex;align-items:center;gap:6px;margin-bottom:4px}.control-head>label{flex:1;min-width:0;margin:0}.material-choices{display:grid;grid-template-columns:1fr 1fr;gap:4px}.material-choice{display:flex;align-items:center;gap:6px;min-width:0;padding:3px 6px;text-align:left}.material-choice .material-chip{width:16px;height:16px}.material-choice-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.material-choice[aria-checked=true]{border-color:#6fae86;background:#2d4a3a;color:#eaf7ee}.material-choice[data-value="-1"] .material-chip{background:repeating-linear-gradient(45deg,#3a4a44 0 3px,#222c2a 3px 6px)}
+/* The shape card names what the shape is made of: a row's partner line (the rock type drawn, where the rest of a setting lives) and its links. */
+.card-partner{display:flex;align-items:center;gap:6px;margin:5px 0 0;font-size:10.5px;line-height:1.45;color:var(--muted)}.card-partner-text{flex:1;min-width:0}.card-partner-text b{color:var(--text);font-weight:600}
+.tool-settings .control:has(>select)>.card-partner{grid-column:1/-1;margin:0}p.card-partner{display:block}
+.card-link{flex:none;padding:1px 8px;font-size:10.5px}.card-partner button.link{border:0;background:none;padding:0;color:var(--accent);text-decoration:underline;cursor:pointer;font-size:inherit;text-align:left}
+.rock-swatch.varies{background:repeating-linear-gradient(45deg,#777 0 2px,#444 2px 4px)}
+.material-choice.material-extra{order:1}#lf-ground-more{margin-top:4px}
 .material-control{margin-top:7px}.material-control-edit{gap:6px;margin-bottom:3px}.material-control-edit input{flex:1;min-width:0}.material-control-range{gap:6px;align-items:center;margin:0 0 4px;font-size:11px;color:var(--muted)}.material-control-range input{width:76px}
 .material-control-colors{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid #455b4a;border-radius:4px;padding:3px 6px;font-size:11px;min-height:26px}.material-control-colors .swatches{display:flex;gap:3px}
 .material-control-colors input[type=color],#stop-color{width:26px;height:20px;padding:0;border:1px solid #0c1214;background:none}
 #controls-edit{margin-top:12px}
 .node-title{gap:8px}.node-title input[type=text],#node-name{flex:1;min-width:0}.check{display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap}
 .node-param{display:grid;grid-template-columns:minmax(0,1fr) 26px;gap:5px;align-items:center;margin-top:7px}.node-param .control{margin:0}
+/* Publishing asks for the control's name in place, under the setting or the colors it publishes. */
+.publish-name{grid-column:1/-1;display:flex;gap:6px;margin-top:2px}.publish-name[hidden]{display:none}.publish-name input{flex:1;min-width:0}.publish-name button{flex:none}#gradient-name-row{margin-top:6px}
 .pin{padding:0;width:26px;height:26px;color:#5d7178;font-size:11px}.pin[aria-pressed=true]{color:#e8d38a;border-color:#a8975a;background:#3a3620}.pin-wide{margin-top:8px}.pin-wide[aria-pressed=true]{color:#e8d38a;border-color:#a8975a}
 #node-histogram,#gradient-bar{display:block;width:100%;margin-top:8px;border-radius:4px}#gradient-bar{cursor:pointer;touch-action:none;height:40px}#node-histogram{height:56px}
 .stop-row{gap:6px;margin-top:8px;align-items:center;font-size:11px}.stop-row input[type=number]{width:58px}.stop-row label{margin:0;color:var(--muted)}
@@ -265,30 +362,38 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .node-actions{gap:6px;margin-top:14px}.node-actions button{flex:1}
 #palette-grid{display:block;width:100%;max-width:320px;aspect-ratio:1;height:auto;cursor:pointer;image-rendering:pixelated}
 .material-fine{margin-top:10px}.material-fine>summary{cursor:pointer;font-size:11px;color:var(--muted)}
-@media(max-width:1000px){.material-layout{grid-template-columns:minmax(0,1fr) 320px}#material-used{display:none}}
-@media(max-width:700px){.material-layout{grid-template-columns:1fr;grid-template-rows:minmax(220px,45dvh) minmax(0,1fr)}.material-side{border-left:0;border-top:1px solid var(--line)}.material-header{flex-wrap:wrap;gap:8px}.material-header h2{display:none}#graph-help{display:none}}
+@container (max-width:1000px){#material-used{display:none}}
+@container (max-width:900px){.material-header{gap:6px;padding-inline:8px}.material-header h2{display:none}.material-choose-role{display:none}.material-side{padding-inline:10px}}
 /* World › Surface (sculpt-surface-panel.js): one row a layer, top first; a row opens to its settings. */
 .surface-show{display:flex;gap:6px;align-items:flex-start;margin:4px 0}
-.surface-layers{list-style:none;margin:6px 0;padding:0;display:flex;flex-direction:column;gap:3px;overflow-y:auto;min-height:0}
+/* The list's three sections (index.html #surface-layers): drawing (open), only where painted and cannot draw yet (folded). */
+.surface-layers{margin:6px 0;display:flex;flex-direction:column;gap:8px;min-height:0}
+.surface-section[hidden]{display:none}
+.surface-section>summary{cursor:pointer;font-size:12px;font-weight:600;padding:2px 0}
+.surface-section-note{display:block;margin:1px 0 0 1.1em;font-weight:400;opacity:.75}
+.surface-list{list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:3px}
+.surface-why{margin:2px 0 1px 1.6em;color:#e9d3a0}
+.surface-why p{margin:2px 0 0}
+.surface-why button.link{border:0;background:none;padding:0;color:var(--accent);text-decoration:underline;cursor:pointer;font-size:inherit;white-space:nowrap}
 .surface-layer{border:1px solid var(--line,#3a3a3a);border-radius:6px;padding:3px 6px;min-width:0}
 .surface-layer.open{padding-bottom:6px}
 .surface-layer:hover,.surface-layer:focus-within{border-color:var(--accent,#c43bd1)}
 .surface-head{display:flex;align-items:center;gap:6px;flex-wrap:nowrap}
 .surface-label{flex:1;min-width:0;display:flex;flex-direction:column;cursor:pointer}
-.surface-label .surface-drawn{opacity:.65;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.surface-label .surface-where{opacity:.7;line-height:1.3}
+.surface-label .surface-place{opacity:.65;font-style:italic}
 .surface-head .surface-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:default}
 .surface-head span.surface-name{cursor:pointer}
 .surface-head input.surface-name{min-width:6em}
 .surface-head button{flex:none;padding:1px 6px}
 .surface-head .surface-toggle{border:0;background:none;width:1.4em;padding:0}
 .surface-layer.unshown>.surface-head .surface-name,.surface-layer.unshown>.surface-head .material-chip{opacity:.45}
-.surface-head button[aria-pressed="true"].surface-solo{background:var(--accent,#c43b3b);color:#fff}
-.surface-head .surface-eye,.surface-head .surface-solo{border:0;background:none;width:1.6em;padding:0;opacity:.8}
+.surface-head button[aria-pressed="true"].surface-solo{background:var(--accent,#c43b3b);color:#11261b;opacity:1}
+.surface-head .surface-eye,.surface-head .surface-solo{border:0;background:none;min-width:3.2em;padding:1px 4px;font-size:10.5px;opacity:.8}
 .surface-head .surface-eye:disabled{opacity:.3}
 .surface-order{flex-wrap:wrap}
 .surface-order>span{flex:1}
 .surface-inspect{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0}
-.surface-inspect button[aria-pressed="true"]{background:var(--accent,#c43b3b);color:#fff}
 .surface-inspect-result{border:1px solid var(--line,#3a3a3a);border-radius:6px;padding:6px;margin:4px 0;display:flex;flex-direction:column;gap:4px}
 .surface-inspect-result p{margin:0}
 .surface-inspect-layers{margin:0;padding-left:1.4em;display:flex;flex-direction:column;gap:2px}
@@ -296,21 +401,20 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .surface-inspect-result button.link{border:0;background:none;padding:0;text-decoration:underline;cursor:pointer;color:inherit}
 .surface-facts{display:grid;grid-template-columns:1fr auto;gap:1px 8px;margin:4px 0 0}
 .surface-facts dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
-.surface-view{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;padding:4px 6px;border:1px dashed var(--accent,#c43b3b);border-radius:6px}
+.surface-view{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;padding:4px 6px;margin:4px 0;border:1px dashed var(--accent,#c43b3b);border-radius:6px}.surface-view[hidden]{display:none}
 .surface-view button{margin-left:auto}
-.surface-head .surface-stage{opacity:.75;white-space:nowrap}
 .material-chip.own{background:repeating-linear-gradient(45deg,#777 0 2px,#444 2px 4px)}
 .surface-body{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;margin-top:6px}
 .surface-wide,.surface-rule{grid-column:1/-1}
 .surface-line{display:flex;gap:6px;align-items:center}
-.surface-group{margin:8px 0 0;opacity:.7;text-transform:uppercase;letter-spacing:.04em;font-size:10px}
-.surface-group:first-child{margin-top:0}
 .surface-material-row{flex:1;min-width:0}
 .surface-material-row select{flex:1;min-width:0;width:0}
 .surface-body button.link{justify-self:start;border:0;background:none;padding:0;text-decoration:underline;cursor:pointer;font-size:12px}
-.surface-slider{display:grid;grid-template-columns:7.4em minmax(0,1fr) 2.6em;align-items:center;gap:4px;font-size:12px}
-.surface-slider output{text-align:right}
-.surface-slider input{min-width:0}
+/* A row's sliders are the editor's own (controlRow), a little lower; a closed row's Coverage sits under its name. */
+.surface-layer .control.surface-slider{margin:0}
+.surface-layer .surface-slider .scrub,.surface-layer .surface-slider .scrub label{min-height:20px}
+.surface-layer .surface-slider .scrub label{padding:1px 6px}
+.surface-cover{margin:3px 0 1px 1.6em}
 .surface-rule{display:flex;flex-direction:column;gap:4px;border-top:1px dashed var(--line,#3a3a3a);padding-top:4px;font-size:12px}
 .surface-rule > button{align-self:start}
 .surface-term{display:flex;gap:4px 8px;align-items:center;flex-wrap:wrap}
@@ -319,5 +423,35 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .surface-number input{width:4.4em}
 .surface-rule-kind select{flex:1;min-width:0;width:0}
 .surface-settings-title{margin-top:14px}
+/* Add a layer's gallery (sculpt-surface-panel.js): a tile a preset, its material's swatch (a plant mark for plants alone) and its name. */
+.surface-gallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;margin:6px 0;padding:6px;border:1px solid var(--line,#3a3a3a);border-radius:6px}
+.surface-gallery[hidden]{display:none}
+.surface-tile{display:flex;align-items:center;gap:7px;min-width:0;padding:5px 7px;text-align:left;font-size:11.5px;line-height:1.25}
+.surface-tile .material-chip{flex:none;width:18px;height:18px;border-radius:3px}
+.surface-tile .surface-plant{display:grid;place-items:center;background:none;border:1px solid var(--line,#3a3a3a);color:#8fd3a8}.surface-tile .surface-plant svg{width:14px;height:14px}
+#surface-add[aria-expanded="true"]{border-color:var(--accent)}
 .surface-head .material-chip{width:14px;height:14px}
 .surface-term .surface-number input{width:3.8em}
+
+/* Rock appearance is one ordered set above the tabs; the page scrolls as a whole so its rows never squeeze the tabs away. */
+#wpane-rock-types:not([hidden]){display:block;overflow-y:auto;scrollbar-width:thin}
+.rock-headlines{padding:8px 10px;border-bottom:1px solid var(--line)}.rock-headlines h3{margin:0 0 6px;font-size:12px}
+.rock-headlines .control>p.rock-headline-note{display:block;margin:3px 0 6px;font-size:10px;color:var(--muted)}
+
+/* Existing controls have one fixed home. The home scrolls as a single page. */
+.world-studio:not(.world-all) .world-nav [data-advanced]{display:none}
+.world-home-head{display:flex;flex-wrap:wrap;gap:7px;align-items:center}.world-home-head .world-name{display:block;width:100%;margin:0;font-size:17px}.world-home-head #biome-select{width:100%}.world-home-head .scope-tag{max-width:100%;white-space:normal}.world-home-head .row{width:100%}
+.world-home-cards{display:flex;flex-direction:column;gap:10px;margin-top:10px}.world-home-card{border:1px solid var(--line);border-radius:7px;padding:9px;min-width:0}.world-home-card>h3{font-size:13px;margin:0 0 7px;color:var(--text)}.world-home-card .control{margin:6px 0}.world-home-card .material-pick{display:flex;gap:5px;align-items:center;flex-wrap:wrap}.world-home-card select{min-width:0;max-width:100%;flex:1}.world-home-card .small{font-size:10px;margin:4px 0}.world-home-card .link{font-size:11px}.world-all-settings{margin-top:7px}.world-home-layer{display:block;text-align:left;margin:5px 0}.world-home-rock{display:flex;gap:6px;align-items:center;border:0;background:transparent;padding:4px 0;text-align:left}.world-use-dot{width:6px;height:6px;border-radius:50%;background:#9cdda6}.world-home-foot{margin-top:12px;flex-wrap:wrap}.world-home-back{margin:0 0 8px}.world-home .world-rows:empty{display:none}
+
+
+/* The design view's label on the map (World › Surface Hide and Solo): what is hidden, that it is temporary, and the way back. */
+.map-view-note{position:absolute;z-index:6;top:10px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:5px 6px 5px 12px;border:1px solid #6f6136;border-radius:8px;background:#2d281bf0;color:#f1d58c;font-size:12px;font-weight:600;white-space:nowrap;box-shadow:0 6px 24px #0008}.map-view-note .small{color:#d6c9a3;font-weight:400}.map-view-note[hidden]{display:none}
+/* Pick's settings rows (the World rows' sliders, compact) and the surface layers at the pixel with why the others are not there. */
+.pick-rows{display:grid;gap:3px}.pick-rows .control{margin:0}
+.pick-more>summary{cursor:pointer;color:var(--muted);font-size:10.5px;display:flex;align-items:center;gap:6px}.pick-more[open]>summary{margin-bottom:4px}.pick-more>summary .scope-tag{margin-left:auto}
+.pick-layer-list{margin:0;padding-left:16px;display:grid;gap:3px;font-size:10.5px;color:var(--muted)}.pick-layer-list li>button.link{margin-right:5px;font-size:inherit;padding:0}
+/* The card's profile is compact (its silhouette, still editable); Full size opens it at the workspace's size. */
+.app:not(.curves-large) #card-profile #section-preview{height:104px}.app:not(.curves-large) #card-profile #along-preview{height:56px}
+.pick-group{margin:4px 0 0;font-size:10px;font-weight:600;color:#96ada2}
+/* World › Surface shows its own note while open: the map's label steps aside rather than say it twice. */
+.app:has(#pane-world:not([hidden]) #wpane-surface:not([hidden]) #surface-view:not([hidden])) #map-view-note{display:none}

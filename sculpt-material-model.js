@@ -49,6 +49,30 @@ export const SURFACE_BUILTINS = {
   regrownMoss: [5, 0], fines: [5, 1], paintedRock: [5, 2], paintedSnow: [5, 3], paintedMoss: [5, 4], sandDust: [5, 5], sand: [5, 6],
   chips: [6, 0], iceCrest: [7, 0], iceCap: [7, 1],
 };
+// What each built-in needs to draw anything at all, as the draw gates it (engine-frag.wgsl, the masks each surfaceStage call is given, and the
+// uniforms sculpt-renderer.js sets them from). World › Surface lists a built-in under "Cannot draw" while one of these fails, and under "Only
+// where painted" when it draws only where Surface paint has painted. A need: `control`, a World setting that must be above 0 (a rock type's
+// setting counts for the world's rock and every rock type in use on the map, as the draw reads each pixel's own); `unless`, a world fact
+// (sculpt-knobs.js worldPanelValues) under which that need does not hold; `role`, a map material in that role (sculpt-materials.js MAP_ROLES)
+// that the draw has no fallback for; `layer`, a surface the world draws (config.layers: its own beach, or one another world lends); `painted`,
+// the mask Surface paint lays. An empty list claims nothing: the sand's sources and the chips' weathering are not read here, and a false
+// "cannot draw" is worse than none.
+export const SURFACE_NEEDS = {
+  highland: [{role: 'worldHigh'}, {control: 'highland'}],   // highShare: 0 with no highland material (u.highGround < 0) or Strength 0
+  slopeCover: [{control: 'slopeTexture', unless: 'slopeSand'}],   // its mask times Sampled slope texture, unless the world's slopes are sand
+  soil: [{control: 'soilRim'}],   // the thinning cover's soil, only when u.soilRim > 0
+  rock: [],
+  beach: [{layer: 'beach'}],   // u.beach: the world's layers hold a beach; without its role material it falls back to the slope's or the ground's
+  crown: [{control: 'rockCrown'}],   // a rock type's rockCrown > 0
+  baseBand: [{control: 'baseBand'}, {control: 'strata'}, {column: true}],   // u.baseBand > 0 on bedded rock (a rock type's strata > 0, and a column)
+  regrownMoss: [{control: 'debrisAmount'}], fines: [{control: 'debrisAmount'}],   // u.debrisAny: the largest debrisAmount of the rocks in use
+  paintedRock: [{painted: 'rock'}], paintedSnow: [{painted: 'snow'}], paintedMoss: [{painted: 'moss'}],   // inside u.paintOn: the painted masks
+  sandDust: [{control: 'sandDust'}],   // sand's dusting, times u.sandDust
+  sand: [],
+  chips: [],
+  iceCrest: [{control: 'iceCrest'}],   // a rock type's iceCrest > 0
+  iceCap: [{control: 'iceSnow'}],   // a rock type's iceSnow > 0 (Snow on level caps)
+};
 // The built-ins that may draw a library material (phase 4): those the engine colors itself. The others already draw a material set in the
 // Materials panel (highland ground, slope cover, beach and debris fines take the world's role materials) or each rock type's rock (rock,
 // crown rock, painted rock, chips); a material for them here would be a second, partial way to set those (CLAUDE.md rule 9).
@@ -122,6 +146,32 @@ export function surfaceRows(surface, slotOf = () => -1, hidden = null) {
   const plants = list.flatMap((layer, i) => layer?.plants?.amount > 0 ? [{row: layerRows[i], kind: PLANT_KINDS.indexOf(layer.plants.kind), amount: Math.min(1, Number(layer.plants.amount))}] : []);
   if (plants.length > PLANT_MAX) throw Error(`A world's surface grows plants on at most ${PLANT_MAX} layers.`);
   return {rows, flags: [facts ? 1 : 0, 0, 0, 0], head: [0, 2, 4, 6].map(k => [...heads[k], ...heads[k + 1]]), layerRows, plants};
+}
+// What a layer's rule says at one pixel, from the facts the probe recorded there (readProbe `facts`, SURFACE_FACTS order), as the draw
+// evaluates it (engine-common.wgsl surfaceWindow, surfaceWindows, surfaceScore): a windows rule multiplies smooth windows, one a term, each
+// [from, to] with a soft edge `fade` wide; a score rule adds weighted facts and passes from `from` over `fade` either side. `share` is what
+// the rule gives before the layer's edge noise and Coverage pattern (0 to 1). The shares of rock, debris and sand grow stage by stage, so a
+// term on one of them reads the final share, which an earlier stage's layer did not see: such a term is marked `late`.
+// Returns {kind: 'none'} for a layer whose place is set by its built-in and its World settings alone.
+const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const LATE_FACTS = ['rockShare', 'debrisShare', 'sandShare'];
+export function ruleHere(layer, facts) {
+  const at = name => Number(facts?.[SURFACE_FACTS.indexOf(name)]), num = (v, fallback) => Number.isFinite(Number(v)) ? Number(v) : fallback;
+  if (layer?.score) {
+    const from = num(layer.score.from, .5), fade = Math.max(num(layer.score.fade, .05), 1e-4);
+    const terms = (layer.score.terms || []).slice(0, SURFACE_RULE_TERMS).filter(t => SURFACE_FACTS.includes(t.fact))
+      .map(t => ({fact: t.fact, weight: num(t.weight, 1), value: at(t.fact), late: LATE_FACTS.includes(t.fact)}));
+    const score = terms.reduce((sum, t) => sum + t.weight * t.value, 0);
+    return {kind: 'score', score, from, fade, terms, share: smooth(from - fade, from + fade, score)};
+  }
+  if (layer?.where?.length) {
+    const terms = layer.where.slice(0, SURFACE_RULE_TERMS).filter(w => SURFACE_FACTS.includes(w.fact)).map(w => {
+      const from = num(w.from, -1e9), to = num(w.to, 1e9), fade = Math.max(num(w.fade, .05), 1e-4), value = at(w.fact);
+      return {fact: w.fact, from, to, fade, value, late: LATE_FACTS.includes(w.fact), share: smooth(from - fade, from + fade, value) * (1 - smooth(to - fade, to + fade, value))};
+    });
+    return {kind: 'where', terms, share: terms.reduce((s, t) => s * t.share, 1)};
+  }
+  return {kind: 'none'};
 }
 // A surface read from a save, a world file or this browser's world store: only the fields a layer has, numbers checked, and the draw's
 // row limits (surfaceRows throws on anything it cannot draw). Returns a fresh list.

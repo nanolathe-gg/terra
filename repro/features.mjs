@@ -107,8 +107,9 @@ try {
   for (let i = 0; i < 2400 && await ev(`document.getElementById('map-export').disabled`); i++) await sleep(250);
   const exported = await ev(`sculptMap.export('Features Test '+Date.now()%1e6).then(r => ({count: r.featureCount, check: r.selfCheck, placed: sculptCanvas.features.serialize().features.length}), e => ({error: e.message}))`);
   assert.equal(exported.error, undefined); assert.equal(exported.count, exported.placed); assert.equal(exported.check.archive, true); report.export = `${exported.count} features exported, self-check passed`;
-  // A saved feature that does not fit is left out and said so.
-  const loaded = await ev(`(async()=>{const s=sculptRegion.sketch();s.mapData={...s.mapData,features:[{name:'Tree1',x:5,z:5},...s.mapData.features]};sculptRegion.loadSketch(s);await sculptCanvas.idle();return {n:sculptCanvas.features.serialize().features.length,status:document.getElementById('status').textContent};})()`);
+  // A saved feature that does not fit is left out and said so. Replay the
+  // in-place model here; the file importer may navigate to the saved world.
+  const loaded = await ev(`(async()=>{const s=sculptRegion.sketch();s.mapData={...s.mapData,features:[{name:'Tree1',x:5,z:5},...s.mapData.features]};sculptDebug.loadSketch(s);await sculptCanvas.idle();return {n:sculptCanvas.features.serialize().features.length,status:document.getElementById('status').textContent};})()`);
   assert.equal(loaded.n, 4); assert.match(loaded.status, /1 saved feature does not fit this world or map and was left out/); report.unfit = loaded.status;
   report.select = 'select, drag, metal, re-roll, Shift-add, Delete, refused overlap';
   // Every world places every kind: a kind its table lacks is Green's (the Go config generator), lit by the world's own sun. Moon has rocks of its
@@ -194,7 +195,7 @@ try {
   assert.equal(await ev('sculptCanvas.features.serialize().fill.generated.length'),0);
   // Reorder recipes and reload: placed variant addresses still resolve to the same recipes.
   const beforeReorder=await ev('sculptCanvas.features.serialize()');
-  await ev('(()=>{const s=sculptRegion.sketch();s.mapData.featureSet.tree.recipes.reverse();sculptRegion.loadSketch(s);return true;})()'); await ready();
+  await ev('(()=>{const s=sculptRegion.sketch();s.mapData.featureSet.tree.recipes.reverse();sculptDebug.loadSketch(s);return true;})()'); await ready();
   assert.deepEqual(await placements(),beforeReorder.features);
   await ev('(async()=>{sculptCanvas.zoom(1);const v=document.getElementById("viewport");v.scrollLeft=180;v.scrollTop=100;v.dispatchEvent(new Event("scroll"));await sculptCanvas.idle();return true;})()'); await settled(); await shot('mixed-recipes.png');
   const saved=await ev('sculptCanvas.features.serialize()');

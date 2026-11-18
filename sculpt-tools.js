@@ -1,5 +1,5 @@
 // The toolbar's shape tools. A world defines its own (config.tools, its table's world.tools), in order: each {id, label, icon, color, group, shape,
-// rock?} draws its shape (sculpt-scene.js LANDFORM_SHAPES) as the world makes it (toolDefaults, config.worldShapes). index.html holds the fixed
+// rock?, family?} draws its shape (sculpt-scene.js LANDFORM_SHAPES) as the world makes it (toolDefaults, config.worldShapes). index.html holds the fixed
 // buttons (Select, the generic Landform, Fissure and the paint tools) and the icon set (Save as tool's icon choices); the page builds only the shape buttons, from this list, into
 // #shape-tools and #water-tools. A stroke names the tool it was drawn with (node.tool), and shows as the generic landform when the toolbar lacks
 // it (another world's tool). No DOM here: the page and the tests share it.
@@ -17,11 +17,14 @@ export const LANDFORM_TOOL={id:'landform',label:'Landform',icon:'landform',color
 // The palette's other fixed buttons: each id is the stroke kind it draws (move is Select).
 export const FIXED_TOOLS=['move','fissure','smooth','erase','paint','sand','grass'];
 export const toolShape=t => t?.shape??t?.id;
+// A saved tool whose library shape this build no longer has (a shape folded into another) is left out when a save or world loads, as any
+// removed option is: its strokes keep their numbers and show as Landform. Only a well-formed tool naming a missing shape is left out.
+export const shapeGone=(t,base=s => s) => Boolean(t)&&typeof t==='object'&&typeof toolShape(t)==='string'&&!Object.hasOwn(LANDFORM_SHAPES,base(toolShape(t)));
 const ID=/^[A-Za-z][A-Za-z0-9_-]{0,39}$/,COLOR=/^#[0-9a-f]{6}$/i,LABEL_MAX=40,HELP_MAX=300;
 const label=v => typeof v==='string' && v.trim() && v.trim().length<=LABEL_MAX;
 // A tool's presentation and shape, checked (`what` starts the error): an id no fixed button has, a label, an icon of the set, a color, a group,
 // and a shape of the library (`base`: the library shape a world's own shape draws, sculpt-scene.js shapeFrom).
-function checkTool(t,what,base=s => s) {
+export function checkTool(t,what,base=s => s) {
   if (!t || typeof t!=='object' || Array.isArray(t)) throw Error(`${what} is not a tool.`);
   if (typeof t.id!=='string' || !ID.test(t.id) || FIXED_TOOLS.includes(t.id) || t.id===LANDFORM_TOOL.id) throw Error(`${what} needs an id of its own (letters, digits, - and _).`);
   if (!label(t.label)) throw Error(`${what} needs a name of 1 to ${LABEL_MAX} characters.`);
@@ -40,6 +43,8 @@ export function worldTools(config) {
   return tools.map((t,i) => {
     checkTool(t,`The world's tool ${i+1}`,shape => shapeFrom(config,shape));
     if (t.help!==undefined && (typeof t.help!=='string' || !t.help.trim() || t.help.length>HELP_MAX)) throw Error(`The world's tool ${t.id}: its help is a line of at most ${HELP_MAX} characters.`);
+    // Its family: the heading it sits under in the Land flyout (Highlands, Hills, Cuts…); a Land tool without one goes in a last group.
+    if (t.family!==undefined && (!label(t.family) || t.group!=='shape')) throw Error(`The world's tool ${t.id}: a family is a Land tool's heading, a name of 1 to ${LABEL_MAX} characters.`);
     if (/^map-\d/.test(t.id)) throw Error(`The world's tool ${t.id}: map-1, map-2, ... are a map's own tools' ids.`);
     if (seen.has(t.id)) throw Error(`The world's tool ${t.id} is listed twice.`);
     seen.add(t.id); return {...t,label:t.label.trim()};
@@ -91,7 +96,7 @@ const MAP_ID=/^map-[1-9][0-9]{0,5}$/,MAP_FIELDS=['id','label','icon','color','gr
 export const CARD_KEYS=new Set([...SHAPE_FIELDS.map(([key]) => key),...Object.keys(LANDFORM_DEFAULTS),...Object.values(LANDFORM_SHAPES).flatMap(Object.keys),'cracks','diameter','amount','roughness','softness','preset','curve','along']);
 const knotList=v => Array.isArray(v) && v.length>=1 && v.length<=128 && v.every(k => Array.isArray(k) && k.length===2 && k.every(Number.isFinite));
 // A card checked as a map's tool holds it: the settings a brush card has, finite numbers, and curves of knots.
-function checkCard(card,what) {
+export function checkCard(card,what) {
   if (!card || typeof card!=='object' || Array.isArray(card)) throw Error(`${what} needs its settings.`);
   for (const [key,v] of Object.entries(card)) {
     if (!CARD_KEYS.has(key)) throw Error(`${what}: no setting ${JSON.stringify(key)}.`);
@@ -108,7 +113,7 @@ export function copyMapTools(value) {
   if (value==null) return null;
   if (!Array.isArray(value) || value.length>MAP_TOOLS_MAX) throw Error(`A map holds at most ${MAP_TOOLS_MAX} tools of its own.`);
   const seen=new Set();
-  return value.map((t,i) => {
+  return value.filter(t => !shapeGone(t)).map((t,i) => {
     const what=`The map's tool ${i+1}`;
     if (!t || typeof t!=='object' || Object.keys(t).some(k => !MAP_FIELDS.includes(k))) throw Error(`${what} is not a tool.`);
     if (typeof t.id!=='string' || !MAP_ID.test(t.id) || seen.has(t.id)) throw Error(`${what} needs an id of its own, map-1 to map-999999.`);

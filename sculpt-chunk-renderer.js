@@ -3,7 +3,7 @@ import {terrainAllocation,TerrainMemoryError} from './sculpt-memory.js';
 import {rockWeatherBytes} from './sculpt-rock-weather.js';
 // Card D: a bounded working set for the existing terrain shader. Materials
 // belong to this renderer once; callers own the LRU of copied output images.
-import {TerrainRenderer,INPUT_TEXTURES} from './sculpt-renderer.js';
+import {TerrainRenderer,INPUT_TEXTURES,SURFACE_RECORD_BYTES} from './sculpt-renderer.js';
 import {columnRows} from './sculpt-column.js';
 import {PLANT_REACH} from './sculpt-material-model.js';
 import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
@@ -89,7 +89,14 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     if(resource)this.resources.set(resource,{label,bytes,kind});
     this.recordMemory();return resource;
   }
-  release(resource) { if(!resource||!this.resources.has(resource))return;resource.destroy();this.resources.delete(resource); }
+  release(resource) { if(!resource||!this.resources.has(resource))return;resource.destroy();this.resources.delete(resource);this.settleReleases(); }
+  // Chrome's Dawn gives a destroyed texture or buffer's memory back at the device's next queue operation, not at destroy(). Released with
+  // no GPU work after them (a pan that empties the color cache and leaves nothing to bake), the GPU process kept them while the editor sat
+  // idle: 464 MB of a 4x4 map's color cache. onSubmittedWorkDone is such an operation and draws nothing; one follows each burst of releases.
+  settleReleases() {
+    if(this.releaseTimer||this.disposed)return;
+    this.releaseTimer=setTimeout(()=>{this.releaseTimer=null;const queue=this.device?.queue;if(!this.disposed&&queue?.onSubmittedWorkDone)queue.onSubmittedWorkDone().catch(()=>{});},100);
+  }
   get residentBytes() { let n=this.outputBytes;for(const r of this.resources.values())n+=r.bytes;return n; }
   get cpuRetainedBytes() { let bytes=this.uniformData?.byteLength??0;for(const tile of this.colorTiles??[])bytes+=tile.cpu.byteLength+tile.world.byteLength;return bytes; }
   recordMemory() {
@@ -118,7 +125,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const levels=options.mipmaps?Math.floor(Math.log2(Math.max(width,height)))+1:1;
     this.track(loaded.texture,label,mipBytes(width,height,images.length,levels,4),'materials');return loaded;
   }
-  number(key,fallback) { return this.variant?.has(key)?Number(this.variant.get(key)):fallback; }
+  number(key,fallback) { const value=this.variant?.get(key);return value==null?fallback:Number(value); }
   // The shaders bound all neighbourhoods. Bake relief noise is a
   // function of the queried point, not walks through adjacent baked pixels.
   // Only height/mask/weather support extends the bake's field input apron.
@@ -179,7 +186,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   }
   // Relief and cached output use scale s. Color is evaluated at up to four
   // native samples per output pixel, then filtered after shading and palette mapping.
-  estimate(region,width,height,maskPlaneCount=this.maskPlaneCount,scale=1,{budgetBytes=this.budgetBytes,reservedBytes=this.reservedBytes}={}) {
+  estimate(region,width,height,maskPlaneCount=this.maskPlaneCount,scale=1,{budgetBytes=this.budgetBytes,reservedBytes=this.reservedBytes,pixelScale=scale,fastRaster=false}={}) {
     region=alignedFieldRegion(region,scale);
     // Every level uses its exact input lattice and one field-filter guard.
     // Texture padding is not terrain data and need not occupy the color cache.
@@ -187,16 +194,16 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const fieldScale=fieldLevel(scale),field=fieldDimension(region.fieldsWidth,scale)*fieldDimension(region.fieldsHeight,scale)*8;
     const maskLayers=Math.max(1,Math.ceil(maskPlaneCount/4)),input=(region.gridWidth*region.gridHeight)*(24+maskLayers*4);
     const gw=region.gridWidth,gh=region.gridHeight,packing=this.maskPacking(gw,gh,budgetBytes),maskPack=packing.bytes+packing.settingsBytes;
-    const rasterScale=scale<1?scale:Math.max(1,scale/2);
+    const rasterScale=fastRaster?pixelScale:scale<1?scale:Math.max(1,scale/2);
     // Presentation, persistent color, and the copied output image.
-    const output=Math.ceil(width/rasterScale)*Math.ceil(height/rasterScale)*8+Math.ceil(width/scale)*Math.ceil(height/scale)*4;
+    const output=Math.ceil(width/rasterScale)*Math.ceil(height/rasterScale)*8+Math.ceil(width/pixelScale)*Math.ceil(height/pixelScale)*4;
     // The loose-stone / plant mask survives chunk reuse. Include its current
     // allocation and the largest next allocation before reserving voxel memory.
     const margin=Math.max(Math.ceil(3.6*(this.number('boulders',0)>0?32:Math.min(16,3.3*this.rockMax('looseSize',this.number('looseSize',6)))))+4,PLANT_REACH);
     const loose=Math.max(this.looseBuffer?.size??16,(Math.ceil((region.fieldsWidth+2*fieldScale+2*margin)/4)+2)*(Math.ceil((region.fieldsHeight+2*fieldScale+2*margin)/4)+2)*32);
     const rockWeather=this.rockMax('runoff',this.number('runoff',0))>0||this.rockMax('debrisAmount',this.number('debrisAmount',0))>0||this.number('rimReach',0)>0||this.number('shoreRock',0)>0||this.number('shoreShelf',0)>0?rockWeatherBytes(region.fieldsWidth+2*fieldScale,region.fieldsHeight+2*fieldScale):0;
     // D is released before mask packing, so their scratch reservations overlap.
-    const voxel=Math.min(64*MB,budgetBytes*.35),geometryPixels=(Math.ceil(width/rasterScale)+2)*(Math.ceil(height/rasterScale)+2),geometryRecord=geometryPixels*56,geometry=geometryPixels*60;
+    const voxel=Math.min(64*MB,budgetBytes*.35),geometryPixels=(Math.ceil(width/rasterScale)+2)*(Math.ceil(height/rasterScale)+2),geometryRecord=geometryPixels*SURFACE_RECORD_BYTES,geometry=geometryPixels*(SURFACE_RECORD_BYTES+4);
     return {field,input,output,loose,rockWeather,maskPlaneCount,maskLayers,voxel,geometry,geometryRecord,maskPack,colorCacheBytes:this.colorBytes,workingBytes:field+input+output+loose+Math.max(voxel,maskPack)+rockWeather+geometry,
       retainedBytes:this.fixedBytes,reservedBytes,gpuBytes:this.fixedBytes+reservedBytes+this.colorBytes+field+input+output+loose+Math.max(voxel,maskPack)+rockWeather+geometry,
       cpuRetainedBytes:this.cpuRetainedBytes,cpuUploadBytes:input,cpuPeakBytes:this.cpuRetainedBytes+input};
@@ -262,14 +269,14 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     if(!enough())this.voxel?.dropPool();
     this.trimColorTiles(enough);this.trimWorking(new Set([this.activeInput,this.activeLevel]),enough);return enough();
   }
-  async allocate(region,gridWidth,gridHeight,world_width,world_height,fed=false,scale=1) {
+  async allocate(region,gridWidth,gridHeight,world_width,world_height,fed=false,scale=1,pixelScale=scale) {
     region=alignedFieldRegion(region,scale);this.geometryValid=false;
     this.voxel.clear();
-    const rasterScale=scale<1?scale:this.fastRaster?scale:Math.max(1,scale/2),width=Math.ceil(world_width/rasterScale),height=Math.ceil(world_height/rasterScale);   // Color raster; the cached image below still uses `scale`.
+    const rasterScale=this.fastRaster?pixelScale:scale<1?scale:Math.max(1,scale/2),width=Math.ceil(world_width/rasterScale),height=Math.ceil(world_height/rasterScale);   // Preview raster and output share pixels; finals retain supersampling.
     const fieldScale=fieldLevel(scale),fw=fieldDimension(region.fieldsWidth,scale),fh=fieldDimension(region.fieldsHeight,scale),gw=gridWidth,gh=gridHeight;
 
-    this.trimColorTiles(()=>this.estimate({...region,gridWidth,gridHeight},world_width,world_height,this.maskPlaneCount,scale).gpuBytes<=this.budgetBytes);
-    let e=this.estimate({...region,gridWidth,gridHeight},world_width,world_height,this.maskPlaneCount,scale);
+    this.trimColorTiles(()=>this.estimate({...region,gridWidth,gridHeight},world_width,world_height,this.maskPlaneCount,scale,{pixelScale,fastRaster:this.fastRaster}).gpuBytes<=this.budgetBytes);
+    let e=this.estimate({...region,gridWidth,gridHeight},world_width,world_height,this.maskPlaneCount,scale,{pixelScale,fastRaster:this.fastRaster});
     const required=e.gpuBytes;
     if(Math.max(fw,fh,gw,gh,width+2,height+2)>this.limit||required>this.budgetBytes||e.geometryRecord>this.device.limits.maxStorageBufferBindingSize){
       // H13: the parts of the estimate, so a refusal says which one crossed the budget (reserved is the canvas, the paged fields and the image cache).
@@ -297,21 +304,21 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       await terrainAllocation(this.device,()=>{
       if(this.failWorkingAllocation){this.failWorkingAllocation=false;throw new TerrainMemoryError('Forced working-set allocation failure.');}
       if(!input.textures.length){
-        const make=(key,label,layers,format,bytes)=>{input[key]=this.texture(label,gw,gh,layers,format,bytes,read);input.textures.push(input[key]);};
+        const make=(key,label,layers,format,bytes)=>{input[key]=this.texture(label,gw,gh,layers,format,bytes,read|(key==='heightTexture'?T.COPY_SRC:0));input.textures.push(input[key]);};
         make('heightTexture','chunk height',1,'r32float',4);make('routeTexture','chunk routes',1,'rgba8unorm',4);
         input.gridTexture=this.texture('chunk weather and material',gw,gh,4,'rgba8unorm',4,read|T.COPY_SRC);input.textures.push(input.gridTexture);input.maskTexture=this.texture('chunk masks',gw,gh,this.maskLayers,'rgba8snorm',4,read|T.COPY_SRC);input.textures.push(input.maskTexture);
       }
       if(!level.fieldsTexture)level.fieldsTexture=this.texture('chunk fields',fw,fh,1,'rgba16float',8,T.STORAGE_BINDING|T.TEXTURE_BINDING);
       });
     }catch(error){this.dropWorking({kind:'input',key:inputKey,state:input});this.dropWorking({kind:'level',key:scale,state:level});throw error;}
-    this.activeInput=input;this.activeLevel=level;input.used=level.used=++this.workingTick;
+    this.activeInput=input;this.activeLevel=level;this.colorRegion=region;input.used=level.used=++this.workingTick;
     for(const k of INPUT_TEXTURES)this[k]=input[k];this.colorMaskTexture=this.maskTexture;
     this.fieldsTexture=level.fieldsTexture;this.voxelColor=level.voxelColor;Object.assign(this.rockWeather,level.rock);
     // The loose buffer can grow on another level, so its output bind group is fresh.
     this.fieldsOut=this.makeFieldsOut();this.bindGroups={};
     if(this.canvas.width!==width)this.canvas.width=width;if(this.canvas.height!==height)this.canvas.height=height;
     this.outputCanvas??=new OffscreenCanvas(width,height);
-    const ow=Math.ceil(world_width/scale),oh=Math.ceil(world_height/scale);
+    const ow=Math.ceil(world_width/pixelScale),oh=Math.ceil(world_height/pixelScale);
     if(this.outputCanvas.width!==ow)this.outputCanvas.width=ow;if(this.outputCanvas.height!==oh)this.outputCanvas.height=oh;
     this.outputBytes=width*height*4+ow*oh*4;
     // The allocation covers this region and one filtering guard texel.
@@ -452,7 +459,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const row=Math.ceil(width/64)*64,limit=Math.min(64*MB,budgetBytes*.35,this.device.limits.maxStorageBufferBindingSize),rows=Math.min(height,Math.max(1,Math.floor(limit/(row*24)))),bands=Math.ceil(height/rows);
     return {row,rows,bands,bytes:row*rows*24,settingsBytes:bands*this.device.limits.minUniformBufferOffsetAlignment};
   }
-  async packColorMasks(){
+  async packColorMasks(encoder){
     const texture=this.maskTexture,d=this.device,width=texture.width,height=texture.height,stride=d.limits.minUniformBufferOffsetAlignment,{row,rows:bandRows,bands,bytes,settingsBytes}=this.maskPacking(width,height);
     if(!this.maskPackBuffer||!this.resources.has(this.maskPackBuffer)||this.maskPackBuffer.size!==bytes||!this.resources.has(this.maskPackSettings)||this.maskPackSettings.size!==settingsBytes){
       this.release(this.maskPackBuffer);this.release(this.maskPackSettings);
@@ -462,34 +469,49 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       });
     }
     const settings=new Uint32Array(settingsBytes/4);for(let band=0;band<bands;band++){settings[band*stride/4]=band*bandRows;settings[band*stride/4+1]=Math.min(bandRows,height-band*bandRows);}d.queue.writeBuffer(this.maskPackSettings,0,settings);
-    const encoder=d.createCommandEncoder({label:'color mask pack'}),group=d.createBindGroup({layout:this.colorMaskLayout,entries:[{binding:0,resource:texture.createView({dimension:'2d-array'})},{binding:1,resource:{buffer:this.maskPackBuffer}},{binding:2,resource:{buffer:this.maskPackSettings,size:16}},{binding:3,resource:this.gridTexture.createView({dimension:'2d-array'})}]});
+    const group=d.createBindGroup({layout:this.colorMaskLayout,entries:[{binding:0,resource:texture.createView({dimension:'2d-array'})},{binding:1,resource:{buffer:this.maskPackBuffer}},{binding:2,resource:{buffer:this.maskPackSettings,size:16}},{binding:3,resource:this.gridTexture.createView({dimension:'2d-array'})}]});
     for(let band=0;band<bands;band++){
       const y=band*bandRows,rows=Math.min(bandRows,height-y),pass=encoder.beginComputePass({label:'color mask pack'});pass.setPipeline(this.colorMaskPipeline);pass.setBindGroup(0,group,[band*stride]);pass.dispatchWorkgroups(Math.ceil(width/8),Math.ceil(rows/8));pass.end();
       encoder.copyBufferToTexture({buffer:this.maskPackBuffer,bytesPerRow:row*4,rowsPerImage:rows},{texture:this.colorMaskTexture,origin:[0,y,0]},[width,rows,3]);
       encoder.copyBufferToTexture({buffer:this.maskPackBuffer,offset:row*rows*12,bytesPerRow:row*4,rowsPerImage:rows},{texture:this.gridTexture,origin:[0,y,0]},[width,rows,3]);
     }
-    d.queue.submit([encoder.finish()]);
   }
 
   // Geometry and surface textures transfer from the mutable workspace; only
-  // the packed mask and weather/material prefixes are copied. Evict these before reusable work.
-  colorResources(){return [...new Set([this.geometryRecord,this.heightTexture,this.fieldsTexture,this.rockWeather.final,this.rockWeather.source,this.rockWeather.rim].filter(r=>this.resources.get(r)?.kind==='working'))];}
-  colorTileBytes(){return this.colorResources().reduce((n,r)=>n+this.resources.get(r).bytes,0)+this.maskTexture.width*this.maskTexture.height*24+this.layout.size+16;}
+  // cropped height, packed masks and weather/material are copied. Evict these before reusable work.
+  colorResources(){return [...new Set([this.geometryRecord,this.fieldsTexture,this.rockWeather.final,this.rockWeather.source,this.rockWeather.rim].filter(r=>this.resources.get(r)?.kind==='working'))];}
+  // Color still needs the field window and its direct sampling reach, but none of the extra
+  // lattice apron used to bake it or march distant shadows (those are in the geometry record).
+  colorLattice(){
+    const r=this.colorRegion,spacing=r.gridSpacing,ox=Math.round(r.gridOrigin[0]/spacing),oy=Math.round(r.gridOrigin[1]/spacing),apron=Math.max(5,r.reach.direct-r.reach.draw);
+    const first=(p,o,n)=>clamp(Math.floor((p-apron)/spacing)-1-o,0,n-1),last=(p,o,n)=>clamp(Math.ceil((p+apron)/spacing)+1-o,0,n-1);
+    const x=first(r.fieldsX,ox,r.gridWidth),y=first(r.fieldsY,oy,r.gridHeight),width=last(r.fieldsX+r.fieldsWidth-1,ox,r.gridWidth)-x+1,height=last(r.fieldsY+r.fieldsHeight-1,oy,r.gridHeight)-y+1;
+    return {x,y,width,height,origin:[ox+x,oy+y],bytes:width*height*28+this.layout.size+16};
+  }
+  colorTileBytes(){return this.colorResources().reduce((n,r)=>n+this.resources.get(r).bytes,0)+this.colorLattice().bytes;}
   async retainColorTile(){
     if(this.busy||!this.geometryValid||!this.activeInput||!this.activeLevel)return null;
-    if(!this.makeWorkingRoom(this.maskTexture.width*this.maskTexture.height*24+this.layout.size+16))return null;
+    const lattice=this.colorLattice();if(!this.makeWorkingRoom(lattice.bytes))return null;
     this._busy=true;try {
-      const owned=this.colorResources(),source={heightTexture:this.heightTexture,gridTexture:null,maskTexture:this.emptyColorMasks,colorMasks:null,fieldsTexture:this.fieldsTexture,rockWeather:{empty:this.rockWeather.empty,final:this.rockWeather.final,source:this.rockWeather.source,rim:this.rockWeather.rim}};
+      const owned=this.colorResources(),source={heightTexture:null,gridTexture:null,maskTexture:this.emptyColorMasks,colorMasks:null,fieldsTexture:this.fieldsTexture,rockWeather:{empty:this.rockWeather.empty,final:this.rockWeather.final,source:this.rockWeather.source,rim:this.rockWeather.rim}};
       const tile={owned,source,world:this.geometryUniformSnapshot.slice(),cpu:this.uniformData.slice(0),width:this.canvas.width,height:this.canvas.height,outWidth:this.outputCanvas.width,outHeight:this.outputCanvas.height,record:this.geometryRecord,gpuFlags:this.gpuFlags,users:0,retired:false};
       try{await terrainAllocation(this.device,()=>{
-        source.gridTexture=this.texture('retained color weather and material',this.gridTexture.width,this.gridTexture.height,3,'rgba8unorm',4,GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST,'color-cache');
-        source.colorMasks=this.texture('retained color masks',this.maskTexture.width,this.maskTexture.height,3,'rgba8snorm',4,GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST,'color-cache');
+        source.heightTexture=this.texture('retained color height',lattice.width,lattice.height,1,'r32float',4,GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST,'color-cache');
+        source.gridTexture=this.texture('retained color weather and material',lattice.width,lattice.height,3,'rgba8unorm',4,GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST,'color-cache');
+        source.colorMasks=this.texture('retained color masks',lattice.width,lattice.height,3,'rgba8snorm',4,GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST,'color-cache');
         tile.uniform=this.device.createBuffer({label:'retained color uniforms',size:this.layout.size,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});this.track(tile.uniform,'retained color uniforms',this.layout.size,'color-cache');
         tile.frame=this.device.createBuffer({label:'retained color frame',size:16,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});this.track(tile.frame,'retained color frame',16,'color-cache');
-      });}catch(error){this.release(tile.uniform);this.release(tile.frame);this.release(source.colorMasks);this.release(source.gridTexture);throw error;}
+      });}catch(error){this.release(tile.uniform);this.release(tile.frame);this.release(source.colorMasks);this.release(source.gridTexture);this.release(source.heightTexture);throw error;}
       this.device.queue.writeBuffer(tile.frame,0,new Uint32Array([tile.width+2,tile.height+2,0,0]));
-      const encoder=this.device.createCommandEncoder({label:'retain color flags'});encoder.copyBufferToBuffer(this.uniformBuffer,0,tile.uniform,0,this.layout.size);encoder.copyTextureToTexture({texture:this.maskTexture},{texture:source.colorMasks},[this.maskTexture.width,this.maskTexture.height,3]);encoder.copyTextureToTexture({texture:this.gridTexture},{texture:source.gridTexture},[this.gridTexture.width,this.gridTexture.height,3]);this.device.queue.submit([encoder.finish()]);
-      tile.owned.push(tile.uniform,tile.frame,source.colorMasks,source.gridTexture);tile.bytes=tile.owned.reduce((n,r)=>n+this.resources.get(r).bytes,0);for(const r of tile.owned)this.resources.get(r).kind='color-cache';
+      const encoder=this.device.createCommandEncoder({label:'retain color flags'});encoder.copyBufferToBuffer(this.uniformBuffer,0,tile.uniform,0,this.layout.size);
+      for(const [from,to,layers]of [[this.heightTexture,source.heightTexture,1],[this.maskTexture,source.colorMasks,3],[this.gridTexture,source.gridTexture,3]])encoder.copyTextureToTexture({texture:from,origin:[lattice.x,lattice.y,0]},{texture:to},[lattice.width,lattice.height,layers]);
+      this.device.queue.submit([encoder.finish()]);
+      // Keep the global sample phase. Only the regional origin/count change; fields and the
+      // geometry keep their original coordinates. Copy GPU-written availability flags first.
+      for(const [name,value]of [['chunkGridOrigin',lattice.origin],['chunkGridSize',[lattice.width,lattice.height]],['chunkGridCount',[lattice.width,lattice.height]]]){
+        const offset=this.layout.fields.get(name).offset;new Float32Array(tile.cpu,offset,2).set(value);this.device.queue.writeBuffer(tile.uniform,offset,tile.cpu,offset,8);
+      }
+      tile.owned.push(tile.uniform,tile.frame,source.colorMasks,source.gridTexture,source.heightTexture);tile.bytes=tile.owned.reduce((n,r)=>n+this.resources.get(r).bytes,0);for(const r of tile.owned)this.resources.get(r).kind='color-cache';
       tile.group=this.commonBindGroup('draw',source,tile.uniform);tile.geometryGroup=this.geometryBinding(this.geometryInLayout,tile.record,source.colorMasks,tile.frame);this.colorTiles.add(tile);
       // Remove transferred textures from the workspace owners before reuse.
       const keep=new Set(tile.owned),input=this.activeInput,level=this.activeLevel;
@@ -581,7 +603,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   // caller must count its retained bitmap/canvas bytes separately from stats.
   // H6b: options.feed (the GPU shape fields' buffers and the Time pass's, see sculpt.js gpuFeedSource) makes the chunk's textures by a compute pass
   // in place of the CPU read and `upload`; the request then carries no fields, only the chunk's rectangle.
-  async renderChunk(request,{feed=null,scale=1,deferCompletion=false,preview=false,deferPipelines=false,fastRaster=false,...options}={}) {   // feed rides in the options so wrappers that forward (request, options) keep it
+  async renderChunk(request,{feed=null,scale=1,deferCompletion=false,preview=false,deferPipelines=false,fastRaster=false,pixelScale=scale,voxelScale=scale,...options}={}) {   // feed rides in the options so wrappers that forward (request, options) keep it
     if(this.disposed)throw new Error('nanolathe: chunk renderer is disposed');
     if(this.busy)throw new Error('nanolathe: chunk renderer is already rendering');
     this._busy=true;this.gpuFlags=false;   // set by a fed bake whose flags the GPU writes
@@ -597,10 +619,10 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       this.recommendedChunkSize=this.chunkSize();
       // A gesture's own previews (quarter level and coarser) shade one sample per image pixel instead of four: they are replaced within
       // a few frames, and the geometry pass was the largest part of each update.
-      this.fastRaster=Boolean(fastRaster)&&scale>=4;
-      const dimensions=await this.allocate(region,w,h,request.width,request.height,Boolean(feed),scale);
+      this.fastRaster=Boolean(fastRaster);
+      const dimensions=await this.allocate(region,w,h,request.width,request.height,Boolean(feed),scale,pixelScale);
       if(feed)await this.feedFromGpu(request,region,dimensions,feed,passes);else this.upload(request,region,dimensions,planes);
-      this.activeRegion=region;this.voxelScale=scale;
+      this.activeRegion=region;this.voxelScale=voxelScale;
       // An export draws the world as saved: the Surface section's design view (hidden layers, its coverage preview) is set aside for its tiles.
       const design=request.exportArt?this.suspendDesignView():null;
       let result;
@@ -617,13 +639,13 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       const completion=this.device.queue.onSubmittedWorkDone();this.olderChunk=this.previousChunk;this.previousChunk=completion;
       completion.then(()=>{this.completedChunk=completion;},()=>{}); // Device errors are also reported by the renderer.
       if(!deferCompletion)await this.previousChunk;
-      return {...result,canvas:this.outputCanvas,x:request.x,y:request.y,width:request.width,height:request.height,scale,outWidth:Math.ceil(request.width/scale),outHeight:Math.ceil(request.height/scale),exportArt:Boolean(request.exportArt),outputBytes:Math.ceil(request.width/scale)*Math.ceil(request.height/scale)*4,region,stats:{...this.stats(),busy:false}};
+      return {...result,canvas:this.outputCanvas,x:request.x,y:request.y,width:request.width,height:request.height,scale,outWidth:this.outputCanvas.width,outHeight:this.outputCanvas.height,exportArt:Boolean(request.exportArt),outputBytes:this.outputCanvas.width*this.outputCanvas.height*4,region,stats:{...this.stats(),busy:false}};
     } catch(error) {
       // A canceled stage can already own submitted work. The next tile must
       // drain it before recycling the working set, just as on success.
       const completion=this.device.queue.onSubmittedWorkDone();this.previousChunk=completion;
       completion.then(()=>{this.completedChunk=completion;},()=>{});throw error;
-    } finally { this._busy=false;this.cpuWorkingBytes=0; }
+    } finally { this._busy=false;this.cpuWorkingBytes=0;this.fastRaster=false; }   // a bake outside a chunk (timeBake, timeDraw) is never a gesture's
   }
   evict() {
     this.trimColorTiles();this.colorTargets.clear();this.voxel?.release();this.rockWeather?.clear();

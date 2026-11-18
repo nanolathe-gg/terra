@@ -1,5 +1,37 @@
 import {createShapeEngine,createNodePreparer,nodeContextKey,shapeScratchBytes,shapeRequestBytes} from './sculpt-gpu-fields.js';
 import {terrainAllocation} from './sculpt-memory.js';
+// Resolution is a display preference, separate from shape/voxel levels. Choose
+// from the unsplit edit area, then hold that choice for the whole gesture.
+export const previewQuality=value=>['2','3','4','8'].includes(String(value))?String(value):'auto';
+export function previewPixels(preference,area,detail=1){
+  return previewQuality(preference)==='auto'?(area.width*area.height<=(768*detail)**2?2:4):Number(preference);
+}
+// Three slow pictures lower Auto by one level. Recovery needs a sustained
+// fast run and a minimum dwell, so a busy shared GPU cannot make it oscillate.
+// Each gesture starts sharp (reset): one heavy drag does not coarsen the next.
+export function createPreviewLoad(){
+ let scale=1,slow=0,fast=0,changedAt=-Infinity,changes=0,lastMs=null,samples=0,gaps=[],last=null;
+ const observe=(ms,now)=>{
+  if(!Number.isFinite(ms)||ms<=0||!Number.isFinite(now))return false;
+  lastMs=ms;samples++;slow=ms>40?slow+1:0;fast=ms<18?fast+1:ms>28?0:Math.max(0,fast-1);
+  const next=scale===1&&slow>=3?2:scale===2&&fast>=8?1:scale;
+  if(next===scale||now-changedAt<500)return false;
+  scale=next;slow=fast=0;changedAt=now;changes++;return true;
+ };
+ return {get scale(){return scale;},stats:()=>({scale,slow,fast,changes,lastMs,samples}),observe,
+  reset(){scale=1;slow=fast=0;changedAt=-Infinity;gaps=[];last=null;},
+  // A picture's interval runs from its start, or from the previous completion when it queued behind that one: time the GPU spent
+  // waiting for input (a slow pointer) is not load. Pictures that queue back to back measure the completion cadence.
+  complete(now,start=-Infinity,reset=false){
+   if(reset){gaps=[];last=null;}
+   if(last!==null)gaps.push(now-Math.max(start,last));last=now;if(gaps.length>4)gaps.shift();
+   // Browsers may deliver two queue-completion callbacks together. Four
+   // intervals include those zero gaps rather than treating the batch as one
+   // slow picture, and still respond within a few pictures under real load.
+   return gaps.length===4?observe(gaps.reduce((a,b)=>a+b,0)/4,now):false;
+  }
+ };
+}
 const union=(a,b)=>!a||!b?null:{x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),width:Math.max(a.x+a.width,b.x+b.width)-Math.min(a.x,b.x),height:Math.max(a.y+a.height,b.y+b.height)-Math.min(a.y,b.y)};
 // A bounded, display-only lattice for zoomed-out views. It evaluates the same
 // shape graph and masks; exports and picking continue to use canonical fields.
@@ -93,7 +125,9 @@ export function createPreviewLattice(device,scene,memoryChanged=()=>{}){
             if(!target||target.ox!==p.x||target.oy!==p.y||target.pw!==p.side){target?.destroy();target=engine.makeTarget(p.x,p.y,p.side,p.side);}
             submitted=engine.submit(p.nodes,s.context,null,{readback:false,target,prepare:n=>p.recipe.get(n)});
           });
-          await submitted.done;current();shapeKey=p.sk;runs++;
+          // The feed and Time pass use this same queue. Their reads follow shape
+          // without a GPU-to-page round trip; the engine retires its scratch.
+          submitted.done.catch(s.fail);current();shapeKey=p.sk;runs++;
         }
         if(key!==p.held){
           if(!p.reuse)dropWeather();else weatherReuses++;key='';

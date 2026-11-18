@@ -1,5 +1,5 @@
 import {createTerrainBudget,TerrainMemoryError,TERRAIN_BUDGET_MAX,deviceMemory} from './sculpt-memory.js';
-import {createPreviewFields,createPreviewLattice,planPreviewBlocks} from './sculpt-preview.js';
+import {createPreviewFields,createPreviewLattice,planPreviewBlocks,previewQuality,previewPixels,createPreviewLoad} from './sculpt-preview.js';
 import {selectionGeometry,hitSelection,drawSelection} from './sculpt-selection.js';
 import {TerrainRenderer} from './sculpt-renderer.js';
 import {drawMapBounds,sampleField,cellHeights,cellHeightTiles} from './sculpt-map.js';
@@ -41,6 +41,18 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // canonical pages' Time; the finals read those pages.
   const previewGridFor=(level,block)=>block&&level>=2&&previewLattice?previewLattice.grid(Math.max(level,4)):(config.worldGrid??config.grid);
   let previewReserved=false;
+  let quality=previewQuality(api.previewQualityPreference?.());
+  const qualityControl=$('preview-quality');qualityControl.value=quality;
+  qualityControl.addEventListener('change',()=>{quality=previewQuality(qualityControl.value);api.savePreviewQuality?.(quality);previewRejects.clear();schedule();});
+  const previewLoad=createPreviewLoad();
+  const previewRaster=level=>{
+    const fastRaster=interacting()&&level>=4*detailLevel(),automatic=(gesture?.previewQuality??quality)==='auto';
+    const load=gesture&&fastRaster&&automatic&&level<=4*detailLevel()?previewLoad.scale:1;   // a gesture's own backoff; control edits stay sharp
+    // A first Auto picture uses a coarser solid, then the normal one. Under
+    // load both raster and solid back off without replacing the source lattice.
+    const solid=fastRaster&&automatic?Math.max(load,gesture&&!(gesture.previewPictures>0)?2:1):1;
+    return {fastRaster,pixelScale:fastRaster?level/4*(gesture?.previewPixels??(quality==='auto'?4:Number(quality)))*load:level,voxelScale:level*solid};
+  };
   let weatheredView=true;
   try{weatheredView=localStorage.getItem('terraform-weathered-view')!=='false';}catch{}
   if(query.has('weatheredView'))weatheredView=query.get('weatheredView')!=='0';
@@ -111,7 +123,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const heightBytes=[...new Set([...cache.values()].map(e=>e.heightPatch?.fields.h.buffer).filter(Boolean))].reduce((n,b)=>n+b.byteLength,0),owned=ownedBytes()+(passability?.stats().bytes||0),other=otherHeap(owned),accounted=owned+other;
     peakGPU=Math.max(peakGPU,gpu);peakHeap=Math.max(peakHeap,heap);peakAccountedHeap=Math.max(peakAccountedHeap,accounted);
     find('[data-memory]').textContent=`Terrain ${(gpu/MB).toFixed(1)} / ${gpuBudget/MB} MiB · heap ${(accounted/MB).toFixed(1)} / ${heapBudget/MB} MiB · ${cache.size} cached · ${evictions} evictions · ${canonicalSize}px bake${terrainBudget.reason?' · '+terrainBudget.reason:''}`;
-    return {reusedBakes:reused,gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,otherHeapBytes:other,gpuBudget,budgetReason:terrainBudget.reason,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,previewBlocks:blocks.size,previewBlockBytes:blockBytes,preview:previewFields.stats(),previewLattice:previewLattice?.stats()??null,finalizing,dirtyChunks:[...cache.values()].filter(e=>e.dirty).length,dirtyMarks,retainedInvalidations,evictions,bakes,hits,rebakes,levels:{quarter:[...cache.values()].filter(e=>(e.scale??1)>1).length,final:[...cache.values()].filter(e=>(e.scale??1)===1).length,quarterBytes:[...cache.values()].filter(e=>(e.scale??1)>1).reduce((n,e)=>n+e.bytes,0)},canonicalChunkSize:canonicalSize,displayChunkSize:viewChunkSize(),field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
+    return {reusedBakes:reused,gpuBytes:gpu,peakGPUBytes:peakGPU,heapBytes:heap,peakHeapBytes:peakHeap,accountedHeapBytes:accounted,peakAccountedHeapBytes:peakAccountedHeap,ownedArrayBytes:owned,otherHeapBytes:other,gpuBudget,budgetReason:terrainBudget.reason,heapBudget,cacheBytes,heightBytes,cachedChunks:cache.size,previewQuality:quality,previewPixels:gesture?.previewPixels??null,previewLoad:previewLoad.stats(),previewBlocks:blocks.size,previewBlockBytes:blockBytes,preview:previewFields.stats(),previewLattice:previewLattice?.stats()??null,finalizing,dirtyChunks:[...cache.values()].filter(e=>e.dirty).length,dirtyMarks,retainedInvalidations,evictions,bakes,hits,rebakes,levels:{quarter:[...cache.values()].filter(e=>(e.scale??1)>1).length,final:[...cache.values()].filter(e=>(e.scale??1)===1).length,quarterBytes:[...cache.values()].filter(e=>(e.scale??1)>1).reduce((n,e)=>n+e.bytes,0)},canonicalChunkSize:canonicalSize,displayChunkSize:viewChunkSize(),field:fields,renderer:render,strokeMilliseconds:strokeTimes.slice(),frameMilliseconds:frameTimes.slice()};
   }
   function remove(key) { const e=cache.get(key);if(!e)return;renderer.releaseColorTile(e.color);e.bitmap.close?.();cacheBytes-=e.bytes;cache.delete(key);evictions++; }
   // H6b: a bake from the GPU buffers records how many changes had been announced when it took them; it is still good if none announced since touched
@@ -154,7 +166,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       coarseColour=true;features?.groundChanged?.(rect);schedule();
     }
     const record={serial,rev:{...rev},stage,rect:rect?{...rect}:null,fields,channels,tiles,kind};
-    if(input)lastInput=record;
+    // A repeated value still returns a no-op for the input bench. Keep the last
+    // actual edit for the pending bake plan: clearing F here forces full bakes.
+    if(input&&stage)lastInput=record;
     return record;
   }
   function trimTo(limit,protectVisible=false){limit=Math.max(0,limit);const v=state();for(const[key,e]of cache)if(cacheBytes>limit&&!intersects(e,v))remove(key);if(protectVisible&&cacheBytes>limit)throw Error("The preview cannot fit beside the visible final images.");while(cacheBytes>limit&&cache.size)remove(cache.keys().next().value);}
@@ -242,7 +256,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // world change regenerates.
   const keepable=(prior,scale,weathered)=>prior?.fed&&prior.bitmap&&typeof prior.digest==='string'&&prior.scale===scale&&prior.weathered===weathered&&!prior.block&&['C','D','E','F'].every(k=>prior.rev?.[k]===rev[k])?prior.digest:null;
   // check: only prior's checksum is compared (prior kept), and {pending} comes back without waiting for the GPU: a promise of the kept entry, or null.
-  async function bake(rect,exportArt=false,signal,stale=null,scale=1,fit=false,block=false,prior=null,check=false) {
+  // read: a pixel read's bake (inspectNow), which may come between a frame's previews without starting the view's final refinement.
+  async function bake(rect,exportArt=false,signal,stale=null,scale=1,fit=false,block=false,prior=null,check=false,raster={pixelScale:scale,fastRaster:false},read=false) {
     // Wait before preparing fields, too: a queued tile must not start a costly
     // paged replay for a viewport that has moved while the GPU was occupied.
     // One tile's GPU work may still run: this tile prepares beside it (the queue keeps their order), and the wait bounds the GPU work in flight.
@@ -250,7 +265,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     // The completed voxel solid is rebuilt every draw. Release it before page
     // preparation and Time allocate their working sets, rather than afterward.
     renderer.voxel.clear();
-    if(previewLattice&&!exportArt&&!block&&!fit&&!interacting()&&!finalizing){
+    if(previewLattice&&!exportArt&&!block&&!fit&&!read&&!interacting()&&!finalizing){
       // The immutable preview picture remains visible; its source and future
       // refinement working sets no longer need to displace canonical pages.
       // The lattice's Time result is kept (trim): the next gesture begins with it instead of running the lattice's Time before its first picture.
@@ -259,13 +274,13 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const costAt=performance.now(),costBudget=gpuBudget;
     signal?.throwIfAborted();
     if(stale?.())throw new DOMException('The view changed under a queued bake.','AbortError');
-    const readWeather=exportArt||weatheredView,lattice=block&&scale>=2?previewLattice:null,sourceSerial=serial,sourceRev={...rev};
+    const readWeather=exportArt||weatheredView,lattice=block&&scale>=2?previewLattice:null,sourceSerial=serial,sourceRev={...rev},pixel=raster.pixelScale;
     const options=drawOptions?.()??api.drawOptions?.()??{},request={...rect,exportArt,worldSize:config.worldSize??config.size,worldGrid:fit?512:previewGridFor(scale,block)};
     // H6b: with the GPU fields on, the chunk's textures are made from the fields' buffers; no CPU read, no upload, no height patch kept.
     if(!exportArt)api.renderProgress?.('Shaping terrain…');
-    const planned=renderer.requiredRegion(request,options),estimateBefore=renderer.estimate(planned,rect.width,rect.height,api.maskKeys.length,scale);let latticeRegion=planned;
+    const planned=renderer.requiredRegion(request,options),estimateBefore=renderer.estimate(planned,rect.width,rect.height,api.maskKeys.length,scale,raster);let latticeRegion=planned;
     if(lattice){
-      const copyBytes=Math.ceil(rect.width/scale)*Math.ceil(rect.height/scale)*8,visible=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0);
+      const copyBytes=Math.ceil(rect.width/pixel)*Math.ceil(rect.height/pixel)*8,visible=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0);
       // The lattice's window covers the whole view's inputs, not this block's: the block grows with a gesture, and each new window ran
       // the lattice's Time again in the middle of the drag (40-50 ms, six times in a 40-move stroke). At rest it is the same window, so the
       // Time result made for the resting picture is the one the next gesture begins with. Where it does not fit beside the visible tiles,
@@ -295,7 +310,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       // Its pages stay cached after the lease is released. Direct readers
       // and export still complete their requested bake.
       if(!exportArt&&!block&&!fit&&stale&&pipelineWaits.has(renderer.specKey().key))return null;
-      const required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,feed.maskCount,scale),ow=Math.ceil(rect.width/scale),oh=Math.ceil(rect.height/scale),copyBytes=ow*oh*8,room=gpuBudget-steadyGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes;
+      const required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,feed.maskCount,scale,raster),ow=Math.ceil(rect.width/pixel),oh=Math.ceil(rect.height/pixel),copyBytes=ow*oh*8,room=gpuBudget-steadyGPU()-estimate.retainedBytes-estimate.workingBytes-copyBytes;
       // A level whose view does not fit beside the bake would have each tile evict the last, and every repaint would bake them all again.
       if(scale<1&&room<detailBytes(scale))throw new Error(`nanolathe: a view at level ${scale} needs more of GPU memory than the budget leaves`);
       // Cold page preparation may grow residency after the pure plan. Replan
@@ -306,8 +321,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       const measureFinal=!exportArt&&!block&&!fit&&scale===detailLevel()&&!api.previewActive?.()&&(!api.canExport||api.canExport());
       const view=!exportArt&&!block&&!fit,reuse=view?keepable(prior,scale,readWeather):null;
       if(check&&!reuse)return null;
-      const atSerial=lattice?sourceSerial:serial,atRev=lattice?sourceRev:{...rev},result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale,signal,stale,preview:block,fastRaster:block&&interacting(),deferPipelines:!exportArt,deferCompletion:!fit&&!exportArt,digest:view?{reuse,check}:null});
-      const entryFor=bitmap=>({...rect,bitmap,bytes:ow*oh*4,digest:null,kept:false,scale,fit,lattice:Boolean(lattice),weathered:readWeather,fed:true,serial:atSerial,rev:atRev,shapeRev:feed.revision,pipelineKey:result.pipelineKey,weatherRevB:fit?null:feed.weatherRevB,level:scale,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null});
+      const atSerial=lattice?sourceSerial:serial,atRev=lattice?sourceRev:{...rev},result=await renderer.renderChunk(request,{...options,quality:'full',feed,scale,signal,stale,preview:block,...raster,deferPipelines:!exportArt,deferCompletion:!fit&&!exportArt,digest:view?{reuse,check}:null});
+      const entryFor=bitmap=>({...rect,bitmap,bytes:ow*oh*4,digest:null,kept:false,scale,pixel,fit,lattice:Boolean(lattice),weathered:readWeather,fed:true,serial:atSerial,rev:atRev,shapeRev:feed.revision,pipelineKey:result.pipelineKey,weatherRevB:fit?null:feed.weatherRevB,level:scale,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null});
       const kept=entry=>{entry.digest=reuse;entry.kept=true;entry.pipelineKey=prior.pipelineKey;entry.finalCostMs=prior.finalCostMs;entry.finalCostBudget=prior.finalCostBudget;return entry;};
       // A kept picture is prior's bitmap; the caller replaces prior with it only while prior is still the cached entry.
       if(check)return {pending:result.check.then(d=>{if(d!==reuse)return null;reused++;metrics();return kept(entryFor(prior.bitmap));},()=>null)};
@@ -373,7 +388,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const v=state(); if(terrain){g.imageSmoothingEnabled=false;g.drawImage(coarse,v.x/map.width*coarse.width,v.y/map.height*coarse.height,v.width/map.width*coarse.width,v.height/map.height*coarse.height,0,0,canvas.width,canvas.height);}
     ng.imageSmoothingEnabled=false; ng.drawImage(coarse,0,0,navigatorCanvas.width,navigatorCanvas.height); ng.strokeStyle='#fff0a0'; ng.lineWidth=1; ng.strokeRect(v.x/map.width*200+.5,v.y/map.height*200+.5,Math.min(200,v.width/map.width*200),Math.min(200,v.height/map.height*200));
   }
+  let overlayFrame=null;
+  function requestOverlay(){if(overlayFrame===null)overlayFrame=requestAnimationFrame(()=>{overlayFrame=null;overlays();});}
   function overlays() {
+    if(overlayFrame!==null){cancelAnimationFrame(overlayFrame);overlayFrame=null;}
     const v=state(); ink.setTransform(1,0,0,1,0,0); ink.clearRect(0,0,overlay.width,overlay.height); ink.save(); ink.scale(scale,scale); ink.translate(-v.x,-v.y);
     passability?.draw(ink,v,scale);
     // Map-coordinate height cells; this guide is only an overlay, never art.
@@ -383,7 +401,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       for(let x=x0;x<=x1;x+=step){ink.strokeStyle=x%128===0?'#d4ebd45c':'#c1dfcd24';ink.beginPath();ink.moveTo(x,y0);ink.lineTo(x,y1);ink.stroke();}
       for(let y=y0;y<=y1;y+=step){ink.strokeStyle=y%128===0?'#d4ebd45c':'#c1dfcd24';ink.beginPath();ink.moveTo(x0,y);ink.lineTo(x1,y);ink.stroke();}
     }
-    drawMapBounds(ink,map,config,navigating()?coarseSample:api.sampleAuthored??sourceSample); features?.draw(ink,v);
+    drawMapBounds(ink,map,config,navigating()?coarseSample:api.sampleAuthored??sourceSample,v); features?.draw(ink,v);
     if(!navigating()&&api.currentTool()==='move'&&!features?.active){
       const members=api.selectedShapes?.()||[];
       if(hoveredNode>=0&&hoveredNode!==api.selection()&&!members.includes(hoveredNode))drawSelection(ink,geometry(hoveredNode),{label:api.selectionLabel(hoveredNode),hover:true});
@@ -392,7 +410,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     }
     // H27: a landform's section picked on its along-the-path canvas, marked across the path (also while the drawing tool keeps the shape just drawn).
     if(!navigating()&&!features?.active){const mark=api.sectionMark?.();if(mark){const a=project(mark.a),b=project(mark.b);ink.save();ink.strokeStyle='#ffd27a';ink.lineWidth=2.5/scale;ink.beginPath();ink.moveTo(a.x,a.y);ink.lineTo(b.x,b.y);ink.stroke();ink.restore();}}
-    if (!navigating() && hover && !features?.active && (api.currentTool()!=='move'||api.drawMode?.()==='add')) { ink.strokeStyle='#b8eef3'; ink.lineWidth=1/scale; ink.beginPath(); ink.arc(hover[0],hover[1]-(Math.max(config.seaLevel,visibleSample(...hover))-config.baseHeight)/2,Number($('diameter').value)/2,0,Math.PI*2); ink.stroke(); }
+    if (!navigating() && hover && !features?.active && !api.picking?.() && (api.currentTool()!=='move'||api.drawMode?.()==='add')) { ink.strokeStyle='#b8eef3'; ink.lineWidth=1/scale; ink.beginPath(); ink.arc(hover[0],hover[1]-(Math.max(config.seaLevel,visibleSample(...hover))-config.baseHeight)/2,Number($('diameter').value)/2,0,Math.PI*2); ink.stroke(); }
     // H7b: ?levelsOverlay=1 marks each shown chunk with its level: orange Q for a quarter image, green F for a final one.
     if(levelsOverlay)for(const e of cache.values())if(intersects(e,v)){const q=(e.scale??1)>1;ink.strokeStyle=q?'#ff9a3c':'#7dff7d';ink.lineWidth=2/scale;ink.strokeRect(e.x+1/scale,e.y+1/scale,e.width-2/scale,e.height-2/scale);ink.fillStyle=ink.strokeStyle;ink.font=`${16/scale}px monospace`;ink.fillText(q?'Q':'F',e.x+8/scale,e.y+20/scale);}
     ink.restore();
@@ -415,7 +433,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     }return clips;
   }
   function paint(entry,v=state()) {
-    const k=entry.scale??1,x0=Math.round((entry.x-v.x)*scale),y0=Math.round((entry.y-v.y)*scale),x1=Math.round((entry.x+entry.bitmap.width*k-v.x)*scale),y1=Math.round((entry.y+entry.bitmap.height*k-v.y)*scale);
+    const k=entry.pixel??entry.scale??1,x0=Math.round((entry.x-v.x)*scale),y0=Math.round((entry.y-v.y)*scale),x1=Math.round((entry.x+entry.bitmap.width*k-v.x)*scale),y1=Math.round((entry.y+entry.bitmap.height*k-v.y)*scale);
     entry.paintedClips=entry.block?blockClips(entry,v):entry.colorRect?[entry.colorRect]:null;
     if(entry.paintedClips){if(!entry.paintedClips.length)return;g.save();g.beginPath();for(const r of entry.paintedClips)g.rect(Math.round((r.x-v.x)*scale),Math.round((r.y-v.y)*scale),Math.round((r.x+r.width-v.x)*scale)-Math.round((r.x-v.x)*scale),Math.round((r.y+r.height-v.y)*scale)-Math.round((r.y-v.y)*scale));g.clip();}
     g.imageSmoothingEnabled=scale<1||k*scale<1;g.imageSmoothingQuality='high';g.drawImage(entry.bitmap,x0,y0,x1-x0,y1-y0);
@@ -426,8 +444,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   function wakeLadder(delay){clearTimeout(ladderTimer);ladderTimer=setTimeout(()=>{ladderTimer=null;schedule();},Math.max(0,delay));}
   function previewSignature(r,level,q,e){return [r.x,r.y,r.width,r.height,level,...q.gridOrigin,q.gridWidth,q.gridHeight,q.fieldsX,q.fieldsY,q.fieldsWidth,q.fieldsHeight,e.workingBytes].join(',');}
   function previewCost(rect,level,options=drawOptions?.()??api.drawOptions?.()??{},visibleBytes=[...cache.values()].filter(e=>intersects(e,state())).reduce((n,e)=>n+e.bytes,0)){
-    const request={...rect,worldSize:config.worldSize??config.size,worldGrid:previewGridFor(level,true)},required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,api.maskKeys.length,level),source=level>=4?previewLattice?.plan(required,weatheredView,interacting()).additionalBytes??0:0;
-    return {required,estimate,total:estimate.retainedBytes+estimate.workingBytes+source+fixedGPU()+visibleBytes+Math.ceil(rect.width/level)*Math.ceil(rect.height/level)*8};
+    const raster=previewRaster(level),request={...rect,worldSize:config.worldSize??config.size,worldGrid:previewGridFor(level,true)},required=renderer.requiredRegion(request,options),estimate=renderer.estimate(required,rect.width,rect.height,api.maskKeys.length,level,raster),source=level>=4?previewLattice?.plan(required,weatheredView,interacting()).additionalBytes??0:0;
+    return {required,estimate,total:estimate.retainedBytes+estimate.workingBytes+source+fixedGPU()+visibleBytes+Math.ceil(rect.width/raster.pixelScale)*Math.ceil(rect.height/raster.pixelScale)*8};
   }
   function releasePreviewMemory(area,level){
     if(!previewLattice||level<4)return;
@@ -551,6 +569,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           const nearArea=editNear?{x:nearX,y:nearY,width:Math.min(editNear.x+editNear.width,clipped.x+clipped.width)-nearX,height:Math.min(editNear.y+editNear.height,clipped.y+clipped.height)-nearY}:null;
           const retained=e=>e&&e.bitmap&&!e.fit&&!offLevel(e,detailLevel())&&e.weathered===weatheredView;
           const previewArea=nearArea&&nearArea.width>0&&nearArea.height>0&&stale.every(r=>intersects(r,nearArea)||retained(cache.get(cacheKey(r,size))))?nearArea:clipped;
+          // Lock the unsplit edit's resolution before budgeting or awaiting GPU work.
+          if(gesture&&gesture.previewPixels==null){gesture.previewQuality=quality;gesture.previewPixels=previewPixels(quality,previewArea,detailLevel());gesture.previewPictures=0;previewLoad.reset();}
           const coarse=previewPlan(previewArea,coarseLevel).sort((a,b)=>dist(a)-dist(b));
           const coarseReady=coarse.every(r=>blockCurrent(blocks.get(blockKey(r,coarseLevel))));
           // F leaves geometry and Time unchanged. Reuse only measured costs
@@ -622,7 +642,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
           const checks=[];
           try{
             for(const {rect,want,block=false,color=false,ready=null} of plan){
-              if(suspended||token!==serial||viewToken!==viewEpoch||busy||previewing!==interacting())break;
+              if(suspended||token!==serial||viewToken!==viewEpoch||busy||readWaiting||previewing!==interacting())break;   // a pixel read waits: it goes next (inspectNow)
               const key=cacheKey(rect,size),e=cache.get(key);
               if(block||color||ready||holding||!intersects(rect,v)||!e?.dirty||!keepable(e,want,weatheredView))continue;
               const controller=new AbortController();activeBake={controller,rect};
@@ -646,7 +666,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         const canContinueColor=color=>color&&allColor&&lastInput?.stage==='F'&&jobs.every(r=>!intersects(r,v)||colorCurrent(cache.get(cacheKey(r,size))));
         const colorResults=new Map();
         try{for(const [jobIndex,{rect,want,block=false,fineTurn=false,color=false,ready=null,readyKey=''}] of plan.entries()){
-          if(suspended||(token!==serial&&!canContinueColor(color))||viewToken!==viewEpoch||busy||previewing!==interacting()){rerun=true;break;}
+          if(suspended||(token!==serial&&!canContinueColor(color))||viewToken!==viewEpoch||busy||readWaiting||previewing!==interacting()){rerun=true;break;}
           if((previewing||navigating()||want<1)&&!intersects(rect,v))continue;   // a detail level bakes only what is seen: its ring would evict itself
           if(block){
             const key=blockKey(rect,want),prior=blocks.get(key);if(blockCurrent(prior))continue;
@@ -655,11 +675,22 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             if(prior&&!prior.dirty&&!changedSince(prior.serial,prior.input,'F',prior.lattice)&&prior.weatherRevB<rev.B&&!api.canExport?.()){wakeLadder(100);continue;}
             // Finish a small coarse refresh even if newer input arrives. Its
             // source revision stays old; the next turn picks up the newest edit.
-            const finishOnInput=Boolean(previewLattice&&want>=4&&want===coarseLevel),controller=new AbortController();activeBake={controller,rect,finishOnInput,preview:want>=4};let e;
+            const finishOnInput=Boolean(previewLattice&&want>=4&&want===coarseLevel),controller=new AbortController();activeBake={controller,rect,finishOnInput,preview:want>=4};const raster=previewRaster(want),owner=gesture,startedAt=performance.now();let e;
             try{if(lastInput?.stage==='F'&&colorInputCurrent(prior)){
-              const result=await renderer.renderColorTile(prior.color,drawOptions?.()??api.drawOptions?.()??{}),bitmap=new OffscreenCanvas(Math.ceil(rect.width/want),Math.ceil(rect.height/want));bitmap.getContext('2d').drawImage(result.canvas,0,0);e={...prior,bitmap,serial:token,rev:{...rev}};
-            }else e=await bake(rect,false,controller.signal,()=>!finishOnInput&&token!==serial||busy||viewToken!==viewEpoch,want,false,true);}
+              const result=await renderer.renderColorTile(prior.color,drawOptions?.()??api.drawOptions?.()??{}),bitmap=new OffscreenCanvas(Math.ceil(rect.width/(prior.pixel??want)),Math.ceil(rect.height/(prior.pixel??want)));bitmap.getContext('2d').drawImage(result.canvas,0,0);e={...prior,bitmap,serial:token,rev:{...rev}};
+            }else e=await bake(rect,false,controller.signal,()=>!finishOnInput&&token!==serial||busy||viewToken!==viewEpoch,want,false,true,null,false,raster);}
             finally{if(activeBake?.controller===controller)activeBake=null;}
+            if(raster.fastRaster&&owner&&owner.previewQuality==='auto'){
+              owner.previewPictures++;const timeRuns=previewLattice?.stats().timeRuns;
+              renderer.previousChunk.then(()=>{
+                if(gesture!==owner)return;
+                const now=performance.now(),last=owner.previewCompletion;
+                // Ignore the cold source/Time pass. Waiting for input is not
+                // counted (sculpt-preview.js createPreviewLoad complete).
+                if(previewLoad.complete(now,startedAt,!last||last.timeRuns!==timeRuns))schedule();
+                owner.previewCompletion={at:now,timeRuns};
+              },()=>{});
+            }
             e.block=true;e.dirty=changedSince(e.serial,e.input,'F',e.lattice);e.bakedAt=performance.now();if(!e.color)await retainColor(e);
             if(want===coarseLevel){fineSinceCoarse=false;}
             if(prior){if(prior.color!==e.color)renderer.releaseColorTile(prior.color);blockBytes-=prior.bytes;}blocks.set(key,e);blockBytes+=e.bytes;
@@ -735,7 +766,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         // Generated deposits and vents sit where the export puts them and take their colors from the export art under them
         // (sculpt-features.js): one anchor read or one 128 px patch per idle frame, after the view's own images and only once the
         // weather the export reads is in.
-        if(!suspended&&!rerun&&token===serial&&viewToken===viewEpoch&&!previewing&&!navigating()&&!holding&&quiet>=1000&&(!api.canExport||api.canExport())&&await features?.fitGround?.(state()))rerun=true;
+        if(!suspended&&!rerun&&!readWaiting&&token===serial&&viewToken===viewEpoch&&!previewing&&!navigating()&&!holding&&quiet>=1000&&(!api.canExport||api.canExport())&&await features?.fitGround?.(state()))rerun=true;
       }
       if(!rerun&&!interacting()&&!foregroundPending()&&(!api.canExport||api.canExport()))api.renderProgress?.(null);
       const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
@@ -797,9 +828,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     clearTimeout(navigationTimer);
     navigationTimer=setTimeout(()=>{navigationTimer=null;schedule();},navigationDelay);
   }
-  function zoom(next) {
+  // zoom(next, at): to a scale or 'overview', keeping the view's center, or centering on `at` ({x, y} in art pixels) when given.
+  function zoom(next,at=null) {
     $('fit').setAttribute('aria-pressed',String(next==='overview'));$('one').setAttribute('aria-pressed',String(next===1));$('zoom').value=String(next);
-    const v=state(),cx=v.x+v.width/2,cy=v.y+v.height/2;overview=next==='overview';if(!overview)scale=clamp(Number(next)||1,.1,4);
+    const v=state(),cx=at?.x??v.x+v.width/2,cy=at?.y??v.y+v.height/2;overview=next==='overview';if(!overview)scale=clamp(Number(next)||1,.1,4);
     resize();viewport.scrollLeft=Math.max(0,cx*scale-canvas.width/2);viewport.scrollTop=Math.max(0,cy*scale-canvas.height/2);position();schedule();
   }
   $('fit').onclick=()=>zoom('overview');$('one').onclick=()=>zoom(1);$('zoom').onchange=e=>zoom(e.target.value==='overview'?'overview':Number(e.target.value));
@@ -845,20 +877,45 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const endNavigation=event=>{if(navigationPointer!==event.pointerId)return;navigationPointer=null;if(navigatorCanvas.hasPointerCapture(event.pointerId))navigatorCanvas.releasePointerCapture(event.pointerId);navigationChanged();};
   for(const name of ['pointerup','pointercancel','lostpointercapture'])navigatorCanvas.addEventListener(name,endNavigation);
   navigatorCanvas.onkeydown=event=>{const d={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];if(!d||busy||gesture||features?.busy)return;event.preventDefault();event.stopPropagation();if(overview)zoom(1);viewport.scrollLeft+=d[0]*canvas.width*.2;viewport.scrollTop+=d[1]*canvas.height*.2;navigationChanged();};
-  // The Surface section's inspector: what the draw laid at one art pixel ({x, y}: screen(event)), from a small final-scale draw around it
-  // that records that pixel (renderer.setProbe); null when the pixel is off the map.
-  async function inspect(at){
-    const x=Math.floor(at.x),y=Math.floor(at.y);if(x<0||y<0||x>=Math.floor(map.width)||y>=Math.floor(map.height))return null;
-    const W=Math.floor(map.width),H=Math.floor(map.height),size=Math.min(32,W,H),rect={x:clamp(x-16,0,W-size),y:clamp(y-16,0,H-size),width:size,height:size};
-    await idle();renderer.setProbe({x,y});
-    try{const e=await bake(rect,false,undefined,null,1);e?.bitmap?.close?.();return await renderer.readProbe();}finally{renderer.setProbe(null);}
+  // Pick and the Surface section's inspector: what the draw laid at one art pixel ({x, y}: screen(event)), from a small final-scale draw around
+  // it that records that pixel (renderer.setProbe); null when the pixel is off the map, {unread: true} when the draw recorded nothing there.
+  // One read at a time: they share the probe and the chunk renderer, so a second click's read waits for the first's.
+  // A read goes between the canvas's own draws, not after the whole view is final: it waits for the draw in flight (a frame lets it in at its
+  // next tile: readWaiting) and for queued World inputs, then holds the renderer as a frame does (drawing), so no frame, ring bake or final
+  // starts under it; the frame it held off runs after it. A read that still meets the renderer busy (work outside the frames) tries once more
+  // after that work ends; one that needs pipelines still compiling lets the frames run while it waits for them.
+  const offMap=at=>{const x=Math.floor(at.x),y=Math.floor(at.y);return x<0||y<0||x>=Math.floor(map.width)||y>=Math.floor(map.height);};
+  let inspecting=Promise.resolve(),readWaiting=0;
+  // `current`: whether the asker still wants this read; one superseded while queued (another pick, an undo's refresh, the card closed) is
+  // dropped before it takes the renderer, so a run of reads cannot hold the map's frames off.
+  function inspect(at,current=()=>true){const run=inspecting.then(()=>current()?inspectNow(at):{superseded:true});inspecting=run.catch(()=>{});return run;}
+  async function holdForRead(){readWaiting++;try{while(drawing||renderer.busy||api.pendingInputs?.())await tick();}finally{readWaiting--;}drawing=true;}
+  function releaseRead(){drawing=false;schedule();}
+  async function inspectNow(at){
+    if(offMap(at))return null;
+    const x=Math.floor(at.x),y=Math.floor(at.y),W=Math.floor(map.width),H=Math.floor(map.height),size=Math.min(32,W,H),rect={x:clamp(x-16,0,W-size),y:clamp(y-16,0,H-size),width:size,height:size};
+    let retried=false,compiles=0;
+    for(;;){
+      await holdForRead();
+      let held=true;   // while a retry awaits, a frame can take drawing: release only this attempt's hold
+      const release=()=>{if(!held)return;held=false;renderer.setProbe(null);releaseRead();};
+      try{renderer.setProbe({x,y});const e=await bake(rect,false,undefined,null,1,false,false,null,false,{pixelScale:1,fastRaster:false},true);e?.bitmap?.close?.();return await renderer.readProbe()??{unread:true};}
+      catch(error){
+        if(error.name==='PipelinesPending'&&compiles++<3){release();await error.ready;continue;}
+        if(/already rendering/.test(error.message)&&!retried){retried=true;release();while(renderer.busy)await tick();continue;}
+        throw error;
+      }
+      finally{release();}
+    }
   }
+  // Where an art pixel's center is on the page now (Pick's card follows it as the view moves).
+  function client(at){const r=overlay.getBoundingClientRect(),v=state();return {x:r.left+(Math.floor(at.x)+.5-v.x)*scale,y:r.top+(Math.floor(at.y)+.5-v.y)*scale};}
   function localPoint(event){const p=screen(event),q=pickWorld(p);return {x:q[0],y:q[1]};}
   function nodeMetadata(index){return api.nodeMetadata?api.nodeMetadata(index):api.graph()[index];}
   const project=p=>({x:p.x,y:p.y-(Math.max(config.seaLevel,visibleSample(p.x,p.y))-config.baseHeight)/2});
   function geometry(index){return selectionGeometry(nodeMetadata(index),project,state());}
   function refreshHover(event){
-    if(gesture||pan||busy||features?.active||api.currentTool()!=='move'||api.drawMode?.()==='add'||api.pathAdding?.()){hoveredNode=-1;overlay.style.cursor=pan?'grabbing':'crosshair';return;}
+    if(gesture||pan||busy||features?.active||api.picking?.()||api.currentTool()!=='move'||api.drawMode?.()==='add'||api.pathAdding?.()){hoveredNode=-1;overlay.style.cursor=pan?'grabbing':'crosshair';return;}
     const q=screen(event),hit=hitSelection(geometry(api.selection()),{x:q.x,y:q.z},api.pathEditing?.());
     const feature=!hit&&!api.pathEditing?.()&&features?.hitAt?.(q);
     hoveredNode=feature?-1:api.pickAt(localPoint(event));
@@ -868,6 +925,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   overlay.addEventListener('pointerdown',event=>{
     if(![0,1].includes(event.button)||busy||gesture||pan||api.gestureActive?.()||!api.ready())return;event.preventDefault();overlay.focus({preventScroll:true});overlay.setPointerCapture(event.pointerId);
     if(space||event.button===1){pan={id:event.pointerId,x:event.clientX,y:event.clientY,left:viewport.scrollLeft,top:viewport.scrollTop};return;}
+    // Pick (sculpt.js pickHere): with the Pick tool, or Alt held whatever the tool, the click reads its pixel and does nothing else (the
+    // features' own handler, which listens first, leaves an Alt-click to this one).
+    if(api.pickHere?.(event,(q=>({x:q.x,y:q.z}))(screen(event)),localPoint(event))){event.stopImmediatePropagation();return;}
     if(features?.active)return;
     const p=localPoint(event),start=performance.now();hover=[p.x,p.y];
     // Select (V) picks a generated feature before a shape, unless a selected shape's handle is under the pointer (sculpt-features.js).
@@ -898,9 +958,11 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     pendingStrokeTime=start;metadata?.update?.();schedule();
   });
   function preview(event,final=false){
-    hover=pickWorld(screen(event));
-    // A stationary release must not pick the newly raised surface again.
-    if(gesture?.id!==event.pointerId||gesture.clientX===event.clientX&&gesture.clientY===event.clientY)return;
+    // A held transform uses projected coordinates directly. Picking terrain
+    // again costs many authored-height samples and does not enter its edit.
+    if(gesture?.id===event.pointerId&&gesture.clientX===event.clientX&&gesture.clientY===event.clientY)return;
+    if(api.currentTool()!=='move'||api.drawMode?.()==='add')hover=pickWorld(screen(event));
+    if(gesture?.id!==event.pointerId)return;
     if(gesture.type==='stroke'&&Math.hypot(hover[0]-gesture.points.at(-1).x,hover[1]-gesture.points.at(-1).y)>(final?0:3)){gesture.clientX=event.clientX;gesture.clientY=event.clientY;gesture.points.push({x:hover[0],y:hover[1]});pendingStrokeTime=performance.now();api.previewStroke(gesture.points);}
     else if(gesture.type==='move'){
       gesture.clientX=event.clientX;gesture.clientY=event.clientY;const q=screen(event),h=gesture.handles,c=h.pivot,around=(a,b,c1,d)=>[a,b,c1,d,c.x-a*c.x-c1*c.y,c.y-b*c.x-d*c.y];let edit;
@@ -914,7 +976,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   overlay.addEventListener('pointermove',event=>{const q=screen(event);focus=[q.x,q.z];
     if(pan?.id===event.pointerId){viewport.scrollLeft=pan.left-event.clientX+pan.x;viewport.scrollTop=pan.top-event.clientY+pan.y;navigationChanged();return;}
     if(navigating()&&!gesture)return;
-    preview(event);refreshHover(event);if(passability?.active){const p=pickWorld(screen(event));passability.inspect(...p);}if(gesture?.id===event.pointerId)schedule();overlays();
+    preview(event);refreshHover(event);if(passability?.active){const p=pickWorld(screen(event));passability.inspect(...p);}if(gesture?.id===event.pointerId)schedule();requestOverlay();
   });
   overlay.addEventListener('pointerleave',()=>{hoveredNode=-1;hover=null;overlays();});
   const end=event=>{if(pan?.id===event.pointerId){pan=null;navigationChanged();}if(gesture?.id===event.pointerId){const commit=event.type==='pointerup';released=commit;if(commit)preview(event,true);const s=gesture;gesture=null;if(s.type==='move')api.endMove(commit);else api.endStroke(commit);released=commit;if(commit)pendingStrokeTime=performance.now();}if(overlay.hasPointerCapture(event.pointerId))overlay.releasePointerCapture(event.pointerId);schedule();};
@@ -923,7 +985,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   window.addEventListener('blur',()=>{space=false;pan=null;navigationPointer=null;if(gesture)end({pointerId:gesture.id,type:'pointercancel'});schedule();});
   function budgets(event){if(event?.target===find('[data-gpu]')){terrainBudget.choose(clamp(Number(find('[data-gpu]').value)||terrainBudget.mb,128,TERRAIN_BUDGET_MAX));const url=new URL(location.href);url.searchParams.set('gpuMB',terrainBudget.mb);history.replaceState(null,'',url);}gpuBudget=terrainBudget.mb*MB;heapBudget=clamp(Number(find('[data-heap]').value)||1024,128,8192)*MB;renderer.trimColorTiles(()=>renderer.colorBytes<=colorReserve());api.setBudget?.(heapBudget*.65);api.fitGpuBudget?.();configureChunks();metrics();schedule();}
   find('[data-gpu]').onchange=budgets;find('[data-heap]').onchange=budgets;
-  async function idle(){do{while(drawing||pending||renderer.busy||pipelineWaits.size||navigationTimer||navigating()||api.pendingInputs?.()||ladderTimer&&foregroundPending())await tick();await renderer.previousChunk;}while(drawing||pending||renderer.busy||pipelineWaits.size||navigationTimer||navigating()||api.pendingInputs?.()||ladderTimer&&foregroundPending());}
+  async function idle(){do{while(overlayFrame!==null||drawing||pending||renderer.busy||pipelineWaits.size||navigationTimer||navigating()||api.pendingInputs?.()||ladderTimer&&foregroundPending())await tick();await renderer.previousChunk;}while(overlayFrame!==null||drawing||pending||renderer.busy||pipelineWaits.size||navigationTimer||navigating()||api.pendingInputs?.()||ladderTimer&&foregroundPending());}
   // Each corner is sampled from an awaited canonical weather field (sculpt-map.js cellHeights). No uncached preview height may enter the TNT
   // while lazy tiles are refining.
   async function sampleHeights(signal){
@@ -944,7 +1006,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     await idle();const size=chunkSize(),total=Math.ceil(map.width/size)*Math.ceil(map.height/size);let index=0;
     for(let y=0;y<map.height;y+=size)for(let x=0;x<map.width;x+=size){signal?.throwIfAborted();const rect={x,y,width:Math.min(size,map.width-x),height:Math.min(size,map.height-y)},entry=await bake(rect,true,signal),tile=new OffscreenCanvas(rect.width,rect.height),c=tile.getContext('2d');c.drawImage(entry.bitmap,0,0);entry.bitmap.close?.();paint?.(c,rect);const png=await tile.convertToBlob({type:'image/png'});await accept({...rect,png},index++,total);tile.width=tile.height=1;metrics();}
   }
-  // H6b: with the GPU feed the chunks rebake as a change is submitted (they read the GPU buffers); the overview and the save wait until the CPU copy holds it.
+  // H6b: display invalidations arrive when fields change. Preview lattices can answer immediately; canonical feeds prepare their own current buffers. The overview and save wait for the CPU copy.
   const invalidate=change=>changed({stage:'A',rect:api.expandDirty?.(change?.rect??null)??change?.rect??null,world:false,channels:[{name:'shape',stage:'A'}]});
   api.subscribeSubmit?.(change=>{if(api.gpuFeedActive?.()){pendingStrokeTime ||= performance.now();invalidate(change);}});
   api.subscribe?.(change=>{pendingStrokeTime ||= performance.now();markCoarse(change?.rect??null);if(!api.gpuFeedActive?.())invalidate(change);});
@@ -974,7 +1036,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(previews&&!finalizing&&!overview&&levels&&api.gpuFeedActive?.()){
       const v=state(),width=Math.min(map.width,Math.ceil(v.width/64)*64),height=Math.min(map.height,Math.ceil(v.height/64)*64),options=drawOptions?.()??api.drawOptions?.()??{};
       const request={x:Math.floor((map.width-width)/2),y:Math.floor((map.height-height)/2),width,height,worldSize:config.worldSize??config.size,worldGrid:config.worldGrid??config.grid};
-      const sets=(previewLattice?[8,4,2]:[4,2]).map(k=>{const requestLevel={...request,worldGrid:previewGridFor(k*detailLevel(),true)},r=renderer.requiredRegion(requestLevel,options),e=renderer.estimate(r,width,height,api.maskKeys.length,k*detailLevel());
+      const sets=(previewLattice?[8,4,2]:[4,2]).map(k=>{const requestLevel={...request,worldGrid:previewGridFor(k*detailLevel(),true)},r=renderer.requiredRegion(requestLevel,options),e=renderer.estimate(r,width,height,api.maskKeys.length,k*detailLevel(),previewRaster(k*detailLevel()));
         if(k*detailLevel()>=4)e.source=previewLattice?.plan(r,weatheredView).peakBytes??0;return e;});
       // Distinct shape lattices keep separate inputs; equal lattices share them.
       // The final reserve already has the voxel pool.
@@ -992,6 +1054,6 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     if(gpuResident()+bytes>gpuBudget)previewLattice.clear();
     return true;
   }
-  const result={inspect,artPoint:event=>{const p=screen(event);return {x:p.x,y:p.z};},setSuspended,get suspended(){return suspended;},renderer,passability,minimumBytes,prepareTime,foregroundPending,previewWorkPending:()=>Boolean(activeBake?.preview)||draftDue&&performance.now()-lastInputAt<DRAFT_LEAD,gpuWorkPending:()=>drawing||renderer.busy,prepareBackground:bytes=>{if(suspended||drawing||renderer.busy||foregroundPending())return false;if(gpuResident()+bytes>gpuBudget)renderer.evict();return gpuResident()+bytes<=gpuBudget;},schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty||e.weathered&&!(e.weatherRevB>=rev.B)||!colorCovers(e)),colorRect:e.colorRect,serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,finalCostMs:e.finalCostMs,finalCostBudget:e.finalCostBudget,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
+  const result={inspect,offMap,client,refineWhileHeld:()=>interacting()&&gesture?.type!=='stroke'&&performance.now()-lastInputAt>=250,artPoint:event=>{const p=screen(event);return {x:p.x,y:p.z};},setSuspended,get suspended(){return suspended;},renderer,passability,minimumBytes,prepareTime,foregroundPending,previewWorkPending:()=>Boolean(activeBake?.preview)||draftDue&&performance.now()-lastInputAt<DRAFT_LEAD,gpuWorkPending:()=>drawing||renderer.busy,prepareBackground:bytes=>{if(suspended||drawing||renderer.busy||foregroundPending())return false;if(gpuResident()+bytes>gpuBudget)renderer.evict();return gpuResident()+bytes<=gpuBudget;},schedule,resize,pick,view:state,stats:metrics,heightSample,sampleHeights,exportChunks,setBusy,features,metadata,changed,dirty:()=>lastInput?structuredClone(lastInput):null,recoverMemory,failNextWorkingAllocation:()=>{renderer.failWorkingAllocation=true;},releaseInput:()=>{released=true;schedule();},blockSnapshot:()=>[...blocks.values()].map(({bitmap,...e})=>e),get serial(){return serial;},get rev(){return {...rev};},zoom,idle,debugBake:async(rect,level=1,exportArt=false)=>{await idle();const e=await bake(rect,exportArt,undefined,null,level);return e.bitmap;},setBudgets:({gpuMB=gpuBudget/MB,heapMB=heapBudget/MB}={})=>{find('[data-gpu]').value=gpuMB;find('[data-heap]').value=heapMB;budgets({target:find('[data-gpu]')});},resetMetrics:()=>{peakGPU=peakHeap=peakAccountedHeap=0;strokeTimes.length=frameTimes.length=0;},get cacheKeys(){return [...cache.keys()];},cacheSnapshot:()=>[...cache].map(([key,e])=>({key,x:e.x,y:e.y,width:e.width,height:e.height,dirty:Boolean(e.dirty||e.weathered&&!(e.weatherRevB>=rev.B)||!colorCovers(e)),colorRect:e.colorRect,serial:e.serial,rev:e.rev,shapeRev:e.shapeRev,weatherRevB:e.weatherRevB,finalCostMs:e.finalCostMs,finalCostBudget:e.finalCostBudget,fit:e.fit,level:e.level,scale:e.scale,input:e.input}))};
   window.sculptCanvas=result;resize();budgets();return result;
 }

@@ -30,9 +30,10 @@ try{
   const visibleShine=()=>ev(`[...document.querySelectorAll('#wtp-light-shine-shine [data-knob]')].filter(e=>e.dataset.eligible==='true').map(e=>e.dataset.knob)`);
   let keys=await visibleShine();assert(keys.includes('shineGround'));assert(!keys.includes('shineSand'));assert(keys.includes('shineSlopeGate'),'common slope gate stays');
   await click('[data-shine-material="Sand"]');keys=await visibleShine();assert(!keys.includes('shineGround'));assert(!keys.includes('shineSlope'));assert(keys.includes('shineSand'));
-  await ev(`document.getElementById('world-search').value='polish';document.getElementById('world-search').dispatchEvent(new Event('input'))`);
-  assert(await ev(`[...document.querySelectorAll('#knobs [data-knob]')].some(e=>e.dataset.knob==='shineGroundSharp'&&!e.hidden)`),'parenthetical searchable');
-  await ev(`document.getElementById('world-search').value='';document.getElementById('world-search').dispatchEvent(new Event('input'))`);
+  // The one search is the top bar's Find: a row's parenthetical ("polish") finds it.
+  await ev(`(()=>{const f=document.getElementById('find-input');f.focus();f.value='polish';f.dispatchEvent(new Event('input',{bubbles:true}));})()`);await sleep(100);
+  assert(await ev(`/sharp/i.test(document.getElementById('find-results').textContent)`),'parenthetical searchable');
+  await ev(`(()=>{const f=document.getElementById('find-input');f.value='';f.dispatchEvent(new Event('input',{bubbles:true}));f.blur();})()`);
   await click('#wsec-rock-types');await click('#wtab-rock-types-layers');await click('#column-open');
   assert(await shown('#column-panel'));assert((await ev(`document.getElementById('column-title').textContent`)).includes(await ev(`document.getElementById('rock-current-name').textContent`)));
   const oldBed=await ev(`document.querySelector('#column-panel [data-column-path$="beds.0.0"]').value`);
@@ -50,6 +51,6 @@ try{
   assert.equal(await ev(`document.getElementById('tool-help').textContent`),await ev(`document.getElementById('feature-help').textContent`));assert((await ev(`document.getElementById('tool-help').textContent`)).includes('rock'));
   await ev(`document.querySelector('[data-feature-mode="fill"]').click()`);await click('[data-fill-region="lasso"]');assert.equal(await ev(`document.getElementById('fill-region').value`),'lasso');assert.equal(await ev(`document.querySelector('[data-fill-region="lasso"]').getAttribute('aria-pressed')`),'true');
   await ev(`document.getElementById('map-name').value='A very long map name to check the topbar stays usable';document.getElementById('map-name').dispatchEvent(new Event('input'))`);assert((await ev(`document.getElementById('tab-map').textContent`)).includes('A very long map name'));
-  await click('#open-export');assert(await shown('#share-menu'));assert.equal(await ev(`document.getElementById('share-menu').closest('#pane-export')!==null`),true);assert.equal(await ev(`document.getElementById('share-restore').closest('#pane-map')!==null`),true);
+  await click('#tab-map');assert(await shown('#share-menu'));assert.equal(await ev(`document.getElementById('share-menu').closest('#pane-map')!==null`),true);assert.equal(await ev(`document.getElementById('share-restore').closest('#pane-map')!==null`),true);
   assert.deepEqual(errors,[]);console.log(JSON.stringify({shineMaterials:true,search:true,columnSheetEditUndo:true,foldKeyboardReveal:true,uniqueIDs:true,featureHint:true,fillSegments:true,mapName:true,shareHome:true,console:errors}));
 }catch(err){console.error(err);process.exitCode=1;}finally{ws?.close();browser.kill();}

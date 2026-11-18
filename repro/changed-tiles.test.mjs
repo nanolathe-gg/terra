@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {dirtyTileRects,invalidateRefinement,refinementValid} from '../sculpt-change-map.js';
 test('unchanged fields produce no invalidation',()=>{assert.deepEqual(dirtyTileRects(new Uint32Array(9),150,64,2),[]);});
 test('refinement dirtiness is sparse and clips the last grid tile',()=>{
@@ -21,4 +22,15 @@ test('global edits invalidate all refinement cells and clip oversized footprints
  assert.deepEqual(all,{x0:0,y0:0,x1:99,y1:99});
  assert.deepEqual(invalidateRefinement(null,{x0:-10,y0:-20,x1:150,y1:120},100),all);
  assert.equal(refinementValid(all,99,99),false);
+});
+
+test('a no-op input preserves the pending edit stage while returning its own empty delta',()=>{
+ const source=readFileSync(new URL('../sculpt-canvas.js',import.meta.url),'utf8');
+ const code=source.slice(source.indexOf('  function changed('),source.indexOf('  function trimTo('));
+ const host=new Function('previous',`let lastInput=previous,serial=7,rev={B:1,F:2};${code};const result=changed({stage:null,kind:'world'});return {lastInput,result};`);
+ for(const stage of ['A','B','F']){
+  const previous={stage,serial:7},result=host(previous);
+  assert.equal(result.lastInput,previous,'keep the stage of unfinished work');
+  assert.equal(result.result.stage,null,'bench still sees the no-op');assert.equal(result.result.serial,7);
+ }
 });

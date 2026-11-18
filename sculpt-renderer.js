@@ -16,6 +16,7 @@ import {terrainAllocation} from './sculpt-memory.js';
 import {extractGates, gateValues, gateKey, uniformStages, worldUniformDelta, PER_CHUNK_UNIFORMS} from './sculpt-gates.js';
 import {digestGuardRequested, installDigestGuard} from './sculpt-digest-guard.js';
 // The textures a chunk's feed fills, which the input checksum hashes texel by texel (inputDigest).
+export const SURFACE_RECORD_BYTES = 32; // PackedSurfaceRecord in engine-frag.wgsl
 export const INPUT_TEXTURES = ['heightTexture', 'routeTexture', 'gridTexture', 'maskTexture'];
 // A uniform field's bytes in uniformData (sculpt-renderer.js uniformLayout).
 const uniformSpan = f => f.stride ? f.stride * f.count : (f.width || 1) * 4;
@@ -579,7 +580,7 @@ export class TerrainRenderer {
   }
 
   async allocateGeometry(){
-    const width=this.canvas.width+2,height=this.canvas.height+2,bytes=width*height*56;
+    const width=this.canvas.width+2,height=this.canvas.height+2,bytes=width*height*SURFACE_RECORD_BYTES;
     if(bytes>this.device.limits.maxStorageBufferBindingSize)throw Error('The geometry record exceeds the GPU memory storage binding limit.');
     if(this.geometryRecord&&(!this.resources.has(this.geometryRecord)||this.geometryRecord.size!==bytes)){this.release(this.geometryRecord);this.geometryRecord=null;}
     if(this.geometryTarget&&(!this.resources.has(this.geometryTarget)||this.geometryTarget.width!==width||this.geometryTarget.height!==height)){this.release(this.geometryTarget);this.geometryTarget=null;}
@@ -596,7 +597,8 @@ export class TerrainRenderer {
     encoder.copyBufferToBuffer(this.probeBuffer,0,read,0,96*4);this.device.queue.submit([encoder.finish()]);
     try{await read.mapAsync(GPUMapMode.READ);const v=[...new Float32Array(read.getMappedRange().slice(0))];read.unmap();if(!v[0])return null;
       const count=Math.min(32,Math.round(v[24])),layers=Array.from({length:count},(_,k)=>({row:Math.round(v[25+2*k]),cover:v[26+2*k]}));
-      return {color:v.slice(1,4),slot:Math.round(v[4]),aboveSea:v[5],facts:v.slice(6,20),wet:v[21],surf:v[22],ownGround:v[23]>.5,layers};}
+      // rock: the rock type whose numbers the pixel read (its slot: 0 the world's) and how much of its rock shows there (0-1).
+      return {color:v.slice(1,4),slot:Math.round(v[4]),aboveSea:v[5],facts:v.slice(6,20),wet:v[21],surf:v[22],ownGround:v[23]>.5,layers,rock:{slot:Math.round(v[20]),share:v[89]}};}
     finally{read.destroy();}
   }
 
@@ -706,9 +708,11 @@ export class TerrainRenderer {
     }
     this.geometryValid=false;await this.allocateGeometry();current();
     this.release(this.maskPackBuffer);this.release(this.maskPackSettings);this.maskPackBuffer=this.maskPackSettings=null;
-    const timers=[];
-    const reset=device.createCommandEncoder({label:'clear geometry record'});reset.clearBuffer(this.geometryRecord);device.queue.submit([reset.finish()]);
+    const timers=[];let clearGeometry=true;
     await this.voxel.render((commands,volume,rect,first)=>{
+      // Clear once in the first solid/draw submission, preserving earlier pieces
+      // if the voxel allocator splits or retries a later piece.
+      if(clearGeometry){commands.clearBuffer(this.geometryRecord);clearGeometry=false;}
       const timer=this.timer();if(timer)timers.push(timer);
       const pass=commands.beginRenderPass({label:'terrain geometry',colorAttachments:[{view:this.geometryTarget.createView(),clearValue:{r:0,g:0,b:0,a:0},loadOp:first?'clear':'load',storeOp:'store'}],timestampWrites:timer?.timestampWrites});
       const [x,y,w,h]=rect.map(Math.round);pass.setPipeline(this.genericPipelines[this.rockMask()].geometry);pass.setScissorRect(x,y,w+2,h+2);
@@ -716,14 +720,14 @@ export class TerrainRenderer {
     },current);
     // E is complete for every piece. F has no solid dependency, so its
     // bounded mask staging replaces D instead of adding to the terrain peak.
-    this.voxel.clear();current();await this.packColorMasks();current();
-    const color=device.createCommandEncoder({label:'terrain color'}),colorTimer=this.timer();if(colorTimer)timers.push(colorTimer);
-    this.encodeColor(color,drawPipeline,[0,0,this.canvas.width,this.canvas.height],true,colorTimer);device.queue.submit([color.finish()]);
+    this.voxel.clear();current();await this.outputPipelines();current();
+    // Packing, color and presentation have no readback between them. One submit
+    // keeps the GPU running across all three instead of waiting on the page.
+    const color=device.createCommandEncoder({label:'terrain color'});await this.packColorMasks(color);current();
+    const colorTimer=this.timer();if(colorTimer)timers.push(colorTimer);
+    this.encodeColor(color,drawPipeline,[0,0,this.canvas.width,this.canvas.height],true,colorTimer);
     this.geometryUniformSnapshot=new Uint32Array(this.uniformData.slice(0));this.geometryValid=true;
-    // Keep intermediate pieces in a persistent texture: a canvas presentation
-    // image expires at the next browser frame while allocation readback yields.
-    const present=device.createCommandEncoder({label:'present voxel terrain'});
-    await this.outputPipelines();this.encodeOutput(present,this.voxelColor,this.context.getCurrentTexture());device.queue.submit([present.finish()]);
+    this.encodeOutput(color,this.voxelColor,this.context.getCurrentTexture());device.queue.submit([color.finish()]);
     this.gpuResult=Promise.all(timers.map(t=>t.result())).then(values=>{const ms=values.reduce((a,b)=>a+(b??0),0);this.lastGPU=ms;return ms;});
     if (this.guard && !await this.guard.check(this, await inputDigest)) inputDigest = null;   // after a violation, no tile is kept
     return {milliseconds:performance.now()-start,gpuMilliseconds:this.lastGPU,pipelineKey,digest:inputDigest};
@@ -1147,7 +1151,7 @@ export class TerrainRenderer {
 
   applyKnobs(options) { this.worldDirty=true;return this.syncWorld(options); }
 
-  variantNumber(key, fallback) { const x = Number(this.variant.get(key)); return Number.isFinite(x) && this.variant.has(key) ? x : fallback; }
+  variantNumber(key, fallback) { const value=this.variant.get(key);if(value==null)return fallback;const x=Number(value);return Number.isFinite(x)?x:fallback; }
 
   // H5: a shader that pastes the common source under EROSION, as erosion.wgsl does.
   preprocessShader(source) { return preprocess(source, this.commonSource, new Set(['EROSION'])); }
@@ -1204,7 +1208,7 @@ export class TerrainRenderer {
     return m.kind === 'i' ? this.uniformView.getInt32(at, true) : this.uniformView.getFloat32(at, true);
   }
   // The largest of slot 0's number `own` (a knob's value) and the other slots' own settings of it: a reach over the rocks in use.
-  rockMax(key, own) { return Math.max(own, ...[...this.rocks.values()].map(r => Number(r.knobs?.[key])).filter(Number.isFinite)); }
+  rockMax(key, own) { let out=Math.max(own);for(const rock of this.rocks.values()){const value=Number(rock.knobs?.[key]);if(Number.isFinite(value))out=Math.max(out,value);}return out; }
   // Slots 1-15 as copies of slot 0 (the world's rock, as applyKnobs, bakeFields and setColumn set it) under their own numbers; the pool of every
   // slot's rock column; and the maxima the passes that gather from other points read (debrisAny, runoffAny, debrisReachMax).
   writeRocks() {

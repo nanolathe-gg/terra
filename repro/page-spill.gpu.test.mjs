@@ -1,5 +1,6 @@
 // GPU integration check of the paged fields' spill (sculpt-gpu-fields.js): Time results evicted from VRAM come back from their CPU copy, shape pages by
-// evaluation, with the same bytes as pages that never left, and an edit that reaches a page runs its Time pass again. Run with repro/check.sh engine. Needs Dawn.
+// evaluation, with the same bytes as pages that never left, and an edit that reaches a page makes it evaluate again: when the page is next read, not as
+// the edit arrives. Run with repro/check.sh engine. Needs Dawn.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -25,7 +26,7 @@ async function pageBytes(fields, rect) {
 // The resident pages' CPU copies and the coarse lattice are read in the background; letting the fields go while one is read aborts the read
 // (heights.gpu.test.mjs).
 async function cpuCopiesIdle(fields) {
-  for (let i = 0; i < 500; i++) { const g = fields.stats().gpuShape; if (g.cpuCopyBytes >= g.shapePages * 8 * fields.pageInfo().side ** 2) return; await new Promise(r => setTimeout(r, 10)); }
+  for (let i = 0; i < 500; i++) { const g = fields.stats().gpuShape; if (!g.cpuCopiesPending && g.cpuCopyBytes >= g.shapePages * 8 * fields.pageInfo().side ** 2) return; await new Promise(r => setTimeout(r, 10)); }
 }
 
 test('evicted pages come back, weather from the spill and shape by evaluation, with the bytes of resident pages, and an edit weathers them again', async () => {
@@ -78,6 +79,56 @@ test('evicted pages come back, weather from the spill and shape by evaluation, w
     assert.equal(A.stats().gpuShape.spill.entries, 0);
     for (const f of [A, B, s.fields]) await f.coarseSettled();
     await cpuCopiesIdle(B);
+    assert.deepEqual(s.errors, []);
+  } finally { for (const f of made) f.destroy(); s.dispose(); }
+});
+
+// A drag is many edits with no read between them (its previews read the preview lattice). The pages evaluate the cells the edits reached once, at
+// the next read, and hold what fields made from the final nodes hold; so does a page evicted with edits still to evaluate, evaluated again on its return.
+test('the edits of a drag are evaluated once, at the next read, and give the bytes of a fresh evaluation', async () => {
+  const headless = await import('./headless.mjs');
+  const s = await headless.openScene(scene, 'biome=green&mapX=4&mapY=4&scratch=1&gpuMB=512&heapMB=1536&gpuPages=force');
+  const made = [];
+  try {
+    const {fieldsModule, engine, renderer, config} = s;
+    let nodes = s.nodes.slice();
+    const common = {worldSize: s.worldSize, worldGrid: s.worldGrid, baseHeight: config.baseHeight, maskKeys: engine.MASK_KEYS, nodes: () => nodes, device: () => renderer.device, context: s.context, gesture: () => false};
+    const time = engine.pagedTime({config, renderer, size: s.worldSize, spacing: s.spacing, material: s.material});
+    const evicting = {...common}, kept = fieldsModule.createPagedFields(common), evicted = fieldsModule.createPagedFields(evicting);
+    made.push(kept, evicted);
+    for (const f of [kept, evicted]) { f.changed(); f.setTime(time); }
+    const {np, core} = kept.pageInfo(), cells = v => Math.ceil(v / s.spacing);
+    const view = {x0: 0, y0: 0, x1: Math.min(s.worldGrid - 1, cells(900)), y1: Math.min(s.worldGrid - 1, cells(900))};
+    const far = {x0: (np - 1) * core, y0: (np - 1) * core, x1: s.worldGrid - 1, y1: s.worldGrid - 1};
+    assert(view.x1 < far.x0, 'the far page is outside the edits');
+    const before = {kept: await pageBytes(kept, view), evicted: await pageBytes(evicted, view)};
+    assert.deepEqual(before.evicted.bytes, before.kept.bytes);
+
+    // A landform dragged in six steps; each edit covers where the shape was and where it is.
+    const at = k => engine.sceneNodes(config, [['landform', [[120 + 40 * k, 120], [220 + 40 * k, 160]], {card: {diameter: 80, elevation: 160}}]], {ground: false, seed: s.seed, settings: s.settings})[0];
+    const reach = k => ({x0: 0, y0: 0, x1: cells(220 + 40 * k + 400), y1: cells(160 + 400)});
+    const base = nodes, evals = f => f.stats().gpuShape.shapeEvals, was = {kept: evals(kept), evicted: evals(evicted)};
+    for (let k = 0; k < 6; k++) { nodes = [...base, at(k)]; for (const f of [kept, evicted]) f.changed(k ? {...reach(k - 1), x1: reach(k).x1} : reach(k)); }
+    assert.deepEqual([evals(kept), evals(evicted)], [was.kept, was.evicted], 'an edit alone evaluates no page');
+
+    // The second fields lose their pages now, the edits not yet evaluated: evaluated again on their return, they must hold them. A page whose CPU
+    // copy is being read is pinned; the reader trims when it finishes.
+    evicting.shapeBudget = 1;
+    await pageBytes(evicted, far);
+    await cpuCopiesIdle(evicted);
+    assert.equal(evicted.stats().gpuShape.shapePages, 0);
+    delete evicting.shapeBudget;
+
+    const fresh = fieldsModule.createPagedFields(common); made.push(fresh);
+    fresh.changed(); fresh.setTime(time);
+    const want = await pageBytes(fresh, view), got = await pageBytes(kept, view), back = await pageBytes(evicted, view);
+    assert.notEqual(want.bytes.shape, before.kept.bytes.shape, 'the drag shows');
+    assert.deepEqual(got.bytes, want.bytes, 'pages that stayed resident hold the final nodes');
+    assert(evals(kept) > was.kept, 'the read evaluated them');
+    assert(back.evaluated > 0, 'the evicted pages were evaluated again');
+    assert.deepEqual(back.bytes, want.bytes, 'and hold the edits');
+    for (const f of [kept, evicted, fresh, s.fields]) await f.coarseSettled();
+    for (const f of [kept, evicted, fresh]) await cpuCopiesIdle(f);
     assert.deepEqual(s.errors, []);
   } finally { for (const f of made) f.destroy(); s.dispose(); }
 });

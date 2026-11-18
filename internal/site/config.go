@@ -18,6 +18,8 @@ type object = map[string]any
 type World struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	// One line on what the world looks like, for the Start a map dialog's card.
+	Description string `json:"description,omitempty"`
 }
 type Manifest struct {
 	Worlds          []World  `json:"worlds"`
@@ -219,6 +221,15 @@ func (s *Site) names() object {
 	}
 	return m
 }
+func (s *Site) descriptions() object {
+	m := object{}
+	for _, w := range s.Manifest.Worlds {
+		if w.Description != "" {
+			m[w.ID] = w.Description
+		}
+	}
+	return m
+}
 func (s *Site) featureCatalog() []any {
 	out := []any{}
 	allowed := map[string]bool{"tree": true, "shrub": true, "rock": true, "scar": true, "deposit": true, "vent": true}
@@ -353,6 +364,7 @@ func (s *Site) configure() error {
 	for _, c := range s.configs {
 		c["worldShapes"] = clone(shapes)
 		c["biomes"] = clone(names)
+		c["biomeDescriptions"] = s.descriptions()
 		c["beachSources"] = clone(beaches)
 	}
 	s.catalog = object{"worlds": worlds}
@@ -397,7 +409,7 @@ func (o orderedObject) MarshalJSON() ([]byte, error) {
 	return b.Bytes(), nil
 }
 func (s *Site) pickerOrder(c object, w string) object {
-	for _, k := range []string{"biomes", "worldShapes", "beachSources"} {
+	for _, k := range []string{"biomes", "biomeDescriptions", "worldShapes", "beachSources"} {
 		c[k] = orderedObject{obj(c[k]), s.Worlds()}
 	}
 	return c

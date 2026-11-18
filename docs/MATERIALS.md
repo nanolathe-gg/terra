@@ -144,17 +144,25 @@ Two machines may place dither dots differently (rule 12).
 ## The editor
 
 **Materials** in the top bar opens it; the World pane's Ground and Water
-sections open it on that material. The map stops rendering while it is open.
+sections, Surface rows, the shape card's ground and Pick's card open it on
+that material. The workspace gives the graph the upper-left two thirds, the live map the lower-left third, the material's texture the lower-middle third, and its settings the right third. The top bar and tool rail remain available. Build, World or the side-panel toggle closes Materials and brings the side panel back. **Focus graph** uses the two preview cells for the graph and pauses the covered map; **Show map & texture**, or Escape, restores them. The hidden texture waits for the split to return; the visible graph thumbnails keep updating. Escape first leaves a text field or closes a menu or drawer, then restores the previews, then closes Pick's card and Materials.
 
-- The graph fills the screen. Each card shows what its node makes.
+- The material's name in the editor's bar opens the library drawer: **In
+  this map** (the map's and the world's materials, each with its role;
+  choosing one switches the editor to it) and **Library** (the shipped
+  materials by world; choosing one adds a copy to the map). One search field
+  filters both by name. Each tile's swatch is the editor's own preview of
+  the material's repeat, made once its tile scrolls into view. **New
+  material** adds a blank one.
+- Each graph card shows what its node makes. Fit includes every card and frame below the toolbar. Arrange uses the graph cell’s aspect; saved node positions stay put until you ask for it. While the view is still fitted, resizing and Focus graph fit it to the space available. After you pan or zoom, edits, reopening the same material, resizing and Focus graph keep your zoom and the graph point at the center. A different material, Restore from library or a newly loaded map fits its graph again.
 - Add a node from its menu: it lists every node and type by name, and a search
   also matches the names other editors use (Perlin, Voronoi, Worley, fBm,
   terrace, posterize, HSL, displace, tile sampler, bomber, motion blur ...).
 - **Starting points** (Start · … in the same menu, `materials/snippets.json`):
   twelve named looks, each two to five wired nodes with their numbers, that
   join the graph being edited at the pointer, selected and ready to tune or
-  wire to the Material node. Unlike Manage's add from the library (a whole
-  material), a starting point joins the open graph, and its nodes count
+  wire to the Material node. Unlike a material from the library drawer (a
+  whole material), a starting point joins the open graph, and its nodes count
   toward the 40-node limit (its menu entry says how many). A few leave an
   input open for you to wire: a height (Moss in hollows) or a base color.
 - Drag from an output dot to an input to connect; drag a wire off an input or
@@ -163,11 +171,17 @@ sections open it on that material. The map stops rendering while it is open.
 - Shift-click selects several; Frame puts them in a labeled frame. Delete
   removes, Ctrl/Cmd+D duplicates, F fits. Nodes move only when you move them
   or press Arrange.
-- The preview shows the whole repeat under the world's sun (Tile), three
-  repeats each way (Repeat), or a shore, a plain and a hill (On terrain); 2×
-  magnifies, Node shows the selected node alone.
+- The preview shows the middle of the repeat at 1× under the world's sun
+  (Tile), three repeats each way (Repeat), or a shore, a plain and a hill (On
+  terrain); 2× magnifies, Node shows the selected node alone. Its box is a
+  whole number of 32 px tiles that fits the texture cell and every view but
+  Repeat draws unscaled.
 - **Controls**: the published settings. In the Node pane, ◆ beside a setting
-  publishes it; a gradient publishes its colors. A control has its own range
+  publishes it; a gradient publishes its colors. Publishing asks for the
+  control's name in place, starting from the node's name and the setting:
+  Enter publishes it under that name (one undo step), Escape cancels. A map
+  maker meets that name in World, so name it as they would ("Grass colors",
+  "Mottling size"). A control has its own range
   inside the node setting's: a newly published scale (a size in px) starts
   with a quarter to four times its value, and Edit controls sets a control's
   name and range or removes it.
@@ -177,9 +191,9 @@ sections open it on that material. The map stops rendering while it is open.
   renderer.
 - **Palette**: click a game color to put it in or out; *Pick from the
   material* chooses the colors nearest what the graph makes.
-- **Manage**: rename, use as the world's ground or water, duplicate, delete,
-  copy and paste (as text), New seed, Reset to library, add from the library
-  or blank.
+- **Manage**: rename, use as the world's ground or water, another world
+  surface, duplicate, delete, copy and paste (as text), New seed, Reset to
+  library.
 
 The editor holds no reference pictures and no comparison tools.
 
