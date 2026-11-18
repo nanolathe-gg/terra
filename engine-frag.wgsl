@@ -38,7 +38,11 @@ fn visibility(p: vec2f, h: f32) -> f32 {
         let d = f32(i * i) * 1.4 + 2.0;
         let q = p + toward * d;
         if (q.x < 0.0 || q.y < 0.0 || q.x >= u.size || q.y >= u.size) { continue; }
-        let blocker = surfaceHeight(q) - h - d * elevation;
+        // The last three samples (142 to 204 px out) read the authored height, as the far march does: the relief's few units barely move
+        // a shadow cast from that far, and the tile's fields then stop at 128 px (sculpt-chunk-renderer.js reaches).
+        var at = 0.0;
+        if (i >= 10) { at = baseHeight(q); } else { at = surfaceHeight(q); }
+        let blocker = at - h - d * elevation;
         shadow = max(shadow, smoothstep(-2.0, 4.0, blocker));
     }
     // A lower sun casts longer shadows (a wall's is its height over the tangent of the sun's height). Past the twelfth sample the march goes
@@ -70,7 +74,9 @@ fn shadowBlocker(p: vec2f, h: f32) -> vec3f {
         let d = f32(i * i) * 1.4 + 2.0;
         let q = p + toward * d;
         if (q.x < 0.0 || q.y < 0.0 || q.x >= u.size || q.y >= u.size) { continue; }
-        let s = smoothstep(-2.0, 4.0, surfaceHeight(q) - h - d * elevation);
+        var hq = 0.0;
+        if (i >= 10) { hq = baseHeight(q); } else { hq = surfaceHeight(q); }   // as visibility() reads them
+        let s = smoothstep(-2.0, 4.0, hq - h - d * elevation);
         if (s > most) { most = s; at = d; }
     }
     let farStep = 6.0 / elevation;

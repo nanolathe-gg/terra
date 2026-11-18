@@ -787,7 +787,7 @@ fn surfaceWindow(v: f32, lo: f32, hi: f32, fade: f32) -> f32 {
     return smoothstep(lo - f, lo + f, v) * (1.0 - smoothstep(hi - f, hi + f, v));
 }
 // The surface facts that look around a pixel (SURFACE_LOOK_*), over the authored height, for the color pass and the plant bake. Both reach
-// less than the draw's own reach (sculpt-chunk-renderer.js reaches: the shadow march's 203.6 px), so a tile already holds every height they
+// no further than the height grid's apron and the color record's lattice (sculpt-chunk-renderer.js reaches: `look`), so a tile holds every height they
 // read; the bake's apron grows by SURFACE_LOOK_REACH when plants are placed and a rule reads one.
 // Sheltered (fact 16): how much of the sky round the pixel the ground hides, 0 open (a top, a plain) to 1 closed (a narrow gorge). Eight looks
 // at 24, 48 and 96 px, each the steepest rise that way, from 3 degrees (nothing) to 31 (all), averaged. The sea counts as level ground.
