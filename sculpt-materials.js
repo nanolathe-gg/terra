@@ -368,8 +368,8 @@ ${all}
 ${store}
 }`, stages: stageSource};
   }
-  return {taps, main: `@group(1) @binding(0) var groundOut:texture_storage_2d_array<rgba32float,write>;
-@group(1) @binding(2) var maskOut:texture_storage_2d_array<rgba16float,write>;
+  return {taps, main: `@group(1) @binding(0) var groundOut:texture_storage_2d_array<rgba16float,write>;
+@group(1) @binding(2) var heightOut:texture_storage_2d_array<r32float,write>;
 @group(1) @binding(1) var<uniform> groundJob:vec4u;
 @compute @workgroup_size(8,8)
 fn groundMain(@builtin(global_invocation_id) id:vec3u){
@@ -377,8 +377,8 @@ fn groundMain(@builtin(global_invocation_id) id:vec3u){
  graphPeriod=f32(textureDimensions(groundOut).x);graphRow=groundJob.z;let point=vec2f(id.xy);
 ${lines(closure(out))}
  var color=${o[0] < 0 ? 'vec3f(.5)' : `v${o[0]}.rgb`};${o[3] >= 0 ? `if(groundJob.w==1u){color=v${o[3]}.rgb;}` : ''}${o[4] >= 0 ? `if(groundJob.w==2u){color=v${o[4]}.rgb;}` : ''}let height=${o[1] < 0 ? '0.0' : `${read(out, 1)}.x*arg(s${out},0u)`};let shine=${o[2] < 0 ? '0.0' : `clamp(${read(out, 2)}.x,0.0,1.0)`};
- textureStore(groundOut,vec2i(id.xy),i32(groundJob.y),vec4f(color,height));
- textureStore(maskOut,vec2i(id.xy),i32(groundJob.y),vec4f(shine,0,0,1));
+ textureStore(groundOut,vec2i(id.xy),i32(groundJob.y),vec4f(color,shine));
+ textureStore(heightOut,vec2i(id.xy),i32(groundJob.y),vec4f(height,0,0,1));
 }`, stages: stageSource};
 }
 // A stage's value at a point: its blurred repeat, wrapped, read between texels where a Light or Cavity asks at a fraction.
@@ -769,10 +769,11 @@ export function parseMaterialText(value) {
   if (m?.format !== 'terraform-material') throw Error('The clipboard has no material.');
   return {name: nameOf(m.name), ...copyMaterial(m)};
 }
-// What the cache holds: 28 bytes a texel a layer (a material, or a Worn or Deposit color it draws), and while any material in use has a
+// What the cache holds: 16 bytes a texel a layer (a material, or a Worn or Deposit color it draws: color and shine in half floats, height in a
+// full float, the palette reduction in bytes), and while any material in use has a
 // staged node (stagePlan) the stage textures, MAX_STAGES layers and two scratch layers of rgba32float.
 export function materialCacheUsage(count, pool = MATERIAL_REPEAT, staged = false) {
   if (!Number.isInteger(count) || count < 0 || count > MATERIAL_SLOTS * (1 + MATERIAL_STATES.length)) throw Error('Invalid material cache size.');
-  const stageBytes = staged ? (MAX_STAGES + 2) * 16 * pool * pool : 0, bytes = count * 28 * pool * pool + stageBytes;
+  const stageBytes = staged ? (MAX_STAGES + 2) * 16 * pool * pool : 0, bytes = count * 16 * pool * pool + stageBytes;
   return {bytes, stageBytes, budget: MATERIAL_CACHE_BYTES, fits: bytes <= MATERIAL_CACHE_BYTES};
 }

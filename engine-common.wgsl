@@ -640,9 +640,9 @@ fn columnAt(c: f32) -> ColumnBed { return columnBedIn(c, columnSectionAt(c), sel
 @group(0) @binding(12) var rockRimTex: texture_2d<f32>;
 @group(0) @binding(14) var groundColorTex: texture_2d_array<f32>;
 @group(0) @binding(15) var<storage,read> materialGraphs:array<MaterialGraph>;
-@group(0) @binding(16) var materialFinishTex:texture_2d_array<f32>;
+@group(0) @binding(16) var materialHeightTex:texture_2d_array<f32>;   // a material's art height (r32float)
 @group(0) @binding(17) var materialMeanTex:texture_2d_array<f32>;   // one texel a material: the mean color of its repeat
-@group(0) @binding(13) var groundTex: texture_2d_array<f32>;
+@group(0) @binding(13) var groundTex: texture_2d_array<f32>;   // a material's unlit color and shine (rgba16float)
 @group(0) @binding(7) var linearClamp: sampler;
 @group(0) @binding(8) var linearRepeat: sampler;
 // Painted masks (card C5), grid resolution, signed bytes so unpainted is 0.0.
@@ -1032,7 +1032,7 @@ fn groundHeight(p:vec2f)->f32 {
 }
 fn materialPixel(p:vec2f)->vec2f {return poolWrap(floor(p),f32(textureDimensions(groundTex).x));}
 
-// A material's cached repeat: unlit color and art height, its shine, and its color reduced to its palette.
+// A material's cached repeat: unlit color and shine, art height, and its color reduced to its palette.
 // A rock slot's surface material (its rock type's, else the world's rock material), -1 none.
 fn rockMaterialOf(slot:u32)->i32 {
  let m=u.rock[slot & rockMask].material;
@@ -1043,8 +1043,8 @@ fn rockMaterialOf(slot:u32)->i32 {
 // A cache layer's art height at a native pixel q, bilinear between texels (the taps that light it read between pixels).
 fn materialReliefBilinear(q:vec2f,layer:i32)->f32 {
  let size=f32(textureDimensions(groundTex).x);let b=floor(q-.5);let f=q-.5-b;
- let a00=textureLoad(groundTex,vec2i(poolWrap(b,size)),layer,0).w;let a10=textureLoad(groundTex,vec2i(poolWrap(b+vec2f(1,0),size)),layer,0).w;
- let a01=textureLoad(groundTex,vec2i(poolWrap(b+vec2f(0,1),size)),layer,0).w;let a11=textureLoad(groundTex,vec2i(poolWrap(b+vec2f(1,1),size)),layer,0).w;
+ let a00=textureLoad(materialHeightTex,vec2i(poolWrap(b,size)),layer,0).x;let a10=textureLoad(materialHeightTex,vec2i(poolWrap(b+vec2f(1,0),size)),layer,0).x;
+ let a01=textureLoad(materialHeightTex,vec2i(poolWrap(b+vec2f(0,1),size)),layer,0).x;let a11=textureLoad(materialHeightTex,vec2i(poolWrap(b+vec2f(1,1),size)),layer,0).x;
  return mix(mix(a00,a10,f.x),mix(a01,a11,f.x),f.y);
 }
 fn materialRaw(p:vec2f,slot:u32)->vec3f { return materialRawAt(p,u.ground[slot & groundMask].cacheLayer); }
@@ -1052,10 +1052,10 @@ fn materialRawAt(p:vec2f,layer:i32)->vec3f {
  return textureLoad(groundTex,vec2i(materialPixel(p)),layer,0).rgb;
 }
 fn materialRelief(p:vec2f,slot:u32)->f32 {
- return textureLoad(groundTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).w;
+ return textureLoad(materialHeightTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).x;
 }
 fn materialShine(p:vec2f,slot:u32)->f32 {
- return textureLoad(materialFinishTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).x;
+ return textureLoad(groundTex,vec2i(materialPixel(p)),u.ground[slot & groundMask].cacheLayer,0).a;
 }
 fn materialMean(slot:u32)->vec3f {
  return textureLoad(materialMeanTex,vec2i(0),u.ground[slot & groundMask].cacheLayer,0).rgb;
