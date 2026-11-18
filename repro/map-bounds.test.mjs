@@ -21,3 +21,9 @@ test('a visible edge samples only its clipped global grid, with the same project
   assert.deepEqual(b.paths.at(-1),a.paths[1].filter(([x])=>x>=192&&x<=528));
  }
 });
+test('a map size of 1 to 40 whole units and a sea level of 0 to 255 is one the editor can open',async()=>{
+  const {validMapSize}=await import('../sculpt-map.js');
+  assert.equal(validMapSize(4,4,64),true);assert.equal(validMapSize(1,40,0),true);assert.equal(validMapSize(40,1,255),true);
+  for(const [x,y,sea] of [[0,4,64],[41,4,64],[2.5,4,64],['4',4,64],[4,4,256],[4,4,-1],[4,4,1.5],[4,4,undefined],[4,4,NaN],[undefined,4,64]])
+    assert.equal(validMapSize(x,y,sea),false,JSON.stringify([x,y,sea]));
+});

@@ -53,3 +53,16 @@ test('a map whose world lacks tools added to yours since opens in yours; one wit
   assert.equal(sameSavedWorld(map,{name:'Mine',colors:{},knobs:{}},config),false,'yours lacks the map’s tool');
   assert.equal(sameSavedWorld(map,{name:'Mine',colors:{},knobs:{},tools:[{...tool('world-a'),label:'Renamed'}]},config),false,'yours changed it');
 });
+test('a saved world\'s numbers are checked as the server sends its defaults, as text; a word keeps its text',()=>{
+  // As served (internal/site config: every default is text), with a word-valued default beside the numbers.
+  const served={...config,defaults:{rainErode:'0',faceWear:'0.2',material:'varied'},engineDefaults:{groundFine:'1'}};
+  const value=savedWorld(served,new URLSearchParams(),{});
+  for(const bad of ['abc','NaN','1e999','','  ']){
+    const knobs=copySavedWorld({...value,knobs:{...value.knobs,rainErode:bad,groundFine:bad,undulation:bad}},served).knobs;
+    assert.equal(knobs.rainErode,undefined,`a world default's number: ${JSON.stringify(bad)}`);
+    assert.equal(knobs.groundFine,undefined,`an engine default's number: ${JSON.stringify(bad)}`);
+    assert.equal(knobs.undulation,undefined,`a slider without a default: ${JSON.stringify(bad)}`);
+  }
+  const kept=copySavedWorld({...value,knobs:{...value.knobs,rainErode:'.5',groundFine:2,undulation:'-1.5',material:'smooth'}},served).knobs;
+  assert.deepEqual([kept.rainErode,kept.groundFine,kept.undulation,kept.material],['.5','2','-1.5','smooth']);
+});

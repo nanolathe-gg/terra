@@ -1,7 +1,7 @@
 import {requestAdapter} from './sculpt-webgpu.js';
 import {savedWorld,worldOverrideCount,resetWorldOverrides,copySavedWorld,savedWorldId,sameSavedWorld,worldKeys} from './sculpt-save.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
-import {configureMap,mapGeometry,mountMapCanvas} from './sculpt-map.js';
+import {configureMap,mapGeometry,mountMapCanvas,validMapSize} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,worldHome,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-column.js';
@@ -1929,6 +1929,7 @@ function leaveFor(id,next) {
 async function loadSketchFile(s,commit=true) {
   pickCard?.close();   // another map: the card's pixel is gone
   if(!s || s.format!=='nanolathe-terrain-sculpt' || s.version!==6 || !Array.isArray(s.nodes) || s.nodes.some(n=>!n))throw new Error('Load a map stroke graph.');
+  if(s.map && !validMapSize(s.map.unitsX,s.map.unitsY,s.seaLevel))throw new Error('The map file’s size or sea level is out of range (1–40 units a side, sea level 0–255).');
   const biome=typeof s?.biome==='string'?s.biome:'';
   const savedId=s.worldSettings?savedWorldId(s):(typeof s.world==='string'&&worlds[s.world]?.base===biome?s.world:biome);
   const mapChanged=(s?.map?.unitsX??0)!==(config.map?.unitsX??0) || (s?.map?.unitsY??0)!==(config.map?.unitsY??0) || (s?.map && s.seaLevel!==config.seaLevel);
@@ -2170,7 +2171,7 @@ async function openSharedLink() {
   if (!service.url) return service.reason;
   try {
     const shared=await getMap(service.url,id);
-    if (!shared || shared.format!=='nanolathe-terrain-sculpt' || shared.version!==6 || !Array.isArray(shared.nodes) || shared.nodes.some(n=>!n) || typeof shared.biome!=='string') throw new Error('The shared map is not a map this editor can open. Your maps were left as they were.');
+    if (!shared || shared.format!=='nanolathe-terrain-sculpt' || shared.version!==6 || !Array.isArray(shared.nodes) || shared.nodes.some(n=>!n) || typeof shared.biome!=='string' || (shared.map && !validMapSize(shared.map.unitsX,shared.map.unitsY,shared.seaLevel))) throw new Error('The shared map is not a map this editor can open. Your maps were left as they were.');
     if (!mapStore) { const token=Math.random().toString(36).slice(2)+Date.now().toString(36); await stashPendingSketch(token,shared); experiment.set('pendingSketch',token); }
     else { const mine=newMapId(); await mapStore.put(mine,shared,mapMeta(mine,shared)); tabState.map=mine; }
     experiment.set('shared','1'); experiment.set('biome',shared.biome); experiment.delete('world');

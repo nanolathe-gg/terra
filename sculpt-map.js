@@ -2,10 +2,12 @@ export {mountMapCanvas} from './sculpt-canvas.js';
 
 // Card D: rectangular map bounds over the prototype's square working
 // field. The extra south rows supply projected art, including the void strips.
+// A map's size (1-40 units a side) and sea level (0-255) as the editor can open them; a save or shared map with others is not opened.
+export const validMapSize=(unitsX,unitsY,sea) => [unitsX,unitsY].every(n => Number.isInteger(n) && n>=1 && n<=40) && Number.isInteger(sea) && sea>=0 && sea<=255;
 export function configureMap(config, query) {
   if (!query.has('mapX') && !query.has('mapY')) return null;
   const unitsX=Number(query.get('mapX')),unitsY=Number(query.get('mapY')),sea=Number(query.get('sea')??config.defaultSeaLevel??64);
-  if (![unitsX,unitsY].every(n => Number.isInteger(n) && n>=1 && n<=40) || !Number.isInteger(sea) || sea<0 || sea>255) throw new Error('Map size must be 1–40 units on each side; sea level must be 0–255.');
+  if (!validMapSize(unitsX,unitsY,sea)) throw new Error('Map size must be 1–40 units on each side; sea level must be 0–255.');
   // DESIGN_MAP_GENERATOR geometry; 160 extra pixels cover base/2 even at
   // sea 255. Fields and GPU bakes are regional; this is the canonical lattice.
   config.map=mapGeometry(unitsX,unitsY);

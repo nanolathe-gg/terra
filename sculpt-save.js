@@ -14,6 +14,12 @@ export function savedWorld(config,settings,world) {
   // The world's surface layers where the artist changed them (docs/SURFACE_LAYERS.md); a world that kept its own carries none.
   return {...storedWorldKit(config,world),materials:worldKept(withWorldMaterials(world.materials,config)),name:world.name||config.biome,base:config.biomeId,colors:worldHexColors(config,settings,world.colors||{}),knobs,...(world.surface?{surface:copySurface(world.surface)}:{})};
 }
+// A number written as text or a number: "abc", "NaN", "1e999" and "" are not.
+const finiteText=v => String(v).trim()!=='' && Number.isFinite(Number(v));
+// A setting that holds a number: a slider (KNOBS), or one whose world default is a number. The served defaults are text ("0.3"), so a default is
+// numeric when its text is a finite number.
+const SLIDERS=new Set(KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)));
+const numericSetting=(config,key) => { const d=config.defaults?.[key]??config.engineDefaults?.[key]; return SLIDERS.has(key)||(d!==undefined&&d!==null&&finiteText(d)); };
 export function copySavedWorld(value,config) {
   if(value===undefined)return null;
   if(!value||value.base!==config.biomeId||typeof value.name!=='string'||!value.colors||Array.isArray(value.colors)||typeof value.colors!=='object'||!value.knobs||Array.isArray(value.knobs)||typeof value.knobs!=='object')throw Error('The saved world settings are invalid.');
@@ -21,7 +27,7 @@ export function copySavedWorld(value,config) {
   const keys=worldKeys(config),knobs={};
   for(const [key,v]of Object.entries(value.knobs)){
     if(!keys.has(key))continue;
-    if((typeof v!=='string'&&typeof v!=='number')||String(v).length>128||(typeof (config.defaults?.[key]??config.engineDefaults?.[key])==='number'&&!Number.isFinite(Number(v))))continue;
+    if((typeof v!=='string'&&typeof v!=='number')||String(v).length>128||(numericSetting(config,key)&&!finiteText(v)))continue;
     knobs[key]=String(v);
   }
   const colors={};
