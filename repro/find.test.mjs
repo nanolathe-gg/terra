@@ -114,11 +114,13 @@ test('each menu action names a button the page has, once', () => {
 });
 
 test('an artist’s words and the outputs’ older names reach the renamed outputs', () => {
-  const entries = [{group: 'A', name: 'Save view image', path: ['View']}, {group: 'A', name: 'Copy map link', path: ['Map']},
-    {group: 'A', name: 'Build game map (.ufo)', path: ['Export']}, {group: 'A', name: 'Save editable map', path: ['Map']}, {group: 'B', name: 'Shallow water', path: ['Land']}];
+  const entries = [{group: 'A', name: 'Save view image', path: ['View']}, {group: 'A', name: 'Save as link', path: ['Map']},
+    {group: 'A', name: 'Build game map (.ufo)', path: ['Export']}, {group: 'A', name: 'Download file', path: ['Map']}, {group: 'B', name: 'Shallow water', path: ['Land']}];
   const first = q => search(entries, q, 3)[0]?.items[0]?.name;
   assert.equal(first('png'), 'Save view image');
-  assert.equal(first('share'), 'Copy map link');
+  assert.equal(first('share'), 'Save as link');
+  assert.equal(first('save'), 'Save as link');
+  assert.equal(first('download'), 'Download file');
   assert.equal(first('ufo'), 'Build game map (.ufo)');
   assert.equal(first('crossing'), 'Shallow water');
 });

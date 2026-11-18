@@ -1868,7 +1868,7 @@ $('reset-strokes').onclick=() => {
   status('Reset every stroke to this world\'s defaults.');
 };
 function persistLater() {
-  if (!SAVING) { $('save-state').textContent='Comparison sketch · use Map › Save editable map to keep it.'; return; }
+  if (!SAVING) { $('save-state').textContent='Comparison sketch · use Map › Save as link or Download file to keep it.'; return; }
   if (!mapStore) { $('save-state').textContent=mapsNote||'Saving in this browser is unavailable. Use Save to keep this map as a file.'; return; }
   clearTimeout(autosaveTimer); autosaveTimer=setTimeout(() => {
     if (stroke || moving || loading) { persistLater(); return; }

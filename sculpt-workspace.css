@@ -237,8 +237,8 @@
 .surface-map{top:48px;left:var(--map-menu-left,156px);width:340px}
 .surface-settings{top:48px;right:10px;width:330px}
 /* The Map menu: the map's file actions and Share link above its own settings. */
-.map-file-actions{display:flex;gap:5px}.map-file-actions button{flex:1}
-#pane-map .share-menu{margin-top:6px}#pane-map .share-menu>summary{text-align:center;padding:6px 9px}
+.map-file-actions{display:flex;gap:5px;margin-top:6px}.map-file-actions button{flex:1}
+#pane-map .share-menu>summary{text-align:center;padding:7px 9px;background:#3f6b4c;border-color:#78ae8d;color:#f1ffe9;font-weight:600}#pane-map .share-menu>summary:hover{background:#4a7d59}
 #pane-map .share-menu .popover{position:static;width:auto;margin-top:6px;padding:10px;box-shadow:none}
 #map-settings-host{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
 /* The View menu: how the map shows, the panels, then the editor's settings. */

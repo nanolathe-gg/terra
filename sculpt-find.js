@@ -21,9 +21,9 @@ export const SYNONYMS = [
   ['crossing ford pass',                'shallow ramp passability'],
   ['grain texture pattern',             'grain material pattern'],
   ['png screenshot picture image',      'view image'],
-  ['share link url',                    'map link'],
+  ['share link url publish',            'save as link'],
   ['ufo export game archive',           'export game map'],
-  ['save download file',                'save editable map'],
+  ['save download file editable',       'download file'],
 ];
 
 // A word in plain form: lower case, no accents, "&" read as "and", camelCase split.
