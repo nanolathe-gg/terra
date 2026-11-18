@@ -134,10 +134,12 @@ export function worldControlRequirement(key,v){
  // The slope group's weight is the slope cover scaled by Sampled slope texture (a sandy slope scales it by its own sand instead). With none it
  // has no share, and its gloss does not wake the pass (uShineOn, sculpt-renderer.js).
  const noSlopeShare=n('slopeTexture')<=0&&n('slopeSand')<=0;
- if(noSlopeShare&&/^shineSlope(Sharp|Scale|Rough)?$/.test(key))return 'Sampled slope texture is 0, so the slope cover has no share to shine. Raise Sampled slope texture to use this setting.';
+ if(noSlopeShare&&/^shineSlope(Sharp|Rough)?$/.test(key))return 'Sampled slope texture is 0, so the slope cover has no share to shine. Raise Sampled slope texture to use this setting.';
  const shine=['Ground','Slope','Rock','Sand','Crystal'].filter(m=>m!=='Slope'||!noSlopeShare),shiny=shine.some(m=>n('shine'+m)>0),rough=shine.some(m=>n('shine'+m+'Rough')>0);
- const lobe=/^shine(Ground|Slope|Rock|Sand|Crystal)(Sharp|Scale)$/.exec(key);
- if(lobe)return needs('shine'+lobe[1]+(lobe[2]==='Sharp'?'':'Rough'),(lobe[2]==='Sharp'?'Gloss':'Roughness')+' in Shine: '+({Ground:'ground',Slope:'slope cover',Rock:'rock',Sand:'sand',Crystal:'crystal'})[lobe[1]]);
+ if(key==='shineGroundScale')return n('shineGroundRough')>0||n('shineSandRough')>0||(!noSlopeShare&&n('shineSlopeRough')>0)?'':'Raise micro roughness on ground, slope cover or sand to set its grain width.';
+ if(key==='shineRockScale')return n('shineRockRough')>0||n('shineCrystalRough')>0?'':'Raise micro roughness on rock or crystal to set its grain width.';
+ const lobe=/^shine(Ground|Slope|Rock|Sand|Crystal)Sharp$/.exec(key);
+ if(lobe)return needs('shine'+lobe[1],'Gloss in Shine: '+({Ground:'ground',Slope:'slope cover',Rock:'rock',Sand:'sand',Crystal:'crystal'})[lobe[1]]);
  if(['shineWhite','shineHeadroom'].includes(key))return shiny?'':'Set a Gloss above zero in one of the Shine groups to use this setting.';
  if(key==='shineStretch')return rough?'':'Set a Roughness above zero in one of the Shine groups to use this setting.';
  if(['shineGate','shineOutside','shineSlopeGate'].includes(key))return shiny||rough?'':'Set a Gloss or Roughness above zero in one of the Shine groups to use this setting.';

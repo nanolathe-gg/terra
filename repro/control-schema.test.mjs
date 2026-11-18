@@ -93,8 +93,10 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  // shine: a lobe needs its material's gloss, a grain its roughness, the shared rows any shining material
  assert.match(requirement('shineRockSharp',{shineRock:0}),/Gloss in Shine: rock/);
  shows('shineRockSharp',{shineRock:.5});
- assert.match(requirement('shineSandScale',{shineSandRough:0,shineSand:1}),/Roughness in Shine: sand/);
- shows('shineSandScale',{shineSandRough:.3});
+ assert.match(requirement('shineGroundScale',{shineSand:1,shineRockRough:.3}),/ground, slope cover or sand/);
+ shows('shineGroundScale',{shineSandRough:.3});
+ shows('shineRockScale',{shineCrystalRough:.3});
+ assert.match(requirement('shineRockScale',{shineSandRough:.3}),/rock or crystal/);
  assert.match(requirement('shineWhite',{shineRockRough:1}),/Gloss/);
  shows('shineWhite',{shineCrystal:.2});
  assert.match(requirement('shineStretch',{shineGround:1}),/Roughness/);
@@ -129,11 +131,12 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.match(requirement('slopeTexture',{slopeReplaced:1}),/Material weathering/);
  shows('slopeTexture',{slopeReplaced:1,shineSlope:.5});
  shows('slopeTexture',{slopeReplaced:0});
- for(const k of ['shineSlope','shineSlopeRough','shineSlopeSharp','shineSlopeScale'])assert.match(requirement(k,{shineSlope:1,shineSlopeRough:1,slopeTexture:0}),/Sampled slope texture/);
+ for(const k of ['shineSlope','shineSlopeRough','shineSlopeSharp'])assert.match(requirement(k,{shineSlope:1,shineSlopeRough:1,slopeTexture:0}),/Sampled slope texture/);
  assert.equal(requirement('shineSlopeGate',{shineSlope:1,slopeTexture:0}),requirement('shineSlopeGate',{}),'a slope group with no share is not a material shining');
  shows('shineSlopeGate',{shineSlope:1,slopeTexture:.3});
  shows('shineSlopeSharp',{shineSlope:1,slopeTexture:.3});
- shows('shineSlopeScale',{shineSlopeRough:1,slopeTexture:0,slopeSand:1});
+ assert.match(requirement('shineGroundScale',{shineSlopeRough:1,slopeTexture:0}),/ground, slope cover or sand/);
+ shows('shineGroundScale',{shineSlopeRough:1,slopeTexture:0,slopeSand:1});
  assert.match(requirement('shineRockSharp',{shineRock:0}),/Gloss/);
  shows('shineRockSharp',{shineRock:1,slopeTexture:0});
  // the bed is always lit, so the step's deep share is drawn whatever the water's tones

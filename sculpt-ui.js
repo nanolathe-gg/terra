@@ -186,7 +186,7 @@ export const WORLD_HOMES={
  'Water & shores/Water bed':'bedTint bedBright bedContrast bedRelief bedCracks bedCrackSize bedFlat',
  'Rain & erosion/':'wetSwath wetGround',
  'Light & shine/Sun & shade':'faceFill flatShadow flatOcclusion lightCap shadeDepth sunTilt ambient creaseShade',
- 'Light & shine/Shine':'shineOutside shineSlopeGate shineStretch shineWhite shineGround shineGroundSharp shineGroundRough shineGroundScale shineSlope shineSlopeSharp shineSlopeRough shineSlopeScale shineSand shineSandSharp shineSandRough shineSandScale shineCrystal shineCrystalSharp shineCrystalRough shineCrystalScale shineGate shineHeadroom',
+ 'Light & shine/Shine':'shineOutside shineSlopeGate shineStretch shineWhite shineGround shineGroundSharp shineGroundRough shineGroundScale shineSlope shineSlopeSharp shineSlopeRough shineSand shineSandSharp shineSandRough shineCrystal shineCrystalSharp shineCrystalRough shineGate shineHeadroom',
 };
 const homeOf=new Map(Object.entries(WORLD_HOMES).flatMap(([home,keys])=>keys.split(' ').map(key=>[key,home])));
 export const worldHome=key=>homeOf.get(key)||'World/';   // a key without a home still shows, in the World section

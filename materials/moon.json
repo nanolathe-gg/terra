@@ -581,7 +581,6 @@
         "shineSlope": 0.06,
         "shineSlopeSharp": 30,
         "shineSlopeRough": 0.12,
-        "shineSlopeScale": 3,
         "shineRock": 0.06,
         "shineRockSharp": 30,
         "shineRockRough": 0.12,
