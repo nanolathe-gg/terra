@@ -66,6 +66,9 @@ function attachScrub(row){
   }};
   scrub.addEventListener('pointerup',end);scrub.addEventListener('pointercancel',end);scrub.addEventListener('lostpointercapture',end);
   scrub.addEventListener('dblclick',e=>{if(e.target===input||disabled())return;e.preventDefault();e.stopPropagation();type();});
+  // A slider in use (a drag on it, from the press to the release) takes Backspace and Delete, so they do not delete the selected shape under the
+  // drag; a slider that only has focus lets them through (owner, 2026-11-18), and its typed entry is a text field, which the editor never takes them from.
+  scrub.addEventListener('keydown',e=>{if(pointer&&(e.key==='Backspace'||e.key==='Delete')){e.preventDefault();return;}});
   scrub.addEventListener('keydown',e=>{if(e.target===input||disabled())return;const step=Number(source.step)||1,delta={ArrowRight:step,ArrowUp:step,ArrowLeft:-step,ArrowDown:-step,PageUp:step*10,PageDown:-step*10}[e.key];if(delta!==undefined||['Home','End'].includes(e.key)){cancelClick();e.preventDefault();e.stopPropagation();if(apply(e.key==='Home'?Number(source.min):e.key==='End'?Number(source.max):Number(source.value)+delta))commit();}else if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();type();}});
   input.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter'){e.preventDefault();finish(false,true);}if(e.key==='Escape'){e.preventDefault();finish(true,true);}});input.addEventListener('blur',()=>finish(false));
   source.addEventListener('input',sync);source.addEventListener('change',sync);
