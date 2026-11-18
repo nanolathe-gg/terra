@@ -313,6 +313,8 @@ fn surfaceEdge(share: f32, e: vec4f, p: vec2f, pixel: vec2f) -> f32 {
 }
 // The stage's layers over `color` in place; `cover` gets each built-in slot's coverage (a union where several layers draw one slot), and
 // `over` the share material layers cover (they lie over what is below, so the built-ins' coverage under them shrinks).
+// Where a pixel reads its ground materials (fragmentMain sets it: the world point, moved on the solid's cut faces to the native pixel they show at).
+var<private> groundAt: vec2f;
 fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, array<vec3f, 7>>, mask: ptr<function, array<f32, 7>>, cover: ptr<function, array<f32, 7>>, over: ptr<function, f32>, p: vec2f, pixel: vec2f) {
     let head = u.materialTable[SURFACE_HEAD + stage / 2u];
     let odd = (stage & 1u) == 1u;
@@ -343,7 +345,7 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
             // Height contrast (the rule head's w): the layer's material against the ground below, art height in units of 4, so the taller
             // wins where the layer meets what it covers. Windows feel it only inside their edge (4 share (1 - share)); a score at its threshold;
             // a partial Amount where its coverage pattern decides.
-            if (rule.w > 0.0 && r0.z >= 0.0) { lift = rule.w * 0.25 * (materialRelief(p, u32(r0.z)) - ownGroundRelief(p, gs)); }
+            if (rule.w > 0.0 && r0.z >= 0.0) { lift = rule.w * 0.25 * (materialRelief(groundAt, u32(r0.z)) - ownGroundRelief(groundAt, gs)); }
             if (rule.x < 1.5) {
                 share = surfaceWindows(ruleAt, rules, surfaceFacts, share);
                 if (share == 0.0) { continue; }
@@ -364,12 +366,12 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
         if (builtin) {
             // A built-in that draws a material (docs/SURFACE_LAYERS.md phase 4) lays that material's color by its own share.
             var source = (*src)[k];
-            if (r0.z >= 0.0) { source = groundPigment(p, u32(r0.z), surfaceFacts[3], surfaceFacts[4]); }
+            if (r0.z >= 0.0) { source = groundPigment(groundAt, u32(r0.z), surfaceFacts[3], surfaceFacts[4]); }
             if (stage == 5u && k >= 5u) { source = mix(source, riverBedOver.rgb, riverBedOver.a); }   // sand dust and sand: a braided river's gravel
             *color = mix(*color, source, c);
             (*cover)[k] = select(1.0 - (1.0 - (*cover)[k]) * (1.0 - c), c, (*cover)[k] == 0.0);   // layers of one slot join as a union
         } else {
-            *color = mix(*color, groundPigment(p, u32(r0.z), surfaceFacts[3], surfaceFacts[4]), c);
+            *color = mix(*color, groundPigment(groundAt, u32(r0.z), surfaceFacts[3], surfaceFacts[4]), c);
             for (var j = 0u; j < 7u; j++) { (*cover)[j] *= 1.0 - c; }
             *over = 1.0 - (1.0 - *over) * (1.0 - c);
         }
@@ -878,7 +880,7 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     var scale = 0.0;
     for (var i = 0; i < 5; i++) {
         var m = select(u.shine[i], u.rock[rs & rockMask].shineRock, i == 2);
-        if(i==0){m.x=max(m.x,materialShine(p,gs));m.y=select(m.y,16.0,m.y<=0.0);}   // a material's own shine adds to the world's ground row
+        if(i==0){m.x=max(m.x,materialShine(groundAt,gs));m.y=select(m.y,16.0,m.y<=0.0);}   // a material's own shine adds to the world's ground row
         if(i==2){let rm=rockMaterialOf(rs);if(rm>=0){m.x=max(m.x,materialShine(grainPixel(pixel),u32(rm)));}}   // and the rock material's to the rock's (read at the native pixel, as its grain)
         gloss += weight[i] * m.x;
         focus += weight[i] * m.x * m.y;
@@ -1606,11 +1608,22 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     painted.x = max(painted.x, max(rimRockAt(p), shoreRockAt(p)));   // bare rock at a rim or a shore is painted rock (engine-common.wgsl rimRockAt, shoreRockAt)
     let place = landPlace(p, baseHeight(p), broad, broad, slope, n, weather, route);
     let bare=clamp(1.0-place.vegetation,0.0,1.0);
-    let faceGate=rockFaceGate(slope/(1.0-.5*bare),painted.x,route)*(1.0-softBankAt(p));
+    // The solid's own faces. Where the drawn surface stands off the surface it was built from (whole blocks and displaced faces cut into or out
+    // of it) by more than the ground's grain and the lattice's interpolation (1.5 units at 1x, more for coarser previews), the rock decision reads
+    // the solid's slope and its face gate, whatever the authored slope under it (the authored slope alone left those faces level ground). The
+    // world's placement (exposure, vegetation) still decides how much of it is rock, so a grassy hill stays grassy.
+    let offDead=1.5*max(u.chunkScale,1.0);
+    let solidOff=h-voxelSourceHeight(p);
+    let solidRock=smoothstep(offDead,offDead+2.5*max(u.chunkScale,1.0),abs(solidOff));
+    // Ground on such a face is read at the native pixel the camera shows it at: past the dead zone each unit of offset moves the read half a pixel
+    // (a height unit rises half a pixel), so a wall gives a texel a row and not one texel smeared down it. Within it, level ground keeps the
+    // world point, and with it the repeat its tiles share.
+    groundAt=vec2f(p.x,p.y-.5*sign(solidOff)*max(abs(solidOff)-offDead,0.0));
+    let faceGate=max(rockFaceGate(slope/(1.0-.5*bare),painted.x,route)*(1.0-softBankAt(p)),solidRock);
     let rain=geometry.rain;
     let footing=u.rock[rs & rockMask].faceGrass*rain*smoothstep(.6,.95,normal.z)*smoothstep(u.sea,u.sea+2.0,h);
     let solidSlope=length(normal.xy)/max(normal.z,.1);
-    let rockSlope=max(slope,solidSlope*.7*smoothstep(.12,.5,slope));
+    let rockSlope=max(slope,solidSlope*.7*max(smoothstep(.12,.5,slope),solidRock));
     let rise=mix(smoothstep(u.rock[rs & rockMask].rockFaceFrom,u.rock[rs & rockMask].rockFaceFrom+1.3,rockSlope),smoothstep(.5*u.rock[rs & rockMask].rockFaceFrom,.5*u.rock[rs & rockMask].rockFaceFrom+.5,rockSlope),bare);
     let share=max(clamp(u.rock[rs & rockMask].faceRock*rise*place.exposure*(2.0-clamp(place.vegetation,0.0,2.0)),0.0,1.0),smoothstep(.15,.95,painted.x)*.9);
     let patches=voxelNoise(hit/vec3f(13,13,8));
@@ -1704,7 +1717,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     if (u.lavaDusk > 0.0 && shading < 1.0) { shading = pow(max(shading, 0.0), 1.0 + u.lavaDusk * smoothstep(u.base + 20.0, u.base + 60.0, baseHeight(p)) * (1.0 - smoothstep(0.1, 0.5, dot(normal, u.light)))); }
     let timeMaps = timeMapsAt(p);
     gs=groundSlotAt(p);
-    var grass = groundPigment(p,gs,timeMaps.wear,timeMaps.deposit);
+    var grass = groundPigment(groundAt,gs,timeMaps.wear,timeMaps.deposit);
     // The world's own settings for level ground (its low-ground tint, its cover table, its patches) belong to its ground material;
     // a material a stroke chose keeps its own look.
     let ownGround = gs == u32(u.groundDefault);
@@ -1726,7 +1739,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         surfaceFacts = array<f32, 18>(slope, baseHeight(p) - u.sea, baseHeight(p) - u.base, timeMaps.wear, timeMaps.deposit, timeMaps.wet,
             site.x, coverSoil(slope, place.top, timeMaps, site.x), site.y, place.top, place.convexity, 0.0, 0.0, 0.0, facing.x, facing.y, shelter, toWater);
     }
-    if (ownGround) { let hs = highShare(p); if (hs > 0.0) { surfSrc[0] = groundPigment(p, u32(u.highGround), timeMaps.wear, timeMaps.deposit); surfMask[0] = hs; } }
+    if (ownGround) { let hs = highShare(p); if (hs > 0.0) { surfSrc[0] = groundPigment(groundAt, u32(u.highGround), timeMaps.wear, timeMaps.deposit); surfMask[0] = hs; } }
     surfaceStage(0u, &grass, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);   // stage 0: highland ground
     // Low ground: the ground from the sea up to lowReach above it keeps Grain kept of its grain, by the authored height (the relief's
     // grit would speckle the edge); the edge is ragged by 20-px noise and fades over the upper half of the reach. Under the sea it is all
