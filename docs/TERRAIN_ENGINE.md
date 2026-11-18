@@ -219,6 +219,12 @@ feature.
       art pixels, chosen over per-tile error diffusion, which re-patterned
       whole tiles on every small edit. The draw's old palette step and its
       World rows went.
+    - A pixel's eight candidates come from a table built on the GPU for each
+      palette: a 64 x 64 x 64 grid of the color cube, each point holding the
+      candidates the search finds for its color. The search for every pixel
+      cost about 5.4 ms of a 512 px final tile's 41 ms of GPU time; the
+      lookup costs 0.25 ms. About a tenth of the dots move, and by eye the
+      picture is the same (2026-11-17).
     - A material's palette list stays as an option for palette output (true
       color ignores it): it alone reproduced the retail hue speckle; graph
       noise tuned to imitate it did not.
