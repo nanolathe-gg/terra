@@ -498,7 +498,7 @@ export class TerrainRenderer {
       {binding:10,resource:(kind==='rock-weather'?source.rockWeather.empty:(source.rockWeather.final??source.rockWeather.empty)).createView()},
       {binding:11,resource:(kind==='rock-weather'?source.rockWeather.empty:(source.rockWeather.source??source.rockWeather.empty)).createView()},
       {binding:12,resource:(kind==='rock-weather'?source.rockWeather.empty:(source.rockWeather.rim??source.rockWeather.empty)).createView()},
-      {binding:13,resource:this.groundCache.fieldTexture.createView({dimension:'2d-array'})},{binding:14,resource:this.groundCache.colorTexture.createView({dimension:'2d-array'})},{binding:15,resource:{buffer:this.groundCache.programBuffer}},{binding:16,resource:this.groundCache.shineTexture.createView({dimension:'2d-array'})},{binding:17,resource:this.groundCache.meanTexture.createView({dimension:'2d-array'})}]});
+      {binding:13,resource:this.groundCache.fieldTexture.createView({dimension:'2d-array'})},{binding:14,resource:this.groundCache.colorTexture.createView({dimension:'2d-array'})},{binding:15,resource:{buffer:this.groundCache.programBuffer}},{binding:16,resource:this.groundCache.heightTexture.createView({dimension:'2d-array'})},{binding:17,resource:this.groundCache.meanTexture.createView({dimension:'2d-array'})}]});
     if(source===this)this.bindGroups[kind]=group;return group;
   }
 
