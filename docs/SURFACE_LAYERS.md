@@ -345,6 +345,28 @@ Limits: a world's tones are measured against its water material as drawn on this
 material editor keeps the tone, which is the intent. Lava's and Moon's tones are their measured -1 to +3 level offsets, kept so
 their look does not move.
 
+## Round 8 (branch `placement`, 2026-11-17): placing surfaces by hand
+
+The owner asked how an artist gets more rock face or rock from another slope, more grass or moss over the rock, and control over shores and
+snow, and what would make that easy. Of the proposals, "Go for it" took the first three (each a commit; the measurements are in their messages):
+- **Each built-in row lists what places it** (`BUILTIN_PLACED_BY`): the World settings the draw reads for its share, each with its value and a
+  door to it. Rock: Rock share of steep faces and Starts at slope (its rock type's; the row shows the world's rock), Bare rock at rims, Rock at
+  shores, Rock on low banks, Lushness. Beach: Beach width. Slope cover: Sampled slope texture. Highland ground and Base band's link becomes the
+  same list. Rows stay where they are: moved alone, a setting would leave its group's heading and siblings behind.
+- **Spread** (a layer's `spread`, -1 to 1): one slider beside Coverage that moves every limit of the layer's rule together, so "more of this"
+  widens where it may show (Coverage is how much of that area it covers). The packed rows carry the moved limits (`spreadRule`), so the shader
+  is unchanged and Spread 0 packs the rule as written. Each condition says where its limits are with Spread.
+- **The fact view**: pointing at a condition shows its fact over the map in gray across its range (`SURFACE_FACT_RANGE`), magenta where it
+  holds, with a histogram of the view and the share that holds it. Diagnostic views 14 to 17 read the previewed layer's own rows; the
+  histogram reads the view's pixels once the map is idle.
+
+Found on the way: on Green's default view the Moss in damp shade preset draws nothing (moisture never passes .4 there); at Spread +1 it covers
+most of the flat ground. The presets' numbers may want a look per world, with the fact view.
+
+Not done: the "More here / not here" buttons on Pick, new facts (distance to water, which way a slope faces, a broad breakup pattern), a snow
+layer that sheds off slopes and stays in shade, rock placement as a rule the rock solid reads, and moving setting rows into Surface.
+The Spread steps (`SURFACE_SPREAD_STEP`) are first guesses; Moss at +1 on Green is strong.
+
 ## Sources (phase 1)
 
 Built-in sources are the surfaces the engine draws today without a material: rock (the rock type's color and
@@ -366,3 +388,4 @@ Phase 4 turns them into materials one by one.
 - Low ground (round 7): the "Low ground by the water" preset draws Red's ground as a band along the shore; judge its material and reach.
 - Shallow water (round 7): a picked tone is kept in the world's colors (`shallowTone`); say if it should live elsewhere.
 - Converting highland, base band and rock face into rules means their World rows move into the Surface section.
+- Spread (round 8): you asked for it as proposed; it does repeat what editing a rule's limits does (rule 9), so say if it should go.
