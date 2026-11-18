@@ -96,3 +96,12 @@ test('Show here at the end of a fact’s range takes the limit away rather than 
   assert.deepEqual(moved, [{fact: 'sheltered', end: 'from', was: .3, now: null}]);
   assert.equal(ruleHere(next, facts({sheltered: 0})).share, 1);
 });
+
+test('a score’s new threshold clears the edge noise the draw adds, and a value past the range still ends fully out', () => {
+  const layer = {id: 's', material: 'x', edge: {noise: .8}, score: {from: 1, fade: .05, terms: [{fact: 'slope', weight: 1}]}};
+  const at = facts({slope: .5});
+  const from = ruleToShow(layer, at).layer.score.from;
+  assert.ok(.5 - from >= .05 + .05 + .4 - 1e-9, `below the score by fade, 0.05 and half the noise (${from})`);
+  const past = {id: 'm', material: 'x', where: [{fact: 'aboveSea', from: 0, fade: 2}]};
+  assert.equal(ruleHere(ruleToHide(past, facts({aboveSea: 260})).layer, facts({aboveSea: 260})).share, 0);
+});

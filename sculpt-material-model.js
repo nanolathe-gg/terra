@@ -234,7 +234,7 @@ export function ruleHere(layer, facts) {
 // Show moves every window that fails to just past the value (a limit that would leave its fact's range goes); Not here moves the one limit whose move cuts least of its fact's range. A
 // score's threshold moves past the score. The limits stored are the drawn ones less the layer's Spread (spreadRule), so the layer draws
 // the new limit with Spread as it is. The new limit clears the value by a fiftieth of the fact view's gray and the window's fade (a score:
-// by its fade and 0.05), rounded to a thousandth of the range.
+// by its fade, 0.05 and half its edge noise; its height contrast is not counted), rounded to a thousandth of the range.
 export function ruleToShow(layer, facts) { return moveRule(layer, facts, true); }
 export function ruleToHide(layer, facts) { return moveRule(layer, facts, false); }
 function moveRule(layer, facts, show) {
@@ -249,7 +249,8 @@ function moveRule(layer, facts, show) {
   if (here.kind === 'score') {
     if (here.terms.some(t => t.late)) return {reason: `Its score reads ${lateNames(here.terms)}, which the draw finishes after this layer: set its threshold in World › Surface.`};
     const terms = layer.score.terms || [], step = s * terms.reduce((sum, t) => sum + Math.abs(Number(t.weight ?? 1)) * (SURFACE_SPREAD_STEP[t.fact] ?? 0), 0) / Math.max(terms.length, 1);
-    const pad = here.fade + .05, drawn = show ? here.score - pad : here.score + pad, now = clean(Math.round((drawn + step) * 1000) / 1000);
+    // The draw adds the layer's edge noise (Noise times -0.5 to 0.5) to the score before its threshold, so the margin covers half of it too.
+    const pad = here.fade + .05 + .5 * Math.max(0, Number(layer.edge?.noise) || 0), drawn = show ? here.score - pad : here.score + pad, now = clean(Math.round((drawn + step) * 1000) / 1000);
     next.score.from = now; moved.push({fact: null, end: 'score', was: layer.score.from ?? .5, now});
     return {layer: next, moved};
   }
@@ -267,8 +268,8 @@ function moveRule(layer, facts, show) {
     const late = failing.filter(([t]) => t.late);
     if (late.length) return {reason: `${lateNames(late.map(([t]) => t))} here is the share the draw finishes after this layer, so its limit cannot be read from this pixel: set it in World › Surface.`};
     for (const [t, k] of failing) {
-      if (t.value < t.from + t.fade) store(k, 'from', Math.min(t.value, clear(t, -1)));
-      if (t.value > t.to - t.fade) store(k, 'to', Math.max(t.value, clear(t, 1)));
+      if (t.value < t.from + t.fade) store(k, 'from', Math.min(t.value - t.fade, clear(t, -1)));
+      if (t.value > t.to - t.fade) store(k, 'to', Math.max(t.value + t.fade, clear(t, 1)));
     }
   } else {
     // Each limit that could leave the value out, by how much of its fact's gray the move cuts away (factPosition): a limit by the distance it
@@ -277,7 +278,7 @@ function moveRule(layer, facts, show) {
     here.terms.forEach((t, k) => {
       if (t.late || t.share <= 0) return;
       const pos = v => factPosition(t.fact, v), has = end => layer.where[k][end] != null;
-      const from = Math.max(t.value, clear(t, 1)), to = Math.min(t.value, clear(t, -1));
+      const from = Math.max(t.value + t.fade, clear(t, 1)), to = Math.min(t.value - t.fade, clear(t, -1));
       // A window narrowed past its other end would invert, drawn or as stored (Spread moves the stored limits apart): that limit is no option.
       const step = s * (SURFACE_SPREAD_STEP[t.fact] ?? 0), w = layer.where[k];
       if (from < t.to && !(has('to') && from + step > w.to)) options.push({k, end: 'from', drawn: from, cost: has('from') ? Math.abs(pos(from) - pos(t.from)) : pos(from)});

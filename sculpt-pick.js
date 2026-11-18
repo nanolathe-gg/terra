@@ -178,7 +178,7 @@ export function mountPick(host) {
     note.hidden = false;
     if (result.reason) { note.textContent = `${name}: ${result.reason}`; return; }
     if (!host.setSurface(layers.map((l, k) => k === i ? result.layer : l))) { note.textContent = `${name} could not be changed.`; return; }
-    note.textContent = `${name} ${show ? 'now shows here' : 'now leaves this pixel'}: ${result.moved.map(m => `${limitName(m.fact, m.end)} ${limitValue(m.was)} → ${limitValue(m.now)}`).join(', ')}. Undo puts it back.`;
+    note.textContent = `${name}: its rule now ${show ? 'holds here' : 'leaves this pixel out'}: ${result.moved.map(m => `${limitName(m.fact, m.end)} ${limitValue(m.was)} → ${limitValue(m.now)}`).join(', ')}. Undo puts it back.`;
     readHere();
   }
   // The ring on the pixel and the card beside it, inside the map view: right of the pixel, or left where the view ends, and held on screen.
