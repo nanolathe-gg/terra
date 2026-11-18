@@ -24,6 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the whole history, for the history check below
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -31,6 +33,10 @@ jobs:
         with:
           go-version-file: go.mod
       - run: sh repro/check.sh quick
+      # The pre-push hook's history check, here too: a push without the hook, or a pull request, cannot bring generated preview PNGs or
+      # browser output (smoke-out/, Chrome profiles) into the history.
+      - name: Check the history for generated files
+        run: go run ./cmd/previews check-history
       - name: Check preview freshness and publication
         env:
           GH_TOKEN: ${{ github.token }}

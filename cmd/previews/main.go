@@ -16,7 +16,7 @@ import (
 
 func run() error {
 	if len(os.Args) < 2 {
-		return fmt.Errorf("usage: go run ./cmd/previews fingerprint|stamp|package|compare|publish|fetch|check|check-push|install-hook")
+		return fmt.Errorf("usage: go run ./cmd/previews fingerprint|stamp|package|compare|publish|fetch|check|check-push|check-history|install-hook")
 	}
 	command := os.Args[1]
 	f := flag.NewFlagSet(command, flag.ContinueOnError)
@@ -119,11 +119,21 @@ func run() error {
 			if len(fields) != 4 {
 				return fmt.Errorf("invalid pre-push input")
 			}
-			if !strings.HasPrefix(fields[2], "refs/heads/") || strings.Trim(fields[1], "0") == "" || seen[fields[1]] {
+			if strings.Trim(fields[1], "0") == "" || seen[fields[1]] {
 				continue
 			}
 			sha := fields[1]
 			seen[sha] = true
+			// A tag's history is checked as a branch's (generated files never go public); only a branch must also have published previews.
+			if strings.HasPrefix(fields[2], "refs/tags/") {
+				if err = previewassets.CheckHistory(*root, sha); err != nil {
+					return err
+				}
+				continue
+			}
+			if !strings.HasPrefix(fields[2], "refs/heads/") {
+				continue
+			}
 			if err = previewassets.CheckHistory(*root, sha); err != nil {
 				return err
 			}
@@ -136,6 +146,16 @@ func run() error {
 			}
 		}
 		return scanner.Err()
+	case "check-history":
+		// CI's copy of the hook's history check: no generated preview PNG or browser output (smoke-out/) anywhere in the history of a ref.
+		ref := "HEAD"
+		if f.NArg() > 0 {
+			ref = f.Arg(0)
+		}
+		if err = previewassets.CheckHistory(*root, ref); err != nil {
+			return err
+		}
+		fmt.Println("No generated preview or browser files in the history of " + ref + ".")
 	case "install-hook":
 		hookPath := filepath.Join(*root, ".githooks")
 		c := exec.Command("git", "config", "--local", "core.hooksPath", hookPath)
