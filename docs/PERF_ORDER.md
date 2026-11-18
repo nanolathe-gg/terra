@@ -131,3 +131,70 @@ judged both look changes the same by eye.
   features) the parts it would share are under 20 KB a checkpoint, under
   1 MB over 48 checkpoints.
 - **5, not started:** waits on the `088b94c4` decision.
+
+## Second round (2026-11-17, late)
+
+Measured on main `ad10a3a4` (and `1f2b958e` before it). Other sessions held
+the GPU at 80-100% throughout, so every timing is the fastest of several
+interleaved pairs, and release-to-final times (which swung up to 1.7x
+between runs of one build) are not used. Ideas came from two Fable code
+reads; each was checked by ablation before it was ranked.
+
+Where time goes now (owner's 8x8 map, Chrome): a jump is final at 0.8-1.3 s,
+a draw 0.85-1.06 s after release. A final 512 px tile is about 26 ms of GPU
+(Dawn): geometry 8.6, relief bake 6.5, color 4.4, voxel build 2.9. The
+"output blit" figure (4.4 ms) is a timestamp artifact: it always equals the
+color pass's, and a blit writing a constant costs the same. A drag keeps the
+GPU 94-96% busy, a picture every 23 ms. Deposit and vent ground patches
+(`fitGround`) are 128 px export-art bakes, one at a time, after the ring.
+
+### Built (branches, not on main)
+
+- **`perf/bake-skip`, relief octaves where gain is 0.** Byte-identical in
+  nine fixtures. Dawn: relief bake 6.4 to 4.5 ms a tile on level-heavy
+  ground. Owner's map, Chrome: 5.1-5.7 against 6.8-7.1 ms a bake after a
+  jump; 0.9-1.0 against 1.1-1.2 ms a drag picture.
+- **`perf/bake-skip`, cavity reads the hit's gradient once.** Byte-identical.
+  Dawn: geometry 8.8 to 8.3 ms a tile; inside the noise in Chrome.
+- **`fix/material-field-spacing` (a look fix, not perf).** On paged maps
+  with Material weathering above 0, each page's material field used
+  (world size - 1) / 767 as its spacing (about 5.7 px on 8x8, not 2): 75% of
+  page cells differed from a whole-map field, by up to 0.95; none do with
+  the fix. New GPU test `repro/material-field-pages.gpu.test.mjs`.
+
+### Measured, not built
+
+1. **The color reserve starves pages on small budgets.** `colorReserve()`
+   holds min(40%, budget - 512 MiB) for color records whether or not any
+   are held. At `gpuMB=1024` (16x16 Green): 7 shape and 7 weather pages
+   against 24 each at 2048; after a 30-step pan 154 shape evaluations
+   against 90; two sliders and a hill stroke then cost 237 more against 10.
+   After the pan only 47 of the 410 reserved MiB held records. Reserving
+   what the records hold needs the color cache to yield to pages (and pages
+   to give room back when color edits start): a design for the owner.
+2. **Soil-only voxels skip the rock-face lattices** (`voxelDensity`, an early
+   return when `face == 0`). Voxel build -0.4 to -0.5 ms a tile on two rocky
+   fixtures; one pixel in 1,048,576 moves (a float contraction tipping one
+   dither), so exported bytes may change. Low priority.
+3. **Fine path at coarse samples** (rock detail, rain, occlusion when a
+   sample is 2 px or more): -1.3 of 3.5 ms geometry a quarter-level picture,
+   -4.5 of 10.4 ms in a final (finals keep it). Changes preview pixels:
+   rule 7 and the owner's eye decide.
+4. **Margins.** Fields carry 204 px on every side for the far shadow taps;
+   at 128 px the relief bake falls 6.5 to 5.0 ms, at 61 px no further. A
+   per-side apron (toward the sun only) or one window for 2x2 tiles would
+   share it; large, unmeasured beyond that.
+
+### Measured and dropped
+
+- `rockFlow`'s 16 rounds in one compute pass: byte-identical, no
+  measurable change (the rounds' cost is compute, not pass overhead).
+- Fewer bisections (16 to 10): 0.25 ms. Far shadow loop: 0.2 ms.
+- Time run waits: after a draw, Time's span minus its GPU time and the
+  draft is about 60-100 ms; worth a look only with a quiet GPU to measure.
+- Bigger tiles: a 1024 px tile does a 1024 px square for 25% less GPU, but
+  over-covers the view; the margin items above get the same saving.
+
+Probes and logs: `~/terraform-assets/agent-perf2-2026-11-17/` (`ab.sh`
+interleaved ablations, `mapprobe4.mjs` with after-release GPU idle,
+`memprobe2.mjs` with page evaluation counts, `absumm.mjs`, `pngdiff.py`).

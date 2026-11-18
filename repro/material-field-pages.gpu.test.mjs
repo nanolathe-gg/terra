@@ -31,6 +31,7 @@ test('each page of a paged map makes the whole map\'s material field',{timeout:2
       }
     }
     console.log(`material field: ${pages} pages, ${cells} cells, ${off} differ by more than 0.02, largest ${(max/255).toFixed(4)}`);
+    assert.ok(pages>1,'the map is paged');
     assert.equal(cells,n,'visited every cell including partial edge pages');
     // The Time pass behind the field differs a little near a window's sink edge (pagedWeatherCompare); the field follows it, no further.
     assert.ok(off/cells<.01,`${off} of ${cells} cells differ`);
