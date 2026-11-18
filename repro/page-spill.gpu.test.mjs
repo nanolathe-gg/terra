@@ -19,7 +19,7 @@ async function pageBytes(fields, rect) {
   await spillSettled(fields);
   const g = await fields.debugGather(rect);
   await spillSettled(fields);
-  return {bytes: {shape: digest([...Object.values(r.fields)]), weather: digest([g.W, ...g.maps])},
+  return {bytes: {shape: digest([...Object.values(r.fields)]), weather: digest([g.W, ...g.maps, ...(g.field ? [g.field] : [])])},
     restored: after.spill.weatherRestores - before.spill.weatherRestores, evaluated: after.shapeEvaluations - before.shapeEvaluations, runs: after.weatherRuns - before.weatherRuns};
 }
 
@@ -37,7 +37,7 @@ test('evicted pages come back, weather from the spill and shape by evaluation, w
     const {fieldsModule, engine, renderer, config} = s;
     let nodes = s.nodes.slice();
     const common = {worldSize: s.worldSize, worldGrid: s.worldGrid, baseHeight: config.baseHeight, maskKeys: engine.MASK_KEYS, nodes: () => nodes, device: () => renderer.device, context: s.context, gesture: () => false};
-    const time = engine.pagedTime({config, renderer, size: s.worldSize, spacing: s.spacing, material: s.material});
+    const time = engine.pagedTime({config, renderer, size: s.worldSize, spacing: s.spacing, material: {depositSpread: .65, seed: s.refinementSeed, mineral: false}});
     // A keeps no page resident once its readers let go (every page goes to the spill); B keeps them all.
     const A = fieldsModule.createPagedFields({...common, shapeBudget: 1, weatherBudget: 1}), B = fieldsModule.createPagedFields(common);
     made.push(A, B);

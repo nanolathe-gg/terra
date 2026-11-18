@@ -1721,7 +1721,7 @@ async function runFedWeather(job) {
     if(job!==weatherJob||stroke||moving){retireGpuWeather(result);return;}
     const invalid=previous?.invalidRect;
     dropGpuWeather();
-    gpuWeather={revB,weather:result.weather,maps:result.maps,field:result.field??null,bytes:result.bytes+(result.field?grid*grid*16:0),mapsOn:true,grid,cpuHeight:false,cpuMaps:false,loading:null};
+    gpuWeather={revB,weather:result.weather,maps:result.maps,field:result.field??null,bytes:result.bytes+(result.field?.size??0),mapsOn:true,grid,cpuHeight:false,cpuMaps:false,loading:null};
     gpuErosionMs=result.milliseconds; window.lastErosionParts=result.parts;
     weatherState='ready'; $('weather-state').textContent=`Weathered edges · GPU time pass ${Math.round(gpuErosionMs)} ms`;
     if (!stroke && !moving) gpuWeatherCpu(false).catch(() => {});   // picking and the cursor read heights at once; the maps stay lazy

@@ -239,7 +239,7 @@ export class GpuErosion {
     }
   }
 
-  // The material field (engine-weather.wgsl mf*): arrival, soil, softened source and source a cell, as a GPU buffer of vec4f that the chunk feed
+  // The material field (engine-weather.wgsl mf*): arrival, soil, softened source and source a cell, packed into one RGBA8 word that the chunk feed
   // writes into gridTexture layer 1. It reads a height already on the GPU (the Time pass's eroded plane: `heightBuffer`, `heightOffset` cells in)
   // and never comes back to the CPU. {ox, oy} is the window's first lattice cell, so that pages of one map join. The caller owns the buffer.
   // A window of a larger map passes the map's spacing, as runGpu's request does: `size` is then the map's, not the window's.
@@ -257,7 +257,8 @@ export class GpuErosion {
     const P = this.field, S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, made = [];
     const make = (bytes, usage = S) => { const b = device.createBuffer({size: Math.max(16, bytes), usage}); made.push(b); return b; };
     const heightBuf = make(n * 4);
-    const [source, gx, gy, basin, deposit, flow, a, b, c, soft, settled, broad, runoff] = Array.from({length: 13}, () => make(n * 4)), field = device.createBuffer({label: 'material field', size: n * 16, usage: S});
+    const [source, gx, gy, basin, deposit, flow, settled] = Array.from({length: 7}, () => make(n * 4));
+    const field = device.createBuffer({label: 'material field', size: n * 4, usage: S});
     const mineral = profile.mineral === true, elevated = profile.elevatedCover || [0, 30, 0];
     const uniform = (sigma, axis) => {
       const buf = make(80, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST), view = new DataView(new ArrayBuffer(80));
@@ -278,13 +279,21 @@ export class GpuErosion {
     const tiles = Math.ceil(grid / 8), u0 = uniform(0, 0);
     run(P.source, [1, 2, 3, 4, 5], [heightBuf, source, gx, gy, basin], u0, [tiles, tiles]);
     run(P.drops, [1, 2, 3, 4, 6, 7], [heightBuf, source, gx, gy, deposit, flow], u0, [Math.ceil(n / 64)]);
+    // The drops have consumed both gradients. Counts overwrite them, then the blur
+    // passes can reuse the two count buffers. Each dispatch reads and writes distinct buffers.
+    const depositAmount = gx, flowAmount = gy, horizontal = deposit, soft = flow;
     const blur = (input, output, sigma) => {
-      run(P.blur, [8, 9], [input, c], uniform(sigma, 0), [tiles, tiles]);
-      run(P.blur, [8, 9], [c, output], uniform(sigma, 1), [tiles, tiles]);
+      run(P.blur, [8, 9], [input, horizontal], uniform(sigma, 0), [tiles, tiles]);
+      run(P.blur, [8, 9], [horizontal, output], uniform(sigma, 1), [tiles, tiles]);
     };
-    run(P.counts, [6, 7, 9], [deposit, flow, a], uniform(0, 1), [tiles, tiles]);
-    run(P.counts, [6, 7, 9], [deposit, flow, b], uniform(0, 2), [tiles, tiles]);
-    blur(source, soft, 9 + spread * 17); blur(a, settled, 2.6); blur(a, broad, 9); blur(b, runoff, 3.5);
+    run(P.counts, [6, 7, 9], [deposit, flow, depositAmount], uniform(0, 1), [tiles, tiles]);
+    run(P.counts, [6, 7, 9], [deposit, flow, flowAmount], uniform(0, 2), [tiles, tiles]);
+    blur(source, soft, 9 + spread * 17);
+    blur(depositAmount, settled, 2.6);
+    // Once the horizontal pass has read the input, its vertical pass can replace it.
+    const broad = depositAmount, runoff = flowAmount;
+    blur(depositAmount, broad, 9);
+    blur(flowAmount, runoff, 3.5);
     run(P.combine, [1, 2, 5, 10, 11, 12, 13, 14], [heightBuf, source, basin, field, settled, broad, runoff, soft], u0, [tiles, tiles]);
     device.queue.submit([encoder.finish()]);
     made.forEach(buf => buf.destroy());   // destroyed buffers wait for the submitted work
