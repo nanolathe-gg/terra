@@ -100,3 +100,25 @@ fewer rock-detail taps and light terms at 2 px.
 
 Time and paging. On the owner's 8x8 map, Time was half the GPU time to a
 final picture (2026-11-16).
+
+## Status (2026-11-17, evening)
+
+Each item is on its own branch from this one; none is on main.
+
+- **1, done:** `perf/palette-table`. Output stage 5.4 to 0.25 ms a 512 px
+  final tile; GPU per tile 41 to 31 ms (Node/Dawn); Chrome release to final
+  on the 16 x 16 Green map 976-993 to 921-960 ms. 9.5-12% of pixels move,
+  by eye the same. Look change for the owner.
+- **2, done:** `perf/height-read`. 16 x 16 corner heights 2.0-3.0 to
+  1.1-2.3 s (Node/Dawn); heights and the exported `.ufo` byte-identical.
+- **3, reviewed:** `mem-pages-review` merges `mem-pages` with main (review in
+  `~/terraform-assets/agent-memory-2026-11-16/HANDOFF.md`). 16 x 16 after a
+  pan: renderer process 916 to 387 MB, GPU process 1,272 to 1,110 MB, same
+  pictures. Waits on the owner: the iPhone/iPad 4 GB guess and the 24-page
+  cap. `088b94c4` waits on the owner too.
+- **4, material textures done:** `perf/material-pack`. 84.3 to 48.3 MiB;
+  42-49% of pixels pick another dither dot, by eye the same. Look change.
+- **4, undo sharing dropped:** on the owner's busiest map (8 x 8, 101
+  features) the parts it would share are under 20 KB a checkpoint, under
+  1 MB over 48 checkpoints.
+- **5, not started:** waits on the `088b94c4` decision.
