@@ -1110,9 +1110,7 @@ fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
         let gap = 0.75 + 0.25 * smoothstep(0.15, 0.5, shelfNoise(p / 11.0 + 91.0 + j * 5.1));
         let inside = 1.0 - smoothstep(-0.7, 0.7, d);
         rgb = mix(rgb, fillTone, inside * fillStep * zone * vis);
-        // Retail's lines run from a dusky rose (155, 91, 99) on the inner copies to a pale one (215, 163, 179) on the outer.
-        let lineTone = mix(tone, mix(vec3f(0.55, 0.27, 0.31), vec3f(0.84, 0.62, 0.68), t), u.ringTone);
-        rgb = mix(rgb, lineTone, line * gap * zone * vis * (1.0 - RING_TAPER * t) * u.ringContrast);
+        rgb = mix(rgb, tone, line * gap * zone * vis * (1.0 - RING_TAPER * t) * u.ringContrast);
     }
     return rgb;
 }

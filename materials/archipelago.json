@@ -848,7 +848,6 @@
         "ringFill": 0.1,
         "ringPatch": 0.8,
         "ringPatchSize": 160,
-        "ringTone": 0.0,
         "faceFill": 0.25,
         "shallowDepth": 4,
         "deepDepth": 52
