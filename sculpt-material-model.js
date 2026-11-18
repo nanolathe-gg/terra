@@ -88,6 +88,9 @@ export const SURFACE_FACTS = ['slope', 'aboveSea', 'abovePlain', 'wear', 'deposi
 // spans it. engine-common.wgsl SURFACE_FACT_LO and SURFACE_FACT_HI hold the same numbers.
 export const SURFACE_FACT_RANGE = {slope: [0, 3], aboveSea: [-20, 200], abovePlain: [-60, 200], wear: [0, 1], deposit: [0, 1], wetness: [0, 1], moisture: [0, 1],
   soilDepth: [0, 1], light: [0, 1.6], top: [-1, 1], convexity: [-1, 1], rockShare: [0, 1], debrisShare: [0, 1], sandShare: [0, 1]};
+// The fact view's gray at a range's low and high ends (engine-common.wgsl SURFACE_FACT_GRAY_LO and _HI): the histogram reads a pixel's green
+// across them. Black is the canvas outside the map.
+export const SURFACE_FACT_GRAY = [.1, .85];
 // Spread (a layer's `spread`, -1 to 1, 0 its rule as written): one control that moves every limit of its rule together, so "more of this layer"
 // widens where it may show without editing each condition. A window's from and to move apart (Spread up) or together (down) by Spread times
 // the fact's step below; a score's threshold falls (up) or rises (down) by Spread times its terms' mean weighted step. A window never inverts:

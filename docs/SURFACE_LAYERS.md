@@ -348,7 +348,8 @@ their look does not move.
 ## Round 8 (branch `placement`, 2026-11-17): placing surfaces by hand
 
 The owner asked how an artist gets more rock face or rock from another slope, more grass or moss over the rock, and control over shores and
-snow, and what would make that easy. Of the proposals, "Go for it" took the first three (each a commit; the measurements are in their messages):
+snow, and what would make that easy. I proposed seven items and asked whether to plan the first three; the owner said "Go for it", and they
+were built on the branch, not landed (each a commit; the measurements are in their messages):
 - **Each built-in row lists what places it** (`BUILTIN_PLACED_BY`): the World settings the draw reads for its share, each with its value and a
   door to it. Rock: Rock share of steep faces and Starts at slope (its rock type's; the row shows the world's rock), Bare rock at rims, Rock at
   shores, Rock on low banks, Lushness. Beach: Beach width. Slope cover: Sampled slope texture. Highland ground and Base band's link becomes the
@@ -358,7 +359,8 @@ snow, and what would make that easy. Of the proposals, "Go for it" took the firs
   is unchanged and Spread 0 packs the rule as written. Each condition says where its limits are with Spread.
 - **The fact view**: pointing at a condition shows its fact over the map in gray across its range (`SURFACE_FACT_RANGE`), magenta where it
   holds, with a histogram of the view and the share that holds it. Diagnostic views 14 to 17 read the previewed layer's own rows; the
-  histogram reads the view's pixels once the map is idle.
+  histogram reads the view's pixels once the map is idle (after an edit, that waits for the map to finish drawing). The gray runs from 0.1
+  to 0.85 (`SURFACE_FACT_GRAY`) so held pixels stay apart at both ends and the black canvas outside the map is not counted.
 
 Found on the way: on Green's default view the Moss in damp shade preset draws nothing (moisture never passes .4 there); at Spread +1 it covers
 most of the flat ground. The presets' numbers may want a look per world, with the fact view.

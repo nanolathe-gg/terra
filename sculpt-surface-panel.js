@@ -3,7 +3,7 @@
 // with its reason. Each row opens to set a layer's material, its Coverage (stored as amount), its edge and its rule (conditions that must all
 // hold, or a score); a row moves within its stage, a material layer can be removed, and a layer is added from a preset. Hovering or focusing a
 // row previews where that layer lies on the map. The list is a world setting: `host.apply(next, {commit})` stores it.
-import {SURFACE_BUILTINS, SURFACE_NEEDS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, SURFACE_OWN_AMOUNT, PLANT_KINDS, PLANT_LABELS, PLANT_FACTS, surfaceRows, spreadRule, SURFACE_FACT_RANGE, isMaterialLayer, layerKey} from './sculpt-material-model.js';
+import {SURFACE_BUILTINS, SURFACE_NEEDS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, SURFACE_OWN_AMOUNT, PLANT_KINDS, PLANT_LABELS, PLANT_FACTS, surfaceRows, spreadRule, SURFACE_FACT_RANGE, SURFACE_FACT_GRAY, isMaterialLayer, layerKey} from './sculpt-material-model.js';
 import {controlRow} from './sculpt-workspace.js';
 
 const $ = id => document.getElementById(id);
@@ -227,34 +227,49 @@ export function mountSurfacePanel(host) {
   // The fact view (engine-frag.wgsl views 14 to 17): pointing at or focusing a condition shows its fact over the map in gray, magenta where the
   // condition holds, while "Stripes where the layer under the pointer lies" is on; the block's legend then gives the fact's range, a histogram
   // of the map in view across it (from the view's own pixels, host.factSample) with the condition's limits marked, and the share that holds it.
-  let sampling = 0;
-  function factView(term, k, layer, layerRow, legend) {
-    const fact = layer.score ? layer.score.terms[k]?.fact : layer.where?.[k]?.fact, drawn = layer.score ? null : spreadRule(layer).where[k];
+  // What the legend shows: the layer (key) and its condition k, and its contents (a function, so a rebuilt row gets fresh elements). A rebuild of
+  // the list (a material measured, a World setting changed) keeps it: the new row's legend shows it again (showFact, called by build).
+  let sampling = 0, factShown = null;
+  const showFact = () => {
+    // A rebuild drops the focus from the row (its focusout clears the map's preview): the fact view is asked for again (a no-op when it is on).
+    if (factShown) host.preview(factShown.row, factShown.k);
+    for (const l of list.querySelectorAll('.surface-fact-view')) {
+      const mine = factShown && l.closest('.surface-layer')?.dataset.key === factShown.key;
+      l.hidden = !mine; if (mine) l.replaceChildren(...factShown.parts());
+    }
+  };
+  function factView(term, k, layer, layerRow) {
+    const key = layerKey(layer), fact = layer.score ? layer.score.terms[k]?.fact : layer.where?.[k]?.fact, drawn = layer.score ? null : spreadRule(layer).where[k];
     const on = () => {
       if (!$('surface-show').checked || layerRow == null || !fact) return;
       host.preview(layerRow, k);
-      const ticket = ++sampling, [lo, hi] = SURFACE_FACT_RANGE[fact];
-      legend.hidden = false;
-      legend.replaceChildren(el('p', {className: 'small', textContent: `On the map: ${factName(fact)} in gray, black at ${fmt(lo)} to white at ${fmt(hi)}; magenta where ${layer.score ? 'the score passes' : 'this condition holds'}. Reading the view…`}));
+      const ticket = ++sampling, [lo, hi] = SURFACE_FACT_RANGE[fact], holds = layer.score ? 'the score passes' : 'this condition holds';
+      const range = `On the map: ${factName(fact)} in gray, dark at ${fmt(lo)} to light at ${fmt(hi)}`;
+      const late = () => ['rockShare', 'debrisShare', 'sandShare'].includes(fact) ? [el('p', {className: 'small', textContent: 'The map shows its final share; a layer drawn before that share is complete saw less.'})] : [];
+      factShown = {key, k, row: layerRow, parts: () => [el('p', {className: 'small', textContent: `${range}; magenta where ${holds}. Reading the view once the map has finished drawing…`}), ...late()]};
+      showFact();
       host.factSample?.().then(read => {
         if (ticket !== sampling) return;
-        const words = el('p', {className: 'small', textContent: read ? `On the map: ${factName(fact)} in gray, black at ${fmt(lo)} to white at ${fmt(hi)}; magenta where ${layer.score ? 'the score passes' : 'this condition holds'}: ${percent(read.holds / read.total)} of the map in view.`
-          : `On the map: ${factName(fact)} in gray, black at ${fmt(lo)} to white at ${fmt(hi)}. The view could not be read for a histogram.`});
-        const parts = [words];
-        if (read) parts.push(histogram(read.levels, lo, hi, drawn));
-        if (['rockShare', 'debrisShare', 'sandShare'].includes(fact)) parts.push(el('p', {className: 'small', textContent: 'The map shows its final share; a layer drawn before that share is complete saw less.'}));
-        legend.replaceChildren(...parts);
+        factShown = {key, k, row: layerRow, parts: () => [el('p', {className: 'small', textContent: read ? `${range}; magenta where ${holds}: ${percent(read.holds / read.total)} of the map in view.` : `${range}. The view could not be read for a histogram.`}),
+          ...(read ? [histogram(read.levels, lo, hi, drawn)] : []), ...late()]};
+        showFact();
       });
     };
-    const off = event => { if (term.contains(event?.relatedTarget)) return; sampling++; legend.hidden = true; if ($('surface-show').checked && layerRow != null) host.preview(layerRow); };
+    const off = event => {
+      if (term.contains(event?.relatedTarget)) return;
+      sampling++; if (factShown?.key === key && factShown.k === k) { factShown = null; showFact(); }
+      if ($('surface-show').checked && layerRow != null) host.preview(layerRow);
+    };
     term.addEventListener('pointerenter', on); term.addEventListener('focusin', event => { if (!term.contains(event.relatedTarget)) on(); });
     term.addEventListener('pointerleave', event => { if (!term.contains(document.activeElement)) off(event); }); term.addEventListener('focusout', off);
   }
-  // A histogram of the fact over the map in view (the gray levels' counts, 0 to 255 across [lo, hi]) in 48 bars, the condition's limits shaded.
+  // A histogram of the fact over the map in view (the green levels' counts; green across SURFACE_FACT_GRAY spans [lo, hi]) in 48 bars, the
+  // condition's limits shaded.
   function histogram(levels, lo, hi, drawn) {
     const W = 240, H = 40, BARS = 48, c = el('canvas', {width: W, height: H, className: 'surface-histogram', title: `How much of the map in view has each value, ${fmt(lo)} to ${fmt(hi)}`});
     const g = c.getContext('2d'), bars = new Array(BARS).fill(0);
-    levels.forEach((n, v) => { bars[Math.min(BARS - 1, Math.floor(v * BARS / 256))] += n; });
+    const [g0, g1] = SURFACE_FACT_GRAY.map(v => v * 255);
+    levels.forEach((n, v) => { bars[Math.max(0, Math.min(BARS - 1, Math.floor((v - g0) / (g1 - g0) * BARS)))] += n; });
     const top = Math.max(...bars, 1), x = v => (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * W;
     if (drawn) { g.fillStyle = 'rgba(230, 60, 220, .28)'; const a = drawn.from != null ? x(drawn.from) : 0, b = drawn.to != null ? x(drawn.to) : W; g.fillRect(a, 0, Math.max(1, b - a), H); }
     g.fillStyle = '#d8d8d8';
@@ -270,9 +285,9 @@ export function mountSurfacePanel(host) {
     select.onchange = () => edit(i, l => switchRule(l, select.value), true);
     block.append(el('label', {className: 'surface-number surface-rule-kind'}, el('span', {textContent: 'Shows'}), select));
     const drawn = spreadRule(layer), legend = el('div', {className: 'surface-fact-view', hidden: true});
-    if (kind === 'where') layer.where.forEach((w, k) => { const term = windowRow(i, k, w, drawn.where[k]); factView(term, k, layer, layerRow, legend); block.append(term); });
+    if (kind === 'where') layer.where.forEach((w, k) => { const term = windowRow(i, k, w, drawn.where[k]); factView(term, k, layer, layerRow); block.append(term); });
     if (kind === 'score') {
-      layer.score.terms.forEach((t, k) => { const term = termRow(i, k, t); factView(term, k, layer, layerRow, legend); block.append(term); });
+      layer.score.terms.forEach((t, k) => { const term = termRow(i, k, t); factView(term, k, layer, layerRow); block.append(term); });
       block.append(el('div', {className: 'surface-term'}, el('span', {className: 'small', textContent: 'The sum, with the edge noise, passes'}),
         number('at', layer.score.from ?? .5, v => edit(i, l => { l.score.from = v ?? .5; }, true), 'The sum it shows from', '.5', 'score-at'),
         number('fade', layer.score.fade ?? .05, v => edit(i, l => { l.score.fade = Math.max(v ?? .05, .0001); }, true), 'How gradually it starts', '', 'score-fade'),
@@ -396,7 +411,8 @@ export function mountSurfacePanel(host) {
       item.append(body);
     }
     // Chrome has no onfocusin/onfocusout properties: the focus events are listened for.
-    const preview = () => host.preview($('surface-show').checked ? layerRows[i] : -1);
+    // While one of its conditions shows its fact (factView), the row leaves the map to it: a rebuild that gives the focus back must not undo it.
+    const preview = () => { if (factShown?.key !== key) host.preview($('surface-show').checked ? layerRows[i] : -1); };
     item.onpointerenter = preview; item.addEventListener('focusin', event => { if (!event.target.closest?.('.surface-term')) preview(); });   // a condition shows its fact (factView)
     item.onpointerleave = () => { if (!item.contains(document.activeElement)) host.preview(-1); };
     item.addEventListener('focusout', event => { if (!item.contains(event.relatedTarget)) host.preview(-1); });
@@ -438,6 +454,9 @@ export function mountSurfacePanel(host) {
   // Each layer's section and reasons, as the last build placed them (sync rebuilds only when the world has moved one).
   let placedText = '';
   const placeAll = layers => layers.map(l => layerSection(l, facts));
+  // What a rebuild would change: each layer's section and reasons, and the values the open built-in rows list (placedByBlock), so a World setting
+  // changed through a door shows its new value when the artist comes back.
+  const shownState = layers => JSON.stringify([placeAll(layers), [...open].map(key => (BUILTIN_PLACED_BY[key] ?? []).map(k => { const c = host.control?.(k); return c ? c.own ?? c.value : null; }))]);
   // `reveal`: a layer whose section opens so its row shows (a new layer, a layer opened from the inspector). The focused control keeps the
   // focus across the rebuild (by its id, or a slider by its range's), and a section that receives it opens.
   let revealNext = null;   // a layer the next build reveals (one just added)
@@ -451,7 +470,7 @@ export function mountSurfacePanel(host) {
     let layerRows = [];
     try { layerRows = surfaceRows(layers).layerRows; } catch (_) {}
     const placed = placeAll(layers);
-    placedText = JSON.stringify(placed);
+    placedText = shownState(layers);
     // Shown top first (the topmost layer first), as the map stacks them: the last stage's last layer first.
     const order = layers.map((l, i) => i).sort((a, b) => stageOf(layers[b]) - stageOf(layers[a]) || b - a);
     for (const section of SECTIONS) {
@@ -464,6 +483,7 @@ export function mountSurfacePanel(host) {
     const unshown = layers.filter(l => !shown(layerKey(l))).length;
     $('surface-view').hidden = !unshown;
     $('surface-view-text').textContent = solo ? `Showing “${nameOf(layers.find(l => layerKey(l) === solo))}” alone.` : `${unshown} hidden while you design.`;
+    showFact();   // a condition's legend survives the rebuild
     const back = scrub ? list.querySelector(`.scrub[data-source="${CSS.escape(scrub)}"]`) : focused ? $(focused) : null;
     const shownRow = reveal != null ? list.querySelector(`[data-key="${CSS.escape(reveal)}"]`) : null;
     let moved = false;
@@ -472,7 +492,7 @@ export function mountSurfacePanel(host) {
     if (moved) back.closest('.surface-layer')?.scrollIntoView({block: 'nearest'});   // its row left for a folded section: follow it
   }
   // After a World setting, a rock type in use or a role material changed: rebuild if a layer has changed section or reason.
-  const sync = () => { if (!editing && !picking && JSON.stringify(placeAll(host.surface())) !== placedText) build(); };
+  const sync = () => { if (!editing && !picking && shownState(host.surface()) !== placedText) build(); };
   $('surface-show-all').onclick = () => { hidden.clear(); solo = null; build(); sendView(); };
   // Add a layer: a small gallery of the presets (one tile each: its material's swatch, or a plant mark for a layer that grows plants only, and
   // its name), opened in place by its button; Escape folds it back (sculpt-ui.js closeTop presses the button). Choosing one adds the layer on

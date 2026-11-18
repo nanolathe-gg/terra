@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {surfaceRows, copySurface, spreadRule, ruleHere, SURFACE_SPREAD_STEP, SURFACE_FACT_RANGE, SURFACE_BUILTINS, SURFACE_STAGES, SURFACE_FACTS, SURFACE_FLAGS_ROW, SURFACE_DRAWABLE} from '../sculpt-material-model.js';
+import {surfaceRows, copySurface, spreadRule, ruleHere, SURFACE_SPREAD_STEP, SURFACE_FACT_RANGE, SURFACE_FACT_GRAY, SURFACE_BUILTINS, SURFACE_STAGES, SURFACE_FACTS, SURFACE_FLAGS_ROW, SURFACE_DRAWABLE} from '../sculpt-material-model.js';
 import {withWorldMaterials, materialsInUse, copyMaterials, roleOf, LIBRARY, surfaceMaterials, deleteMaterial, assignMaterial, worldMaterials, worldOwnMaterials, keptWorldMaterials, worldKept} from '../sculpt-materials.js';
 
 const defaults = JSON.parse(readFileSync(new URL('../materials/defaults.json', import.meta.url), 'utf8'));
@@ -235,4 +235,5 @@ test('the fact view’s ranges in the shader are the model’s', () => {
   const list = name => wgsl.match(new RegExp(`const ${name} = array<f32, 14>\\(([^)]*)\\)`))[1].split(',').map(Number);
   assert.deepEqual(list('SURFACE_FACT_LO'), SURFACE_FACTS.map(f => SURFACE_FACT_RANGE[f][0]));
   assert.deepEqual(list('SURFACE_FACT_HI'), SURFACE_FACTS.map(f => SURFACE_FACT_RANGE[f][1]));
+  assert.deepEqual(['LO', 'HI'].map(end => Number(wgsl.match(new RegExp(`const SURFACE_FACT_GRAY_${end} = ([0-9.]+);`))[1])), SURFACE_FACT_GRAY);
 });
