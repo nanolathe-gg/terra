@@ -186,6 +186,15 @@ fn rockDetail(p:vec3f,site:RockSite)->f32 {
     }
     return h*site.gain+grit;
 }
+// The surface the solid is built from (voxelPrepare caches it on the lattice; the color pass compares its hit with it): the drawn surface, its ice
+// softened over raised ground.
+fn voxelSourceHeight(p:vec2f)->f32 {
+    let h=surfaceHeight(p);
+    if(u.iceSoft<=0.0){return h;}
+    var softened=0.0;
+    for(var y=-1;y<=1;y++){for(var x=-1;x<=1;x++){softened+=baseHeight(p+vec2f(f32(x),f32(y))*6.5);}}
+    let base=baseHeight(p);return h+u.iceSoft*smoothstep(u.base+1.5,u.base+8.0,base)*(softened/9.0-base);
+}
 #ifdef VOLUME_COMPUTE
 @group(3) @binding(0) var cacheOut:texture_storage_2d<rgba32float,write>;
 @group(3) @binding(1) var guideOut:texture_storage_2d<rgba32float,write>;
@@ -197,13 +206,6 @@ struct VolumeCount {bricks:atomic<u32>,invalid:atomic<u32>,kept:atomic<u32>,padd
 @group(3) @binding(6) var blockOut:texture_storage_2d<rgba32float,write>;
 @group(3) @binding(7) var<storage,read_write> coarseOut:array<u32>;
 @group(2) @binding(6) var vk:texture_2d<f32>;
-fn voxelSourceHeight(p:vec2f)->f32 {
-    let h=surfaceHeight(p);
-    if(u.iceSoft<=0.0){return h;}
-    var softened=0.0;
-    for(var y=-1;y<=1;y++){for(var x=-1;x<=1;x++){softened+=baseHeight(p+vec2f(f32(x),f32(y))*6.5);}}
-    let base=baseHeight(p);return h+u.iceSoft*smoothstep(u.base+1.5,u.base+8.0,base)*(softened/9.0-base);
-}
 @compute @workgroup_size(8,8)
 fn voxelPrepare(@builtin(global_invocation_id) id:vec3u){
     if(id.x>=vs.width||id.y>=vs.height){return;}

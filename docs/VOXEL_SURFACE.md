@@ -23,8 +23,14 @@ interface.
    coverage follows upward-facing, rain-exposed ledges. More distant
    shadows and ambient occlusion use the authored terrain height.
 6. Procedural material color, dielectric reflections, water, and the TA
-   palette produce the export art. Rock color is sampled in three planes;
-   its texture no longer contains a second fixed directional light.
+   palette produce the export art. Rock grain is read at the native pixel
+   the camera shows it at, so it never stretches on a face; its texture
+   no longer contains a second fixed directional light. Ground materials
+   are read at the world point, so level ground repeats its tiles. Where
+   the solid stands more than 1.5 units off the surface it was built from
+   (whole blocks, displaced faces), the face is rock whatever the
+   authored slope, and any ground left on it is read at the native pixel
+   too.
 
 At final 1x, a voxel is one art unit along each world axis. A vertical art
 unit projects to half a screen pixel in TA's camera; this is a world-space
