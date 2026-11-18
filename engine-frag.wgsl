@@ -118,11 +118,7 @@ fn mineralMargin(p: vec2f, slope: f32, n: vec4f) -> f32 {
     // Nearby fractured slopes feed irregular outcrops into their level crown
     // and foot. The support dies outside that neighbourhood, leaving broad
     // patterned flats quiet. Width and gaps belong to one world-space field.
-    var reach = mix(9.0, 26.0, smoothstep(0.28, 0.72, n.g));
-    if (u.groundFringe != 0 && u.ringAmount > 0.0) {
-        let varied = mix(8.0, 48.0, smoothstep(0.20, 0.80, n.r * 0.6 + n.g * 0.4));
-        reach = mix(22.0, varied, u.ringVariation) * mix(0.65, 1.60, u.ringSpread);
-    }
+    let reach = mix(9.0, 26.0, smoothstep(0.28, 0.72, n.g));
     let neighbours = vec4f(baseHeight(p + vec2f(reach, 0.0)), baseHeight(p - vec2f(reach, 0.0)),
                            baseHeight(p + vec2f(0.0, reach)), baseHeight(p - vec2f(0.0, reach)));
     let neighbourhood = vec2f(neighbours.x - neighbours.y, neighbours.z - neighbours.w) / (2.0 * reach);
@@ -1013,111 +1009,6 @@ fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32) -> f32 {
     return smoothstep(-0.5, 0.5, (d - (at + wander * smoothstep(1.0, at, depth))) / (max(grad, 0.04) * max(u.stepSoftPx, 1.0)));
 }
 
-// E11: contour lines in Archipelago's red fringe. Retail's fringe is a stack of thin wavy
-// lines 2-4 px apart that follow the hill's outline (a hill's border, not a texture laid on
-// the screen). The mineral field's own falloff is the outline's distance measure: the
-// Time pass's source falls off about exponentially from the hill, so lines at equal
-// steps of its logarithm are equally spaced in px, whatever the hill's shape. Pixel width
-// comes from the field's gradient. field: the material field's source (.b); returns the
-// line colour and its weight.
-fn fringeField(q: vec2f) -> f32 {
-    return log(max(materialFieldAt((q / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid).b, 1e-4));
-}
-fn fringeContours(p: vec2f, field: f32) -> vec4f {
-    if (u.ringContrast <= 0.0 || u.materialReady == 0) { return vec4f(0.0); }
-    let outer = 0.004 / max(u.ringSize * u.ringSize, 0.05);
-    if (field < outer * 0.5 || field > 0.65) { return vec4f(0.0); }
-    const e = 2.0;
-    let grad = 0.5 / e * length(vec2f(fringeField(p + vec2f(e, 0.0)) - fringeField(p - vec2f(e, 0.0)),
-                                      fringeField(p + vec2f(0.0, e)) - fringeField(p - vec2f(0.0, e))));
-    let scale = max(u.ringCount, 1.0) / max(log(0.3 / outer), 0.5);
-    let wobble = (shelfNoise(p / 7.0 + 13.0) - 0.5) * 1.7 + (shelfNoise(p / 2.6 + 71.0) - 0.5) * 0.8;
-    let k = -log(max(field, 1e-4)) * scale + wobble;
-    let rate = max(grad * scale, 0.02);
-    let f = fract(k);
-    let line = 1.0 - smoothstep(0.3, 0.9, min(f, 1.0 - f) / rate);
-    let dash = smoothstep(0.25, 0.6, shelfNoise(p / 8.0 + 91.0));
-    let zone = smoothstep(outer * 0.5, outer * 3.0, field) * (1.0 - smoothstep(0.25, 0.6, field)) * smoothstep(0.04, 0.12, rate);
-    let tone = mix(vec3f(0.50, 0.16, 0.28), vec3f(0.30, 0.12, 0.13), smoothstep(0.02, 0.3, field));
-    return vec4f(tone, line * dash * zone * u.ringContrast);
-}
-
-// G3: the red fringe as stacked, offset copies of the hill's outline. Retail steps out from the
-// hill in many thin crimson outlines, each a copy of the foot moved a few px from the last, so
-// they cross and scallop instead of nesting (the owner's "offset faded copies"). Copy j is the
-// same softened outline the concentric lines read, at its own level and at its own offset (a
-// hashed direction around northwest, wandering slowly across the map, a length up to
-// ringShift), with scalloped lobes in its edge. The field is a Gaussian blur of the hill, whose
-// tail falls as exp(-d^2): the square root of its negative logarithm is therefore about
-// proportional to the distance from the hill, so levels at equal steps of that measure are
-// equally spaced in px, where equal steps of the logarithm would crowd into the far tail. Its edge
-// is a line one px wide, whose distance in px comes from the measure's gradient at the pixel
-// (copies sit within a few px, where it barely changes). Outer copies are drawn first so inner
-// lines lie over them. base: the ground so far.
-fn ringHash(k: f32) -> f32 { return fract(sin(k * 12.9898 + 78.233) * 43758.5453); }
-// How far a copy's outline bulges at p, -0.4..0.6 of ringWobble: round lobes about jittered centres (one per
-// ringLobe px cell, new for each copy) that meet in inward cusps, as a union of discs outlines. A noise waver
-// would only ripple the line; retail's copies read as overlapping scales.
-fn ringScallop(p: vec2f, seed: f32) -> f32 {
-    let q = p / max(u.ringLobe, 4.0);
-    let c = floor(q);
-    var nearest = 4.0;
-    for (var dy = -1; dy <= 1; dy++) {
-        for (var dx = -1; dx <= 1; dx++) {
-            let cell = c + vec2f(f32(dx), f32(dy)) + vec2f(seed * 17.0, seed * 5.0);
-            let at = c + vec2f(f32(dx), f32(dy)) + vec2f(shelfHash(cell), shelfHash(cell + vec2f(57.3, 31.1)));
-            nearest = min(nearest, distance(q, at));
-        }
-    }
-    let x = clamp(nearest / 0.7, 0.0, 1.0);
-    return sqrt(1.0 - x * x) - 0.4;
-}
-fn ringReachMeasure(q: vec2f) -> f32 { return sqrt(max(-fringeField(q), 0.01)); }
-// H24: the outermost copy's line is this much fainter than the innermost's, the same on every world.
-const RING_TAPER = 0.35;
-fn fringeCopies(base: vec3f, p: vec2f, field: f32) -> vec3f {
-    if (u.ringContrast <= 0.0 || u.materialReady == 0) { return base; }
-    let outer = 0.004 / max(u.ringSize * u.ringSize, 0.05);
-    if (field < outer * 0.3 || field > 0.65) { return base; }
-    let zone = smoothstep(outer * 0.3, outer * 1.5, field) * (1.0 - smoothstep(0.45, 0.7, field));
-    if (zone <= 0.0) { return base; }
-    let count = i32(clamp(u.ringCount, 1.0, 24.0));
-    let inner = sqrt(-log(0.45));
-    let far = sqrt(-log(outer));
-    let tone = mix(vec3f(0.50, 0.16, 0.28), vec3f(0.30, 0.12, 0.13), smoothstep(0.02, 0.3, field));
-    // Each copy tints what it covers (ringFill: the tint where every copy overlaps, so the skirt steps
-    // lighter outward) and the reach of the stack varies along the outline.
-    let fillStep = 1.0 - pow(1.0 - clamp(u.ringFill, 0.0, 0.95), 1.0 / f32(count));
-    let fillTone = vec3f(0.70, 0.70, 0.50);
-    const PATCH_SIZE = 160.0;   // length in art pixels over which the mineral fringe thins and widens
-    let span = shelfNoise(p / PATCH_SIZE + 53.0) * 0.65 + shelfNoise(p / (0.37 * PATCH_SIZE) + 11.0) * 0.35;
-    let reach = mix(2.0, smoothstep(0.3, 0.7, span) * 1.05, 0.8);
-    var rgb = base;
-    for (var n = 0; n < count; n++) {
-        let j = f32(count - 1 - n);
-        let t = j / max(f32(count - 1), 1.0);
-        let vis = 1.0 - smoothstep(reach - 0.12, reach + 0.12, t);
-        let level = mix(inner, far, (j + 0.5) / f32(count));
-        let wander = (shelfNoise(p / 170.0 + j * 7.3) - 0.5) * 2.0;
-        let angle = radians(225.0) + ((ringHash(j + 1.0) - 0.5) * 2.0 + wander * 0.5) * 0.5 * 3.14159;
-        let shift = u.ringShift * (0.45 + 0.55 * ringHash(j + 41.0));
-        let at = p - shift * vec2f(cos(angle), sin(angle));
-        let waver = ringScallop(p, j) * u.ringWobble;
-        // The copy's own gradient: the field's tail is not uniform, and a line drawn from the pixel's
-        // gradient fattens into blobs where the copy lies on a flatter stretch.
-        const e = 3.0;
-        let here = ringReachMeasure(at);
-        let slope = length(vec2f(ringReachMeasure(at + vec2f(e, 0.0)) - here, ringReachMeasure(at + vec2f(0.0, e)) - here)) / e;
-        let d = (here - level) / max(slope, 0.012) + waver;
-        let line = 1.0 - smoothstep(0.3, 0.75, abs(d));
-        let gap = 0.75 + 0.25 * smoothstep(0.15, 0.5, shelfNoise(p / 11.0 + 91.0 + j * 5.1));
-        let inside = 1.0 - smoothstep(-0.7, 0.7, d);
-        rgb = mix(rgb, fillTone, inside * fillStep * zone * vis);
-        rgb = mix(rgb, tone, line * gap * zone * vis * (1.0 - RING_TAPER * t) * u.ringContrast);
-    }
-    return rgb;
-}
-
 // Shallow water as the bed under it (card E1): the ground colour already lit at
 // this pixel, moved toward the shallows' tint: the water material's mean plus the world's shallow tone (Colors: Shallow water),
 // so recoloring the water moves its shallows with it. The tint keeps the bed's light
@@ -1144,9 +1035,9 @@ fn litBed(bed: vec3f, rockShare: f32, rockLevel: f32) -> vec3f {
 fn frostDry(near: f32, route: f32) -> f32 { return near * (1.0 - u.frostWet * smoothstep(0.02, 0.04, route)); }
 
 // ---- The mineral margins and the sediment transition ----
-// Nearby fractured slopes feed outcrops into their level crown and foot (the mineral margins); a table with a fringe, a ring or a body
-// layer adds the fringe, the ring veins and the sediment transition. Each block is gated by a uniform, never by a world. The materials
-// it reads are the map's in their roles (roleColor): the slope cover, the margin fringe, ring and body.
+// Nearby fractured slopes feed outcrops into their level crown and foot (the mineral margins); the fringe and body materials
+// supply the sediment transition. Each block is gated by a uniform, never by a world. The materials
+// it reads are the map's in their roles (roleColor): the slope cover, the margin fringe and body.
 // The state drawMineralMargins leaves for joinSedimentTransition to finish:
 var<private> transitionGround: vec3f;
 var<private> transitionFace: vec3f;
@@ -1156,8 +1047,8 @@ var<private> transitionCore: f32;
 var<private> transitionShared: bool;
 
 // Edits the slope cover and, for the shared transition, leaves the state joinSedimentTransition finishes.
-fn drawMineralMargins(p: vec2f, h: f32, slope: f32, n: vec4f, pixel: vec2f, grass: vec3f, sediments: vec4f, brokenSediments: vec4f,
-                      materialWeather: f32, fringeVariation: f32, slopeGrass: ptr<function, vec3f>, slopeCover: ptr<function, f32>) {
+fn drawMineralMargins(p: vec2f, h: f32, slope: f32, n: vec4f, pixel: vec2f, grass: vec3f, sediments: vec4f,
+                      materialWeather: f32, slopeGrass: ptr<function, vec3f>, slopeCover: ptr<function, f32>) {
     transitionGround = grass; transitionFace = grass; transitionLow = grass; transitionPower = 1.0; transitionCore = 0.0; transitionShared = false;
     if (u.mineralMargins == 0) { return; }
     var cover = mineralMargin(p, slope, n);
@@ -1178,49 +1069,18 @@ fn drawMineralMargins(p: vec2f, h: f32, slope: f32, n: vec4f, pixel: vec2f, gras
     let face = slopeGrassSource(pixel);
     let detail = (0.35 - dot(face, vec3f(0.299, 0.587, 0.114))) * 0.12;
     *slopeGrass = mix(fringe, face, smoothstep(0.20, 0.78, cover + detail));
-    if (u.ringAmount > 0.0) {
-        // A connected native vein material occupies its own irregular zone before the brown core.
-        let zone = cover + ((n.r - 0.5) * 0.38 + (n.g - 0.5) * 0.22) * u.ringVariation * smoothstep(0.0, 0.12, cover);
-        let spread = mix(0.60, 1.80, u.ringSpread);
-        let ring = roleColor(u.ringGround, u.slopeGround, pixel);
-        let vein = smoothstep(u.fringeRange.x, u.fringeRange.y, dot(ring, u.fringeSignal.rgb) + u.fringeSignal.a);
-        let tail = smoothstep(0.005, 0.19, max(0.0, zone));
-        let ringMask = smoothstep(0.06, 0.42, zone * spread + vein * 0.15) * tail * mix(0.30, 1.0, max(vein, smoothstep(0.16, 0.40, zone)));
-        var margin = mix(grass, fringe, tail * mix(0.25, 1.0, vein));
-        margin = mix(margin, ring, ringMask * u.ringAmount);
-        *slopeGrass = mix(margin, face, smoothstep(0.22, 0.96, zone + detail));
-    }
     *slopeCover = smoothstep(0.01, 0.28, cover) * smoothstep(u.slopeProfile.z, u.slopeProfile.w, baseHeight(p));
     if (materialWeather > 0.0 && u.transitionBody != 0) {
         // The worker's spatially softened source measures a join across world pixels; all three materials use that coordinate.
-        var source = sediments.b;
-        let variation = ((n.r - 0.5) * 0.08 + (n.g - 0.5) * 0.04) * fringeVariation;
-        source = clamp(source + variation * 4.0 * source * (1.0 - source), 0.0, 1.0);
-        let ring = roleColor(u.ringGround, u.slopeGround, pixel);
+        let source = sediments.b;
         let body = roleColor(u.bodyGround, u.slopeGround, pixel);
-        let vein = smoothstep(u.fringeRange.x, u.fringeRange.y, dot(ring, u.fringeSignal.rgb) + u.fringeSignal.a);
-        let arrivals = max(source * 1.30, sediments.r * 0.55) * exp2((u.ringSpread - 0.70) * 2.0);
-        var fine = smoothstep(0.002, 0.23 + 0.5 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
-        fine *= 1.0 - sediments.g * smoothstep(0.38, 0.63, n.r * 0.55 + n.g * 0.45) * 0.75;
-        let fill = smoothstep(0.018, 0.17 + 0.4 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
-        let ringWeight = fine * mix(fill, 1.0, vein) * u.ringAmount;
-        transitionGround = mix(grass, ring, ringWeight);
         var warm = smoothstep(0.02, 0.54, source);
         let warmGrain = 0.52 - dot(body, vec3f(0.299, 0.587, 0.114));
         warm = clamp(warm + warmGrain * 0.5 * 4.0 * warm * (1.0 - warm), 0.0, 1.0);
-        transitionGround = mix(transitionGround, body, warm);
-        if (u.ringShift > 0.0) { transitionGround = fringeCopies(transitionGround, p, sediments.b); }
-        else {
-            let contours = fringeContours(p, sediments.b);
-            transitionGround = mix(transitionGround, contours.rgb, contours.a);
-        }
+        transitionGround = mix(grass, body, warm);
         if (u.transitionDetail > 0.0) {
-            let uv = grainPixel(pixel) / 512.0;
-            let groundLow = groundMean();
-            let ringLow = roleMean(u.ringGround, u.slopeGround);   // the materials' broad colors (their caches keep no coarse levels)
-            let bodyLow = roleMean(u.bodyGround, u.slopeGround);
-            transitionLow = mix(mix(groundLow, ringLow, ringWeight), bodyLow, warm);
-            transitionPower = ((1.0 - ringWeight) * (1.0 - ringWeight) + ringWeight * ringWeight) * (1.0 - warm) * (1.0 - warm) + warm * warm;
+            transitionLow = mix(groundMean(), roleMean(u.bodyGround, u.slopeGround), warm);
+            transitionPower = (1.0 - warm) * (1.0 - warm) + warm * warm;
         }
         transitionFace = face;
         transitionCore = smoothstep(0.23, 0.88, source);
@@ -1228,25 +1088,9 @@ fn drawMineralMargins(p: vec2f, h: f32, slope: f32, n: vec4f, pixel: vec2f, gras
         transitionCore = clamp(transitionCore + faceGrain * 0.35 * 4.0 * transitionCore * (1.0 - transitionCore), 0.0, 1.0);
         transitionShared = true;
     } else if (materialWeather > 0.0) {
-        let interruption = max(0.0, sediments.a - brokenSediments.a) * (1.0 - smoothstep(0.40, 0.90, cover));
-        let crust = max(0.0, cover - interruption * 1.35);
-        var zone = weatheredCover(crust, sediments, n);
-        zone = max(zone, brokenSediments.a * 0.36 * (1.0 - smoothstep(0.05, 0.35, sediments.a)));
-        let ring = roleColor(u.ringGround, u.slopeGround, pixel);
-        let vein = smoothstep(u.fringeRange.x, u.fringeRange.y, dot(ring, u.fringeSignal.rgb) + u.fringeSignal.a);
-        let arrivals = max(sediments.b * 1.30, sediments.r * 0.55) * exp2((u.ringSpread - 0.70) * 2.0);
-        var fine = smoothstep(0.002, 0.23 + 0.5 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
-        fine *= 1.0 - sediments.g * smoothstep(0.38, 0.63, n.r * 0.55 + n.g * 0.45) * 0.75;
-        let veil = smoothstep(0.06, 0.78, zone);
+        let veil = smoothstep(0.06, 0.78, weatheredCover(cover, sediments, n));
         var margin = mix(grass, fringe, veil * 0.55);
-        let fill = smoothstep(0.018, 0.17 + 0.4 * u.ringFade, arrivals * (1.0 + 0.6 * u.ringFade));
-        margin = mix(margin, ring, fine * mix(fill, 1.0, vein) * u.ringAmount);
-        if (u.ringShift > 0.0) { margin = fringeCopies(margin, p, sediments.b); }
-        else {
-            let contours = fringeContours(p, sediments.b);
-            margin = mix(margin, contours.rgb, contours.a);
-        }
-        let core = smoothstep(0.22, 0.96, max(0.0, cover - interruption * 0.6) + (n.b - 0.5) * 0.12) * smoothstep(0.02, 0.35, sediments.a);
+        let core = smoothstep(0.22, 0.96, cover + (n.b - 0.5) * 0.12) * smoothstep(0.02, 0.35, sediments.a);
         margin = mix(margin, face, core);
         *slopeGrass = mix(mix(grass, *slopeGrass, *slopeCover), margin, materialWeather);
         *slopeCover = 1.0;
@@ -1590,9 +1434,6 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let gSoft=vec2f(geometry.gx,geometry.gy);
     let n = terrainNoise(p);
     let sediments = select(vec4f(0.0), materialFieldAt((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid), u.materialReady != 0);
-    let fringeVariation = u.ringVariation / 0.75;
-    let drift = ((terrainNoise(poolPos(p) * poolScale(0.65) + vec2f(133.0, 71.0)).rg - 0.5) * 66.0 + (n.gb - 0.5) * 16.0) * fringeVariation;
-    let brokenSediments = select(sediments, materialFieldAt(((p + drift) / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid), u.materialReady != 0);
     let materialWeather = select(0.0, u.materialWeathering, u.materialReady != 0);
     let weather = weatherAt(p / (u.size - 1.0)).rg;
     let slope = length(broad);
@@ -1765,7 +1606,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // This is an appearance material, not recovered albedo or geometry.
         var slopeGrass = slopeBased;
         var slopeCover = smoothstep(u.slopeProfile.x, u.slopeProfile.y, slope) * smoothstep(u.slopeProfile.z, u.slopeProfile.w, baseHeight(p));
-        drawMineralMargins(p, h, slope, n, pixel, grass, sediments, brokenSediments, materialWeather, fringeVariation, &slopeGrass, &slopeCover);
+        drawMineralMargins(p, h, slope, n, pixel, grass, sediments, materialWeather, &slopeGrass, &slopeCover);
         // Level dry ground can receive mineral tails from a nearby hill.
         // Only banks below that plane need the high-coast admission check.
         if (u.slopeOnLowBanks == 0 && h < u.base - 0.25) {

@@ -2,7 +2,7 @@
 // world's three reproduction scenes (repro/scenes), on the real engine, and the render is compared with the unmoved one: repro/compare.py's
 // mean |diff| and share of pixels moved, and measure/impact.py's block share of the knob's class (decision 11: a kept control must move at least
 // 5% of its class at 1x, beside a noise floor of 1-3%). A zero is inactive on these scenes; check parent gates and variants before calling a control dead.
-//   node measure/geology_controls.mjs [--out DIR] [--only desert,lava] [--knobs banding,strata] [--probe archipelago.ringShift=0] [--family geology|fractures|shores|bodies|impacts] [--scenes DIR] [--list]
+//   node measure/geology_controls.mjs [--out DIR] [--only desert,lava] [--knobs banding,strata] [--probe desert.strataContrast=0] [--family geology|fractures|shores|bodies|impacts] [--scenes DIR] [--list]
 //        [--configs DIR] [--chrome --server http://127.0.0.1:<yours> --port <cdp>]
 // The renders are repro/render.mjs's: under Node on Dawn by default, from this checkout's files (the world configs dumped once), or in the page
 // with --chrome, which needs --server (your own Go development server; there is no default).
@@ -26,16 +26,16 @@ const py = process.env.PYTHON || '/Users/daniel/src/terraform/.venv/bin/python';
 const here = new URL('..', import.meta.url).pathname;
 const sceneRoot = opt('--scenes', `${here}repro/scenes`);
 const scenePath = (world, n) => existsSync(`${sceneRoot}/${world}-${n}.json`) ? `${sceneRoot}/${world}-${n}.json` : `${here}repro/scenes/${world}-${n}.json`;
-// The geology families: the column's tilt (bedDip*), band*, strata*, ring*, layer*, the lava layer controls, the cap and foot bands and the column.
+// The geology families: the column's tilt (bedDip*), band*, strata*, layer*, the lava layer controls, the cap and foot bands and the column.
 // The water-bed knobs (bedTint, bedRelief, ...) are Water's, not geology.
-const FAMILY = /^(bed(Dip|DipDir)|banding|band[A-Z]\w*|sandBanding|sandBandSpacing|strata\w*|ring\w*|layer\w*|shoreLayers|lava(Spread|CircleVary)|baseBand\w*|desertCapFlat|column\w*)$/;
+const FAMILY = /^(bed(Dip|DipDir)|banding|band[A-Z]\w*|sandBanding|sandBandSpacing|strata\w*|layer\w*|shoreLayers|lava(Spread|CircleVary)|baseBand\w*|desertCapFlat|column\w*)$/;
 // The class each family acts on (measure/geology_diff.py).
 const SHORES = /^(shoal\w*|shelf\w*|shallowDepth|deepDepth|waterSoft|crispShore|stepSoftPx|deepEdge|bed(Tint|Flat|Relief|Contrast|Bright)|flatBank|bankRock|beachWidth|apron|sandCrown|shoreEdge|fingers|finger[A-Z]\w*|shoreLayers|layer(Px|Riser|Ledge|Rough|Style|Vary|Circle|Crease)|lava(Spread|CircleVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*|water(Deep|Bed))$/;
 const SHORE_CLASS = k => /^(shoal(Stairs|ShoreSoft)|crispShore|shoreEdge|shore)$/.test(k) ? 'edge' : /^(beachWidth|apron|sandCrown)$/.test(k) ? 'beach' : /^(flatBank|bankRock|layerCrease)$/.test(k) ? 'bank'
   : /^(fingers|finger[A-Z]\w*|shoreLayers|layer[A-Z]\w*|lava(Spread|CircleVary)|shorePlates|plate[A-Z]\w*|crystalShore\w*)$/.test(k) ? 'shore' : 'shallows';
 const IMPACTS = /^(moon\w*|pock\w*|crystalCrater\w*|worms|wrinkles|slopeMarks)$/;
 const IMPACT_CLASS = k => /^(worms|wrinkles|slopeMarks|moon(Ribs|RibDepth|RibDark|Cups|CupSize|CupDepth))$/.test(k) ? 'slope' : /^moonFold/.test(k) ? 'fold' : 'impact';
-const CLASS = k => bodies ? BODY_CLASS(k) : impacts ? IMPACT_CLASS(k) : shores ? SHORE_CLASS(k) : fractures ? (/^crack/.test(k) ? 'slope' : 'face') : /^ring/.test(k) ? 'halo' : /^(layer|shoreLayers|lava)/.test(k) ? 'bank' : 'raised';
+const CLASS = k => bodies ? BODY_CLASS(k) : impacts ? IMPACT_CLASS(k) : shores ? SHORE_CLASS(k) : fractures ? (/^crack/.test(k) ? 'slope' : 'face') : /^(layer|shoreLayers|lava)/.test(k) ? 'bank' : 'raised';
 // Card units of the stroke options (sculpt-scene.js SHAPE_FIELDS' last scale): a stroke that carries its own value is moved with the world's.
 const CARD_SCALE = {fingers: 100, fingerSize: 100, shorePlates: 1, plateWaterPx: 1, plateLandPx: 1, plateSize: 1, plateGap: 10, plateHeight: 10, plateMaterial: 1,
   crystalShoreSeam: 100, waterDeep: 1, shoreLayers: 1, layerPx: 1, layerCircle: 1, layerStyle: 1, layerRiser: 10, layerLedge: 100, layerRough: 100, layerVary: 100, layerJag: 1, lavaSpread: 100, lavaCircleVary: 100};

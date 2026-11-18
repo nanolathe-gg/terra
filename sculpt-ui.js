@@ -184,7 +184,6 @@ export const WORLD_HOMES={
  'Water & shores/Depths & edges':'deepDepth waterSoft crispShore deepEdge stepSoftPx shelfWander shoalRag shoalShoreSoft',
  'Water & shores/Shore & beach':'coastRamp beachWidth apron shoreEdge bankRock frostGaps frostGapReach frostGapSize frostGapDepth',
  'Water & shores/Water bed':'bedTint bedBright bedContrast bedRelief bedCracks bedCrackSize bedFlat',
- 'Water & shores/Mineral fringe':'ringFade ringContrast ringCount ringSize ringShift ringWobble ringLobe ringFill',
  'Rain & erosion/':'wetSwath wetGround',
  'Light & shine/Sun & shade':'faceFill flatShadow flatOcclusion lightCap shadeDepth sunTilt ambient creaseShade',
  'Light & shine/Shine':'shineOutside shineSlopeGate shineStretch shineWhite shineGround shineGroundSharp shineGroundRough shineGroundScale shineSlope shineSlopeSharp shineSlopeRough shineSlopeScale shineSand shineSandSharp shineSandRough shineSandScale shineCrystal shineCrystalSharp shineCrystalRough shineCrystalScale shineGate shineHeadroom',

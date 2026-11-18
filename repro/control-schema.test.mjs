@@ -153,8 +153,6 @@ test('H22b: rows that act only once another is on say so, and come back when it 
  assert.equal(available('waterDeep','landform',{world:{waterTones:2}}),true);
  assert.equal(available('waterDeep','landform',{world:{waterColored:1,waterTones:2}}),true,'a picked color makes two tones, so a stroke\'s edge shows');
  // facts of the world's material the panel passes in with the settings
- assert.match(requirement('ringContrast',{ringLayer:0}),/no mineral fringe/);
- shows('ringContrast',{ringLayer:1});
  assert.match(requirement('beachWidth',{beachLayer:0}),/no beach of its own. Choose another world's Beach, above,/);
  shows('beachWidth',{beachLayer:1});
  assert.match(requirement('slopeTexture',{slopeSand:1}),/sand/);

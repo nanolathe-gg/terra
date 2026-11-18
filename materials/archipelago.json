@@ -756,19 +756,6 @@
   ],
   "rampMaterial": 1.0,
   "groundFringe": true,
-  "ringAmount": 0.7,
-  "ringSpread": 0.35,
-  "ringVariation": 0.5,
-  "fringeSignal": [
-   1,
-   -1,
-   0,
-   0
-  ],
-  "fringeRange": [
-   0.08,
-   0.28
-  ],
   "transitionDetail": 0.65
  },
  "water": {
@@ -818,7 +805,7 @@
   "vent": {"params": {"size": 0.65, "rim": 0.85}}
  },
  "world": {
-    "materials": {"ground": "archipelago-ground", "water": "archipelago-water", "rock": "archipelago-rock", "slope": "archipelago-slope", "debris": "archipelago-debris", "fringe": "archipelago-fringe", "body": "archipelago-body", "ring": "archipelago-ring", "soil": "archipelago-soil", "snow": "archipelago-snow", "moss": "archipelago-moss", "sand": "archipelago-sand", "band": "archipelago-band", "crystal": "crystals"},
+    "materials": {"ground": "archipelago-ground", "water": "archipelago-water", "rock": "archipelago-rock", "slope": "archipelago-slope", "debris": "archipelago-debris", "fringe": "archipelago-fringe", "body": "archipelago-body", "soil": "archipelago-soil", "snow": "archipelago-snow", "moss": "archipelago-moss", "sand": "archipelago-sand", "band": "archipelago-band", "crystal": "crystals"},
     "knobDefaults": {
         "crackSeverity": 0.7,
         "crackMajor": 0.9,
@@ -828,7 +815,6 @@
         "shadeDepth": 0.9,
         "coastRamp": 0.25,
         "hillLight": 1.1,
-        "ringFade": 1,
         "bedTint": 1,
         "bedContrast": 0.8,
         "bedBright": 1.18,
@@ -837,13 +823,6 @@
         "shelfWander": 6,
         "shoalRag": 4,
         "shoalShoreSoft": 4,
-        "ringShift": 10.0,
-        "ringWobble": 7.0,
-        "ringLobe": 20,
-        "ringContrast": 0.35,
-        "ringCount": 30.0,
-        "ringSize": 0.8,
-        "ringFill": 0.1,
         "faceFill": 0.25,
         "shallowDepth": 4,
         "deepDepth": 52

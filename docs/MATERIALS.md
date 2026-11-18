@@ -60,8 +60,7 @@ controls; node settings are the author's tools.
   tools lay down (`world.materials.extra`); a new map adds them too.
 - **The world's other surfaces** are roles a material holds, one each:
   highland ground (`high`), rock (`rock`), slope cover (`slope`), debris
-  (`debris`), beach sand (`beach`) and mineral margins (`fringe`, `body`,
-  `ring`), named in `world.materials`. A new map adds the world's; Manage,
+  (`debris`), beach sand (`beach`) and mineral margins (`fringe`, `body`), named in `world.materials`. A new map adds the world's; Manage,
   *Also the world's*, gives a material a role or takes it away. A map
   reopened in its world keeps the roles its artist cleared; a map carried
   into another world takes that world's surfaces, and a library material

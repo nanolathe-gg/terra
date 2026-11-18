@@ -90,9 +90,8 @@ test('the surface sliders open where the browser puts them, and their ranges are
     const attr = name => Number(tag.match(new RegExp(`${name}="([^"]+)"`))[1]);
     assert.deepEqual(sliderRange(id), [attr('min'), attr('max'), attr('step')], `${id}: min, max and step`);
   }
-  const s = surfaceSliders(config, pageSettings(config, 'ringSpread=.3'));
+  const s = surfaceSliders(config);
   assert.equal(s.relief, 110, 'surfaceRelief 1.12 snaps to the relief slider\'s step of 5');
-  assert.equal(s['ring-spread'], 30, 'the address sets a ring slider');
   assert.equal(drawOptions(s).detail, 1.1);
 });
 

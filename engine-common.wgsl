@@ -194,11 +194,6 @@ struct Uniforms {
     slopeOnLowBanks: i32,
     rampMaterial: f32,
     groundFringe: i32,
-    ringAmount: f32,
-    ringSpread: f32,
-    ringVariation: f32,
-    fringeSignal: vec4f,
-    fringeRange: vec2f,
     transitionBody: i32,
     // The shallows' tint: a tone, a shift of the water material's mean (a = 1 where the world chose its own, else its data's).
     shallowTone: vec4f,
@@ -305,7 +300,6 @@ struct Uniforms {
     bedBright: f32,       // brightness of the tinted bed (1: the tint as it is)
     bedContrast: f32,     // how much of the bed's light carries through the tint (1: all, 0: flat tint)
     hillLight: f32,       // brightness of the hill cover's material (Archipelago; 1: as drawn)
-    ringFade: f32,        // how gradually the mineral ring fades out from the hill (0: as drawn; Archipelago)
     // Ice (card E5).
     shadeBlue: f32,       // shaded ice keeps its blue: how far the blue (and a little green) stay lit as the light falls (0: grey shade, as before)
     // Light colour (card P12b). White leaves the light grey, as before.
@@ -338,9 +332,6 @@ struct Uniforms {
     // E11: shallow water round 2 (Green, Red) and Archipelago's fringe. Every default is the earlier look.
     shelfWander: f32,     // Green, Red: how far broad noise moves the step's depth, in depth units (0: the step follows the shore)
     stepSoftPx: f32,      // Archipelago's reef bars: the true-threshold step's ramp width in px (1: a one-pixel edge, as Green and Red)
-    ringContrast: f32,    // Archipelago: contour lines in the red fringe, following the hill's outline (0: none)
-    ringCount: f32,       // how many lines the fringe carries from its inner to its outer edge
-    ringSize: f32,        // how far out the lines reach, against the fringe's own reach (1: as far as the ring's texture)
     bedFlat: f32,         // the lit bed takes only the bed's own relief for its light, not its slope's (0: the pixel's full shading, as before)
     // E10 (Lava).
     layerCrease: f32,     // dark crease at the foot of each step of the banks between the sea and the plain, whatever its facing (0: none)
@@ -359,10 +350,6 @@ struct Uniforms {
     // G8 (Moon): the surface read from retail pictures.
     // E6 (Ice mountains).
     // G3 (Archipelago rings): the fringe as stacked, offset copies of the hill's outline. Every default is the earlier look.
-    ringShift: f32,       // px each copy sits from the hill's own outline (0: the earlier concentric lines; ringCount copies otherwise)
-    ringWobble: f32,      // px of waver in each copy's outline: lobes with inward cusps, the scalloped look (0: smooth)
-    ringLobe: f32,        // px across one lobe
-    ringFill: f32,        // the pale tint where every copy overlaps; each copy adds its share, so the skirt steps lighter outward (0: none)
     // G6 (Ice blocks and mesas, retail ice-3 and Polar Range).
     iceSoft: f32,         // raised ice is lit by its height blurred over ~13 px, so crests are rounded and faces smooth (0: the full relief lights it, as before)
     iceFrost: f32,        // Ice frost band: fine dark-blue hairlines in parallel runs, thinning inland (0: none)
@@ -418,9 +405,8 @@ struct Uniforms {
     slopeGround: i32,   // the map's slope cover material slot (worldSlope), -1 none: slopes, moss and the margins' face read it
     debrisGround: i32,  // its debris material (worldDebris): the fragments of loose stone and sand
     beachGround: i32,   // its beach material (worldBeach): the beach sand (the slope cover's grain recolored where there is none)
-    fringeGround: i32,  // its mineral margins' fringe, body and ring materials (worldFringe, worldBody, worldRing)
+    fringeGround: i32,  // its mineral margins' fringe and body materials (worldFringe, worldBody)
     bodyGround: i32,
-    ringGround: i32,
     crystalGround: i32, // its crystal material (worldCrystal): the crystals' color, -1 none (then the rock material's)
     waterGround: i32,
     groundAny: i32,

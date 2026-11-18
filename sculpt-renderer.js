@@ -309,8 +309,6 @@ export class TerrainRenderer {
     this.means.rock = materialTint(LIBRARY[this.config.materials?.rock] ?? {nodes: [{type: 'output', in: {}}]});
     // The slope cover's broad color the same way: the Colors row Slope cover starts from it (sculpt.js defaultColor).
     this.means.slope = materialTint(LIBRARY[this.config.materials?.slope] ?? {nodes: [{type: 'output', in: {}}]});
-    // The transition body is generated layer 5 and the transition (ring, body, contours) needs the flag; the ring is layer 7. The beach is the
-    // table's `beach` layer (6 in a world's own table, the last when borrowed).
     this.transitionBody = this.layers.has('body');
     this.applyKnobs();
   }
@@ -700,10 +698,10 @@ export class TerrainRenderer {
     } finally { this._busy=false; }
   }
 
-  async draw({clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, ring = .85, ringSpread = .65, ringVariation = .7, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false, signal, stale, digest = null} = {}) {
+  async draw({clay = false, light = 'original', detail = this.config.material?.surfaceRelief ?? 1, materialWeathering = this.config.material?.materialWeathering ?? 0, transitionDetail = this.config.material?.transitionDetail ?? .65, exact = false, signal, stale, digest = null} = {}) {
     const current=()=>{signal?.throwIfAborted();if(stale?.())throw new DOMException('The scene changed during a terrain bake.','AbortError');};
     current();const start = performance.now(), device = this.device;
-    this.syncWorld({clay,light,detail,ring,ringSpread,ringVariation,materialWeathering,transitionDetail,exact});
+    this.syncWorld({clay,light,detail,materialWeathering,transitionDetail,exact});
     this.i('uMaterialReady', this.materialReady);
     this.i('uTransitionBody', Boolean(this.transitionBody&&this.materialReady&&materialWeathering>0));
     // digest {reuse, check}: the checksum of everything the rest of the draw reads (inputDigest). A caller that still holds the picture of the same
@@ -853,8 +851,8 @@ export class TerrainRenderer {
   // the chunk. Repeated draws reuse the synchronized world; public setters
   // force a refresh when their data changes.
   syncWorld(options=this.worldOptions??{}) {
-    const {clay=false,light='original',detail=this.config.material?.surfaceRelief??1,ring=.85,ringSpread=.65,ringVariation=.7,materialWeathering=this.config.material?.materialWeathering??0,transitionDetail=this.config.material?.transitionDetail??.65,exact=false}=options;
-    const values={clay,light,detail,ring,ringSpread,ringVariation,materialWeathering,transitionDetail,exact};
+    const {clay=false,light='original',detail=this.config.material?.surfaceRelief??1,materialWeathering=this.config.material?.materialWeathering??0,transitionDetail=this.config.material?.transitionDetail??.65,exact=false}=options;
+    const values={clay,light,detail,materialWeathering,transitionDetail,exact};
     const key=JSON.stringify([values,this.grid,this.size]);
     if(!this.worldDirty&&this.worldSyncKey===key)return {fields:[],stage:null,rockSlots:[],channels:[]};
     const wasDirty=this.fieldsDirty;
@@ -910,9 +908,6 @@ export class TerrainRenderer {
     // E11: shallow water round 2; every default is the earlier look.
     this.f('uShelfWander', variant.has('shelfWander') ? Number(variant.get('shelfWander')) : 0);
     this.f('uStepSoftPx', variant.has('stepSoftPx') ? Number(variant.get('stepSoftPx')) : 1);
-    this.f('uRingContrast', variant.has('ringContrast') ? Number(variant.get('ringContrast')) : 0);
-    this.f('uRingCount', variant.has('ringCount') ? Number(variant.get('ringCount')) : 7);
-    this.f('uRingSize', variant.has('ringSize') ? Number(variant.get('ringSize')) : 1);
     this.f('uBedFlat', variant.has('bedFlat') ? Number(variant.get('bedFlat')) : 0);
     this.f('uSandCrown', variant.has('sandCrown') ? Number(variant.get('sandCrown')) : 0);
     this.f('uFlatBank', variant.has('flatBank') ? Number(variant.get('flatBank')) : 0.0);
@@ -940,7 +935,6 @@ export class TerrainRenderer {
     // Water looks (card E1): every default is the earlier water.
     this.f('uBedTint', variant.has('bedTint') ? Number(variant.get('bedTint')) : 0.85);
     this.f('uBedBright', variant.has('bedBright') ? Number(variant.get('bedBright')) : 1);
-    this.f('uRingFade', variant.has('ringFade') ? Number(variant.get('ringFade')) : 0);
     this.f('uHillLight', variant.has('hillLight') ? Number(variant.get('hillLight')) : 1);
     this.f('uBedContrast', variant.has('bedContrast') ? Number(variant.get('bedContrast')) : 1);
     this.f('uDeepEdge', variant.has('deepEdge') ? Number(variant.get('deepEdge')) : 0);
@@ -971,11 +965,6 @@ export class TerrainRenderer {
     this.f('uMoonFoldSpacing', variant.has('moonFoldSpacing') ? Number(variant.get('moonFoldSpacing')) : .9);
     this.f('uIceCrystal', variant.has('iceCrystal') ? Number(variant.get('iceCrystal')) : 0);
     this.f('uIceCrest', variant.has('iceCrest') ? Number(variant.get('iceCrest')) : 0);
-    // G3: the fringe's offset copies (ringShift 0: the earlier concentric lines).
-    this.f('uRingShift', variant.has('ringShift') ? Number(variant.get('ringShift')) : 0);
-    this.f('uRingWobble', variant.has('ringWobble') ? Number(variant.get('ringWobble')) : 3);
-    this.f('uRingLobe', variant.has('ringLobe') ? Number(variant.get('ringLobe')) : 22);
-    this.f('uRingFill', variant.has('ringFill') ? Number(variant.get('ringFill')) : 0);
     // G6: Ice blocks and mesas (0: the earlier look exactly).
     this.f('uIceSoft', variant.has('iceSoft') ? Number(variant.get('iceSoft')) : 0);
     this.f('uIceSnow', variant.has('iceSnow') ? Number(variant.get('iceSnow')) : 0);
@@ -1018,8 +1007,6 @@ export class TerrainRenderer {
     this.i('uGroundFringe', material.groundFringe === true);
     // A preset can retain coloured veins or dark neutral grain at its edge.
     // The blending algorithm does not choose a biome's material colour.
-    this.set('uFringeSignal', material.fringeSignal || [-.299, -.587, -.114, 1]);
-    this.set('uFringeRange', material.fringeRange || [.08, .28]);
     this.f('uWetBand', material.wetBand ?? 13);
     // E6: mineralDetail scales the rock art's contrast about its mean (1: as drawn).
     const bed = this.config.water?.riverBedRGB;   // riverfix: a braided bed's gravel, world data (absent: the draw darkens the world's rock)
@@ -1031,9 +1018,6 @@ export class TerrainRenderer {
     this.f('uMaterialWeathering', weatherAmount);
     this.f('uTransitionDetail', transitionDetail);
     this.f('uDetail', this.variant.get('relief') === 'base' ? 0 : detail);
-    this.f('uRingAmount', this.layers.has('ring') ? ring : 0);
-    this.f('uRingSpread', ringSpread);
-    this.f('uRingVariation', ringVariation);
     this.i('uQuantize', (this.variant.get('palette') || 'nearest') !== 'off');
     this.f('uShoreEdge', Number(this.variant.get('shoreEdge')) || 0);
     this.f('uCrystalGrain', Number(this.variant.get('crystalGrain')) || 0);

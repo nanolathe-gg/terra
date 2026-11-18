@@ -394,21 +394,21 @@ export function pagedBudget({gpuMB,renderer,chunk,maskCount,view,preview=false,f
   return {total:gpuMB*MB,minimum,previewMinimum:minimum+Math.max(0,previewWorking)};
 }
 // The surface sliders (index.html's range inputs, by id): the material value each opens at and its default, then the slider's min, max and
-// step. A page opens each at round(value x 100), clamped and snapped to its step as the browser does; the address may set the ring's three.
+// step. A page opens each at round(value x 100), clamped and snapped to its step as the browser does.
 const SURFACE_SLIDERS={relief:['surfaceRelief',1,0,160,5],'material-weathering':['materialWeathering',0,0,100,1],'deposit-spread':['depositSpread',.65,0,100,1],
-  'transition-detail':['transitionDetail',.65,0,100,1],'mineral-ring':['ringAmount',0,0,100,1],'ring-spread':['ringSpread',.65,0,100,1],'ring-variation':['ringVariation',.7,0,100,1]};
+  'transition-detail':['transitionDetail',.65,0,100,1]};
 export const SURFACE_SLIDER_IDS=Object.keys(SURFACE_SLIDERS);
 // The slider groups the World panel shows or hides by the world's layers (sculpt.js boot sets these containers' hidden; the rest of the panel is
-// its markup): Transition detail needs a body layer, the fringe's three a ring layer.
-export const surfaceGroupsHidden=config => ({'transition-detail-control':!config.layers.includes('body'),'ring-controls':!config.layers.includes('ring')});
+// its markup): Transition detail needs a body layer.
+export const surfaceGroupsHidden=config => ({'transition-detail-control':!config.layers.includes('body')});
 // The sliders the material field reads (materialKnobs): moving one runs the Time pass again; the others only redraw.
 export const TIME_SLIDER_IDS=['material-weathering','deposit-spread'];
 export const sliderRange=id => SURFACE_SLIDERS[id].slice(2);
 export const sliderValue=(id,v) => { const [,,lo,hi,step]=SURFACE_SLIDERS[id]; return clamp(lo+step*Math.round((clamp(v,lo,hi)-lo)/step),lo,hi); };
-export const surfaceSliders=(config,settings) => Object.fromEntries(Object.entries(SURFACE_SLIDERS).map(([id,[key,fallback]]) =>
-  [id,sliderValue(id,Math.round((['ringAmount','ringSpread','ringVariation'].includes(key)&&settings.has(key)?Number(settings.get(key)):config.material?.[key]??fallback)*100))]));
+export const surfaceSliders=config => Object.fromEntries(Object.entries(SURFACE_SLIDERS).map(([id,[key,fallback]]) =>
+  [id,sliderValue(id,Math.round((config.material?.[key]??fallback)*100))]));
 // The draw's options from the slider values (by id) and the view switches.
-export const drawOptions=(s,{clay=false,light='original'}={}) => ({clay,light,detail:s.relief/100,ring:s['mineral-ring']/100,ringSpread:s['ring-spread']/100,ringVariation:s['ring-variation']/100,
+export const drawOptions=(s,{clay=false,light='original'}={}) => ({clay,light,detail:s.relief/100,
   materialWeathering:s['material-weathering']/100,transitionDetail:s['transition-detail']/100});
 // The material field's knobs, or null when Material weathering is 0 (sculpt-erosion.js materialField; `seed` is the refinement seed), and its
 // request over the Time pass's eroded height (heightBuffer, heightOffset cells in; ox, oy a page's first lattice cell).

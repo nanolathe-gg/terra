@@ -261,7 +261,7 @@ export const MATERIAL_STATES = ['worn', 'deposit'];
 // The roles a material of the map may hold besides the world's ground and water: [flag, world.materials key, what it is]. Each surface reads
 // its role's material (engine-frag.wgsl); a material holds one role at most.
 export const MAP_ROLES = [['worldHigh', 'high', 'highland ground'], ['worldRock', 'rock', 'rock'], ['worldSlope', 'slope', 'slope cover'], ['worldDebris', 'debris', 'debris'],
-  ['worldBeach', 'beach', 'beach'], ['worldFringe', 'fringe', 'margin fringe'], ['worldBody', 'body', 'margin body'], ['worldRing', 'ring', 'margin ring'],
+  ['worldBeach', 'beach', 'beach'], ['worldFringe', 'fringe', 'margin fringe'], ['worldBody', 'body', 'margin body'],
   ['worldCrystal', 'crystal', 'crystal']];
 const ROLE_NAMES = {worldGround: 'ground', worldWater: 'water', ...Object.fromEntries(MAP_ROLES.map(([r, , what]) => [r, what]))};
 // A material may instead draw one of the world's surface layers (docs/SURFACE_LAYERS.md): its worldLayer is that layer's id.
@@ -600,7 +600,7 @@ export function withWorldMaterials(value, config, {carried = false} = {}) {
     if (list.length >= MATERIAL_SLOTS - 1) { const taker = list.find(m => !m.worldGround && !m.worldWater); list = list.map(m => m === taker ? {...Object.fromEntries(Object.entries(m).filter(([k]) => !MAP_ROLES.some(([r]) => r === k))), [role]: true} : m); continue; }   // the taker gives up any other role
     const added = addMaterial(list, preset, preset.name); list = added.materials.map(m => m.slot === added.slot ? {...m, [role]: true} : m);
   }
-  // The world's other roles (MAP_ROLES: config.materials.high, .rock, .slope, .debris, .beach, .fringe, .body, .ring, .crystal), each a library material
+  // The world's other roles (MAP_ROLES: config.materials.high, .rock, .slope, .debris, .beach, .fringe, .body, .crystal), each a library material
   // added while the list has room. Level raised ground takes the highland material; every rock face shows the rock material's grain, grit and
   // shine under its rock type's color (a rock type may name another, struct Rock material); the slope cover, the debris fragments, the beach
   // sand and a world's mineral margins read theirs. A map without one draws that surface from another (engine-frag.wgsl roleColor).

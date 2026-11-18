@@ -67,7 +67,7 @@ if (args.includes('--recheck')) {
   for (const b of bad) console.log('!', b);
   process.exit(bad.length || f.console.length ? 1 : 0);
 }
-const SURFACE = [['relief', 0, 160], ['transition-detail', 0, 100], ['mineral-ring', 0, 100], ['ring-spread', 0, 100], ['ring-variation', 0, 100], ['material-weathering', 0, 100], ['deposit-spread', 0, 100]];
+const SURFACE = [['relief', 0, 160], ['transition-detail', 0, 100], ['material-weathering', 0, 100], ['deposit-spread', 0, 100]];
 // The stroke kinds that carry SHAPE_FIELDS rows, drawn one each on a grid of the 1024 px window.
 // The Crater and Crystals buttons draw landforms, so the retired crater and crystal kinds have no rows here (BUTTONS_AT keeps a stroke of each button).
 const KIND_AT = {fissure: [130, 830], erase: [380, 830], paint: [630, 830], landform: [880, 830]};

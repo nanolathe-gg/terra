@@ -155,7 +155,6 @@ export function worldControlRequirement(key,v){
  if(['stepSoftPx','shelfWander','shoalRag'].includes(key))return needs('deepEdge',HARD_STEP);
  // The waterline's stairs and blur are drawn only by a crisp waterline, and a blur replaces the stairs (engine-frag.wgsl, the shore's crisp cut).
  if(key==='shoalShoreSoft')return needs('crispShore','Crisp waterline');
- if(/^ring[A-Z]/.test(key)&&n('ringLayer')<=0)return 'This world draws no mineral fringe.';
  if(key==='beachWidth'&&n('beachLayer')<=0)return 'This world has no beach of its own. Choose another world\'s Beach, above, to use this setting.';
  if(key==='bedCrackSize')return needs('bedCracks','Cracked bed');
  return '';
@@ -182,7 +181,6 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedTint','bedBright','bedContrast','bedRelief','bedCracks','shoreEdge',
  'baseBand','desertCapFlat',
  'shelfWander','bedFlat',
- 'ringContrast','ringCount','ringSize','ringShift',
  'lavaCrust','lavaPillow','lavaVeins','layerCrease','pockmark',
  'moonCups','moonRibs','moonFolds','iceCrystal','gougeWeb','iceCrest','iceSoft','iceSnow','iceFall','iceApron','iceFrost','frostGaps'
 ]);

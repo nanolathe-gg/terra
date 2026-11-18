@@ -145,7 +145,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   let scene_ = null;
   play(strokes, {ground: scene.ground !== false});
   if (paged) await fields.startCoarse();   // bootMap: a paged map's coarse lattice fills from the start
-  const sliders = engine.surfaceSliders(config, settings);
+  const sliders = engine.surfaceSliders(config);
   scene_ = {config, settings, renderer, canvas, fields, nodes, errors, play, context, engine, fieldsModule, worldSize, worldGrid, spacing, minH, maxH, seed, refinementSeed, sliders, paged, ownColors, worldColumn, columnOverride,
     material: engine.materialKnobs(sliders, refinementSeed, renderer.variant.get('transition')), drawOptions: options => engine.drawOptions(sliders, options),
     // The map's rock presets, and a new list for them (a preset edited, added or removed), as sculpt.js editRocks takes it: an edited preset is a
