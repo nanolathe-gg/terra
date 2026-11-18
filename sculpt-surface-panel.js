@@ -3,7 +3,7 @@
 // with its reason. Each row opens to set a layer's material, its Coverage (stored as amount), its edge and its rule (conditions that must all
 // hold, or a score); a row moves within its stage, a material layer can be removed, and a layer is added from a preset. Hovering or focusing a
 // row previews where that layer lies on the map. The list is a world setting: `host.apply(next, {commit})` stores it.
-import {SURFACE_BUILTINS, SURFACE_NEEDS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, SURFACE_OWN_AMOUNT, PLANT_KINDS, PLANT_LABELS, PLANT_FACTS, surfaceRows, isMaterialLayer, layerKey} from './sculpt-material-model.js';
+import {SURFACE_BUILTINS, SURFACE_NEEDS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, SURFACE_OWN_AMOUNT, PLANT_KINDS, PLANT_LABELS, PLANT_FACTS, surfaceRows, spreadRule, isMaterialLayer, layerKey} from './sculpt-material-model.js';
 import {controlRow} from './sculpt-workspace.js';
 
 const $ = id => document.getElementById(id);
@@ -36,8 +36,9 @@ const andList = words => words.length < 2 ? words.join('') : `${words.slice(0, -
 export function whereWords(layer) {
   const window = w => { const name = factName(w.fact), from = w.from != null, to = w.to != null;
     return from && to ? `${name} is ${fmt(w.from)} to ${fmt(w.to)}` : from ? `${name} is above ${fmt(w.from)}` : to ? `${name} is below ${fmt(w.to)}` : `${name} is anything`; };
-  const rule = layer?.score?.terms?.length ? `Where a score of ${andList(layer.score.terms.map(t => (Number(t.weight ?? 1) < 0 ? 'less ' : '') + factName(t.fact)))} passes ${fmt(layer.score.from ?? .5)}`
-    : layer?.where?.length ? `Where ${layer.where.map(window).join(' and ')}` : '';
+  const {where, score} = spreadRule(layer);   // the limits it draws with, its Spread applied
+  const rule = score?.terms?.length ? `Where a score of ${andList(score.terms.map(t => (Number(t.weight ?? 1) < 0 ? 'less ' : '') + factName(t.fact)))} passes ${fmt(score.from ?? .5)}`
+    : where?.length ? `Where ${where.map(window).join(' and ')}` : '';
   const own = layer?.builtin != null ? BUILTIN_WHERE[layer.builtin] : '';
   if (own) return rule && !SURFACE_FIXED.includes(layer.builtin) ? `${own}, ${rule[0].toLowerCase()}${rule.slice(1)}` : own;
   return rule || 'Everywhere';
@@ -159,6 +160,7 @@ const ruleKind = layer => layer.score ? 'score' : layer.where?.length ? 'where' 
 function switchRule(layer, kind) {
   const facts = layer.score ? layer.score.terms.map(t => t.fact) : (layer.where ?? []).map(w => w.fact);
   delete layer.where; delete layer.score;
+  if (kind === 'none') delete layer.spread;   // a layer shown everywhere has no limits to spread
   if (kind === 'where') layer.where = (facts.length ? facts : ['slope']).map(fact => ({fact, from: .5, fade: .1}));
   if (kind === 'score') layer.score = {terms: (facts.length ? facts : ['slope']).map(fact => ({fact, weight: 1})), from: .5, fade: .1};
 }
@@ -207,12 +209,15 @@ export function mountSurfacePanel(host) {
     return el('label', {className: 'surface-number'}, el('span', {textContent: label}), input);
   };
   const remover = (title, onClick) => { const b = el('button', {type: 'button', textContent: '×', title, ariaLabel: title}); b.onclick = onClick; return b; };
-  function windowRow(i, k, w) {
+  // `drawn`: the condition as the layer draws it, its Spread applied; when that moved its limits, the row says where they are now.
+  function windowRow(i, k, w, drawn) {
     const set = (field, v) => edit(i, l => { if (v === undefined) delete l.where[k][field]; else l.where[k][field] = v; }, true);
+    const moved = drawn && (drawn.from !== w.from || drawn.to !== w.to);
     return el('div', {className: 'surface-term'}, factSelect(w.fact, f => edit(i, l => { l.where[k].fact = f; }, true), `w${k}-fact`),
       number('from', w.from, v => set('from', v), undefined, undefined, `w${k}-from`), number('to', w.to, v => set('to', v), undefined, undefined, `w${k}-to`),
       number('fade', w.fade ?? .05, v => edit(i, l => { l.where[k].fade = Math.max(v ?? .05, .0001); }, true), 'How gradually it starts and stops', '', `w${k}-fade`),
-      remover('Remove this condition', () => edit(i, l => { l.where.splice(k, 1); if (!l.where.length) delete l.where; }, true)));
+      remover('Remove this condition', () => edit(i, l => { l.where.splice(k, 1); if (!l.where.length) delete l.where; }, true)),
+      ...(moved ? [el('span', {className: 'small surface-spread-now', textContent: `With Spread: ${drawn.from != null ? fmt(drawn.from) : 'open'} to ${drawn.to != null ? fmt(drawn.to) : 'open'}`})] : []));
   }
   function termRow(i, k, t) {
     return el('div', {className: 'surface-term'}, factSelect(t.fact, f => edit(i, l => { l.score.terms[k].fact = f; }, true), `t${k}-fact`),
@@ -227,13 +232,20 @@ export function mountSurfacePanel(host) {
       el('option', {value: 'score', textContent: 'Where a score passes (a weighted sum)', selected: kind === 'score'}));
     select.onchange = () => edit(i, l => switchRule(l, select.value), true);
     block.append(el('label', {className: 'surface-number surface-rule-kind'}, el('span', {textContent: 'Shows'}), select));
-    if (kind === 'where') layer.where.forEach((w, k) => block.append(windowRow(i, k, w)));
+    const drawn = spreadRule(layer);
+    if (kind === 'where') layer.where.forEach((w, k) => block.append(windowRow(i, k, w, drawn.where[k])));
     if (kind === 'score') {
       layer.score.terms.forEach((t, k) => block.append(termRow(i, k, t)));
       block.append(el('div', {className: 'surface-term'}, el('span', {className: 'small', textContent: 'The sum, with the edge noise, passes'}),
         number('at', layer.score.from ?? .5, v => edit(i, l => { l.score.from = v ?? .5; }, true), 'The sum it shows from', '.5', 'score-at'),
-        number('fade', layer.score.fade ?? .05, v => edit(i, l => { l.score.fade = Math.max(v ?? .05, .0001); }, true), 'How gradually it starts', '', 'score-fade')));
+        number('fade', layer.score.fade ?? .05, v => edit(i, l => { l.score.fade = Math.max(v ?? .05, .0001); }, true), 'How gradually it starts', '', 'score-fade'),
+        ...(drawn.score.from !== (layer.score.from ?? .5) ? [el('span', {className: 'small surface-spread-now', textContent: `With Spread: ${fmt(drawn.score.from)}`})] : [])));
     }
+    // Spread: every limit of the rule moved together (sculpt-material-model.js spreadRule), so one slider widens or narrows where the layer may
+    // show; the conditions keep their own numbers. Coverage beside it is how much of that area it covers, not how far it reaches.
+    if (kind !== 'none') block.append(slider('Spread', layer.spread ?? 0, -1, 1, .01, (v, c) => edit(i, l => { if (v) l.spread = v; else delete l.spread; }, c),
+      'Moves every limit of its rule together: right widens where it may show, left narrows it; the conditions keep their own numbers',
+      v => (v > 0 ? '+' : '') + fmt(v)));
     const terms = kind === 'where' ? layer.where.length : kind === 'score' ? layer.score.terms.length : 0;
     if (kind !== 'none' && terms < SURFACE_RULE_TERMS) {
       const add = el('button', {type: 'button', textContent: kind === 'where' ? '+ Condition' : '+ Term', title: 'Read another fact of the site'});
