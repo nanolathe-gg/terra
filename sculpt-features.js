@@ -903,9 +903,10 @@ export async function mountMapFeatures(api) {
         def(n,[['description','Rock'],['footprintx',fw],['footprintz',fz],['height',v.params.tall>0.4?60:rockHeight(v.footprint)],['seqname',seq(`${b}r${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}r${i}s`,[frameOf(f.shadow)])],
           ['metal',g.metal],...(g.energy?[['energy',g.energy]]:[]),['damage',2000],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['reclaimable',v.params.reclaimable===false?0:1],['blocking',1]]);
       } else if (p.kind==='scar') {
+        // The game draws the body translucent where the editor does (the generator's bodyBlend): a smudge is, a speckle and a stain are not.
         const smudgeType=v.params.type!=='stain';
         def(n,[['description',smudgeType?'Scorch Mark':'Rock Stain'],['footprintx',1],['footprintz',1],['height',0],['seqname',seq(`${b}c${i}`,[frameOf(f.body)])],...(f.shadow?[['seqnameshad',seq(`${b}c${i}s`,[frameOf(f.shadow)])]]:[]),
-          ['animtrans',smudgeType?1:0],['shadtrans',1],['damage',smudgeType?0:20000],['reclaimable',0],['blocking',0],['featuredead',n]]);
+          ['animtrans',f.bodyBlend<1?1:0],['shadtrans',1],['damage',smudgeType?0:20000],['reclaimable',0],['blocking',0],['featuredead',n]]);
       }
     }
     return {pack:{prefix,defs,sequences},nameOf};
