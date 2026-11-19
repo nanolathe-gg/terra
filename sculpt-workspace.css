@@ -40,6 +40,7 @@
 .rock-swatch{flex:none;width:12px;height:12px;border-radius:3px;border:1px solid #0007}#rock-current-swatch{width:26px;height:26px;border-radius:5px}
 .rock-chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px}
 .rock-chip{display:flex;align-items:center;gap:6px;min-width:0;padding:3px 6px;font-size:10.5px;text-align:left;white-space:nowrap;overflow:hidden}
+.rock-chip-name{min-width:0;overflow:hidden;text-overflow:ellipsis}   /* a long name ends in an ellipsis; the chip's title holds it whole */
 .rock-chip[aria-checked=true]{background:#354d40;border-color:#82b597;color:#e4f6e6}
 #rock-manage{position:static}#rock-manage>summary{font-size:10.5px;padding:3px 8px}#rock-manage .popover{top:40px;left:10px;right:10px;width:auto;padding:10px 12px;display:grid;gap:7px}
 #rock-manage .row{display:flex;gap:5px;margin:0}#rock-manage .row>*{flex:1;min-width:0}#rock-add{font-size:11px;width:100%}.rock-picker .control-requirement:empty{display:none}

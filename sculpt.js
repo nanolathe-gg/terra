@@ -2732,7 +2732,7 @@ function syncRockPanel() {
   $('rock-chips').replaceChildren(...[...list.options].map(option=>{
     const slot=Number(option.value),chip=document.createElement('button'),swatch=document.createElement('span'),name=slot===0?worldRockName(config):option.textContent;
     chip.type='button';chip.className='rock-chip';chip.setAttribute('role','radio');chip.setAttribute('aria-checked',String(slot===rockSelected));chip.dataset.slot=option.value;chip.tabIndex=slot===rockSelected?0:-1;chip.title=slot===0?`${name}: the world\u2019s rock type`:name;
-    swatch.className='rock-swatch';swatch.style.background=rockHex(slot);chip.append(swatch,name);
+    swatch.className='rock-swatch';swatch.style.background=rockHex(slot);const label=document.createElement('span');label.className='rock-chip-name';label.textContent=name;chip.append(swatch,label);
     chip.onkeydown=e=>{const keys=['ArrowRight','ArrowDown','ArrowLeft','ArrowUp','Home','End'];if(!keys.includes(e.key))return;e.preventDefault();const chips=[...$('rock-chips').children],i=chips.indexOf(chip),next=e.key==='Home'?0:e.key==='End'?chips.length-1:(i+(e.key==='ArrowRight'||e.key==='ArrowDown'?1:-1)+chips.length)%chips.length;chips[next].click();$('rock-chips').querySelector('[aria-checked=true]').focus();};
     chip.onclick=()=>{list.value=option.value;list.dispatchEvent(new Event('change'));};
     return chip;
