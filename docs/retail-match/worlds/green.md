@@ -68,7 +68,8 @@ These notes are by eye, from the base crops in
   .6, no jag (`bandJag` 0). Bands do draw on green-5's ridge flanks, but
   faintly (measured 2026-11-18: doubling `banding` changed 8.5% of green-5's
   pixels, all on the flanks), and never on its plain, because they start at
-  slope 0.07. `bandLevel` (new) moves that start down. A rock type carries
+  slope 0.07. `bandLevel` (Lines on level ground) draws them on slopes
+  0.004 to 0.09 with a strength of its own, times the slopes'. A rock type carries
   its own `banding`, so a map's strokes can have stronger bands than the
   world's own rock.
 - Lighting on Green was set by the owner (2026-11-15) and stays unless a
@@ -102,10 +103,24 @@ partly ported to main on 2026-11-18:
 
 Round 2's proposals:
 
-1. **Contour hatch on near-level ground (6.1): real.** `bandLevel` shares
-   the bands' strength with the slopes, so more lines on the plain triple
-   them on green-2's slopes (trial-060). It needs its own strength for gentle
-   ground: an engine change, not yet built.
+1. **Contour hatch on near-level ground (6.1): built, and mostly not
+   Green's gap.** `bandLevel` is now a strength of its own (0 to 2) on slopes
+   0.004 to 0.09, gone before the slope class, so it no longer crowds the
+   slopes (measured 2026-11-18 on all seven windows: at 2, green-2's slope
+   lines .00443 to .00452, where the old reach control took them to .00586;
+   at 0 the picture is unchanged). But by eye retail Green's level ground is
+   mostly clean. The "level" lines retail has sit on the gentle parts of
+   green-2's hatched slope and on green-5's ridge flanks. At 2, green-5's
+   look fell .35 to .24 by drawing squiggles across its plain that retail
+   does not have: do not keep that. **Green-2's real gap is line
+   character:** retail's hatch is thin, faint, even wavy lines about 5 px
+   apart across the whole slope (spacing 1.3 fits it); ours are bold black
+   dashes in clumps (slope lines .0044 against .0019). Two tries that did
+   not fix it (scratch, green-2 alone): band step 3.7 (look .17 but blobby
+   ledges, not a hatch) and a lighter line, `world.column.bands` [1.3, 0.4]
+   (.27). Next: `bandJag`, `bandSoftness`, `terraceBreak`, and the rock
+   type green-2's strokes use; if none gives an even fine hatch, propose a
+   control for the bands' dash breakup (fixed noise in `contourBands`).
 2. **Thin dark lines on terraced faces (6.2): untested.** It asked to
    "expose" `bandFade`, which the world's data can already set (now listed
    in section 1 of the reference, with the other data-only settings). Probe

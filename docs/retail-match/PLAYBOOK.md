@@ -247,7 +247,7 @@ moved, class by class, beside retail's value.
 | `level:color`, `level:luma` | ground material: its Gradient stops, palette | `groundPatch`, `lushness`, `ambient` |
 | `level:band2` (fine grain) | ground material: fine Noise `detail`, dither `amount` | `reliefAmount`, `plainRelief` |
 | `level:band8`, `level:band32` | ground material: broad Noise `size`, `layers` | `groundPatch`, `groundPatchSize`, `undulation`, `reliefPatchy` |
-| `level:edges`, `level:lines` too few | `bandLevel` (contour lines onto gentle ground), `banding`; the map's `undulation` (section 6) | ground material: Scatter pits or a Cracks noise; `plainRelief`, `lumpRelief` |
+| `level:edges`, `level:lines` too few | `bandLevel` (lines on near-level ground, its own strength; check by eye that retail has them there, not on a slope beside it), `banding`; the map's `undulation` (section 6) | ground material: Scatter pits or a Cracks noise; `plainRelief`, `lumpRelief` |
 | `level:edges` too many (regular dimples) | the map's `undulation`, `undulationScale` (section 6) | ground material's broad Noise |
 | `slope:color`, `slope:luma` | slope material; `hillLight` | `slopeTexture`, `faceFill`, `creaseShade` |
 | `slope:lines` too few | `banding`, `bandSoftness` (contour hatch), `slopeMarks`, `wrinkles` | the map lane: the window's strokes with Steps and a rock type of their own (section 6) |
@@ -302,9 +302,9 @@ You may read any code; you may not change it.
 2. **Find where it is drawn.** `grep -n "<key>" sculpt-renderer.js` gives
    the uniform's name. Then grep `engine-*.wgsl` for that uniform, and read
    the condition around it. For example, contour bands (`banding`) are drawn
-   in `engine-bake.wgsl` `contourBands`. They start at slope 0.07 (lower
-   with `bandLevel`), fade out on slopes steeper than `bandFade`, and take
-   each rock type's own `banding`.
+   in `engine-bake.wgsl` `contourBands`. They start at slope 0.07 (below
+   that, `bandLevel` sets their strength), fade out on slopes steeper than
+   `bandFade`, and take each rock type's own `banding`.
 3. **Write down what you found.** "Gated by X at 0", or "fades out above
    slope Y, where this window's hills are" is a finding. A proposal built on
    it is specific.
