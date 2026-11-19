@@ -238,6 +238,9 @@ def show(a):
     untried = [k for k, _ in KINDS if k not in counts and k != 'other world data']
     if untried:
         print(f"no trial yet moved: {', '.join(untried)}. A \"cannot\" in the report needs each kind tried or said why it cannot reach the gap (README.md)")
+        if 'shape preset' in untried:
+            print("  a shape preset reaches a window only as world.shapes.<kind> for a kind its strokes name (landform, hill, deep, ...), and only for"
+                  " keys their cards leave out; a world's own shape (one with a `from`) is never named by a scene (REFERENCE.md, section 5)")
 
 
 def main():

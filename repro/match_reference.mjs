@@ -140,8 +140,11 @@ row([-1, 'ground beneath (keeps what is there)', '', '']);
 for (const m of materials) row([m.worldGround ? `${m.slot} (choose as 0)` : m.slot, m.name, m.source ? `\`${m.source}\`` : '', materialUse(m)]);
 L.push('', 'To give a map another ground, add its material to `world.materials.extra` (a list of textures.json keys); it takes the next free slot.',
   'A `landform` or `paint` stroke lays it with `groundPreset`; a paint stroke with a large `diameter` covers a plain, for example\n  `["paint", [[60, 300], [380, 320]], {"card": {"diameter": 300, "amount": 100, "groundPreset": 12}}]`.', '');
-L.push('### What each window\'s scene sets now', '', 'A scene stroke takes its tool\'s shape preset (`world.shapes`) but not the tool\'s `rock`: an unset `rockPreset` is -1, rock beneath, which',
-  'on open ground is the world\'s own rock. Set `rockPreset` in a stroke\'s `card` to choose a rock type.', '');
+L.push('### What each window\'s scene sets now', '', 'A scene stroke starts from the world\'s numbers for the shape it names (`world.shapes.<kind>`, for example',
+  '`world.shapes.hill` for a `hill` stroke), then its `card` on top: a preset key moves the windows whose strokes name that kind and leave',
+  'that key out of their card. A world\'s own shapes (those with a `from`, such as a massif) are never named by a scene, so editing one moves no',
+  'window. A stroke does not take the tool\'s `rock`: an unset `rockPreset` is -1, rock beneath, which on open ground is the world\'s own rock.',
+  'Set `rockPreset` in a stroke\'s `card` to choose a rock type.', '');
 for (const f of readdirSync(join(repo, 'repro', 'scenes')).filter(f => new RegExp(`^${world}-[0-9]\\.json$`).test(f)).sort()) {
   const sc = json(`repro/scenes/${f}`), strokes = sc.strokes ?? [];
   L.push(`- **${f.replace('.json', '')}** (${sc.source?.map ?? 'unknown map'}): query \`${sc.query || ''}\`; ${strokes.length} strokes` +
