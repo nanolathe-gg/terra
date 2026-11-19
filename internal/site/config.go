@@ -118,8 +118,11 @@ func readObject(path string) (object, error) {
 	if err != nil {
 		return nil, err
 	}
+	return decodeObject(path, data)
+}
+func decodeObject(path string, data []byte) (object, error) {
 	var m object
-	if err = decode(data, &m); err != nil {
+	if err := decode(data, &m); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return m, nil
@@ -175,12 +178,13 @@ func Load(root string) (*Site, error) {
 			return nil, fmt.Errorf("duplicate world %q", w.ID)
 		}
 		path := filepath.Join(root, materialPath(w.ID))
-		s.tables[w.ID], err = readObject(path)
+		// One read: the table and the feature order come from the same bytes, so a world
+		// file saved while this request loads cannot mix two versions of itself.
+		raw, err := os.ReadFile(path)
 		if err != nil {
 			return nil, err
 		}
-		raw, err := os.ReadFile(path)
-		if err != nil {
+		if s.tables[w.ID], err = decodeObject(path, raw); err != nil {
 			return nil, err
 		}
 		var table map[string]json.RawMessage
