@@ -2515,8 +2515,11 @@ function buildWorldPanel() {
   $('world-export').onclick=() => download(new Blob([JSON.stringify({format:'nanolathe-map-world',version:1,world:{...(({tools,rocks,...rest})=>rest)(world),...storedWorldKit(baseWorldConfig,world),materials:structuredClone(worldKept(mapMaterials)),knobs:{...world.knobs},featureSet:mapFeatures?.serialize().featureSet}},null,1)],{type:'application/json'}),(world.name||'world').replace(/[^\w-]+/g,'_')+'.world.json');
   $('world-import').onclick=() => $('world-file').click();
   $('world-file').onchange=async () => {
+    // Clear the input before reading, so choosing the same file again after a failed
+    // import still fires a change (the map loader does the same).
+    const file=$('world-file').files[0]; $('world-file').value=''; if (!file) return;
     try {
-      const data=JSON.parse(await $('world-file').files[0].text()),w=data?.world;
+      const data=JSON.parse(await file.text()),w=data?.world;
       if (data?.format!=='nanolathe-map-world' || !w || typeof w.name!=='string' || !(w.base in (config.biomes||{}))) throw new Error('Not a world file for a world this server has.');
       const id=w.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,24)+'-'+Math.random().toString(36).slice(2,6);
       const response=await fetch(configUrl(w.base));if(!response.ok)throw Error('The world’s base could not be read.');const base=applyWorldRock(await response.json()),checked=copySavedWorld({...w,colors:w.colors??{},knobs:w.knobs??{}},base);
