@@ -1976,8 +1976,24 @@ addEventListener('pagehide',() => { worldInputQueue.flush();if (!stroke && !movi
 const savedStrokes=(list,carry,own,tables) => { const ids=toolIds(own),saved=inferStrokeTools(list,ids); return carry?carryNodes(saved,own,tables):keepStrokeTools(saved,ids); };
 function loadSketch(s,carry=false) {
   if (!s || s.format!=='nanolathe-terrain-sculpt' || s.version!==6 || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n)) throw new Error('Load a map stroke graph with the same canvas and grid size.');
-  const column=copyColumn(s.column),rock=copyRockSettings(s.rock),rocks=copyRocks(s.rocks),materials=copyMaterials(s.materials),own=copyMapTools(s.tools)??[],ids=toolIds(own);
+  const column=copyColumn(s.column),rock=copyRockSettings(s.rock),rocks=copyRocks(s.rocks),materials=copyMaterials(s.materials);let own=copyMapTools(s.tools)??[];
   const supplied=rocks??worldRocks(config),adopted=surfaceMaterials(config.surface,adoptWorldMaterials(materials,config,{carried:carry}),{config,nodes:s.nodes,rocks:supplied}),staged=instantiateWorldKit(config,activeWorld(),{rocks:supplied,materials:adopted,source:s.worldSettings??{},append:s.worldSettings?.rocks!==undefined,builtIn:builtInWorld()});
+  // Tools and rock types an earlier build kept in a world become the map's own (owner, 2026-11-19: everything lives with the map): each tool
+  // authored in the world turns into a map tool (its rock and ground as this map's slots), and no rock type is a world's instance any more.
+  const authored=(currentWorldKit?.tools??[]).filter(authoredWorldTool);
+  if(authored.length||staged.rocks.some(r=>r.worldKey)||activeWorld().rocks!==undefined){
+    let list=s.nodes,settings={...(s.toolSettings??{})},picked=s.tool,lost=0;
+    for(const t of authored){
+      if(own.length>=MAP_TOOLS_MAX){lost++;continue;}
+      try{const added=addMapTool(own,list,{label:t.label,icon:t.icon,color:t.color,group:t.group,shape:shapeFrom(config,toolShape(t)),card:resolvedWorldCard(t,staged.rocks,staged.materials,config)});
+        own=added.tools;list=list.map(n=>n?.tool===t.id?{...n,tool:added.id}:n);if(settings[t.id]){settings[added.id]=settings[t.id];delete settings[t.id];}if(picked===t.id)picked=added.id;}
+      catch(_){lost++;}
+    }
+    s={...s,nodes:list,toolSettings:settings,tool:picked};staged.rocks=staged.rocks.map(({worldKey:_,...r})=>r);
+    const w=activeWorld();delete w.tools;delete w.rocks;refreshWorldKit();
+    if(lost)status(`${lost} of the world’s own tools did not fit among this map’s ${MAP_TOOLS_MAX}; shapes drawn with them show as Landform.`);
+  }
+  const ids=toolIds(own);
   const next=deserializeNodes(savedStrokes(s.nodes,carry,own,staged));
   shapeClipboard=null;   // copied shapes name this map's rocks and materials: they do not paste into another map
   // Reject damaged saves before committing any pending edit to the old map.
