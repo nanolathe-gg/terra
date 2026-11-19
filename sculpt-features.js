@@ -219,19 +219,22 @@ export async function mountMapFeatures(api) {
   const paint=(p,rgba,sun=light(),signal=null) => { const v=variantOf(p); return work({type:'paint',kind:p.kind,params:paintParams(p),seed:v.seed,light:sun,w:PATCH,h:PATCH,cx:PATCH/2,cy:PATCH/2,rgba},[rgba.buffer],signal).then(r => r.rgba); };
   function stampFor(p) {
     const pk=key(p);
-    let s=stamps.get(pk); if (!s) { s={bitmap:null,want:'',painting:'',exact:null,exactStale:true}; stamps.set(pk,s); }
+    let s=stamps.get(pk); if (!s) { s={bitmap:null,want:'',painting:'',failed:'',exact:null,exactStale:true}; stamps.set(pk,s); }
     const exact=exactOrigin(p),gk=exact?exact.ox+','+exact.oy:'';
     let g=exact?grounds.get(gk):null;
     if (exact && !g) { g={ox:exact.ox,oy:exact.oy,rgba:null,gen:0,stale:true,pending:false,failed:false,input:null}; grounds.set(gk,g); }
     const want=variantOf(p).seed+'|'+JSON.stringify(paintParams(p))+'|'+lightKey(light())+'|'+(g?.rgba?gk+'|'+g.gen:'flat');
-    if (s.want!==want && s.painting!==want) {
+    // A paint that failed keeps its failure: stampFor runs every draw frame a placement is
+    // visible, so retrying the same want each frame would re-post the job forever (the sprite
+    // path caches e.error the same way). A new want — new params, light or ground — retries.
+    if (s.want!==want && s.painting!==want && s.failed!==want) {
       s.painting=want;
       paint(p,g?.rgba?g.rgba.slice():flatGround()).then(async rgba => {
         if (s.painting!==want) return;
         const bitmap=await createImageBitmap(new ImageData(rgba,PATCH,PATCH));
         if (s.painting!==want) { bitmap.close(); return; }
-        s.bitmap?.close?.(); Object.assign(s,{bitmap,want,painting:''}); api.schedule();
-      },err => { s.painting=''; status('A deposit or vent could not be painted: '+err.message); });
+        s.bitmap?.close?.(); Object.assign(s,{bitmap,want,painting:'',failed:''}); api.schedule();
+      },err => { s.painting=''; s.failed=want; status('A deposit or vent could not be painted: '+err.message); });
     }
     return s;
   }
