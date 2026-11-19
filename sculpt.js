@@ -312,6 +312,7 @@ function updateControls() {
   // The side panel's Selection block is the Select tool with no shape selected: its hint, or the selected features' values. A selected
   // shape's own actions are the bar on the map (#selection-hud) and the head of its card.
   $('selection-panel').hidden=featureActive||picking||tool!=='move'||(hasSelection&&!featureSelection);
+  $('pick-panel').hidden=!picking||Boolean(selectedNode?.params);   // Pick with no shape's card to show: what Pick does, so the panel is not blank
   $('feature-selection').hidden=!featureSelection;$('shape-selection-actions').hidden=!selectionActive;
   $('selection-empty').hidden=hasSelection||featureSelection;
   $('path-actions').hidden=$('path-row').hidden=!pathEditing||!hasSelection;
