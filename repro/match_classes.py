@@ -13,7 +13,10 @@ class actually drew. The classes:
   slope   dry, slope .08 to .5;
   steep   dry, slope .5 and over (cliffs, faces).
 
-Each mask loses EDGE_PX px at its border, so a number describes the class, not the seam between two. Per class and side:
+Both sides are classed from 16 px height cells, so a class boundary can sit up to half a cell from where the picture changes: each
+mask loses EDGE_PX px (half a cell) at its border, so a number describes the class, not the seam between two. A retail coast is
+drawn by its tiles, not by its heights, so a mask can still hold the other side of a waterline: a dry class drops pixels whose color
+is nearer that side's own water than its own land, and the water drops pixels nearer the land (`unmixed`). Per class and side:
 share of the window, mean color (sRGB and CIELAB), luma mean and spread, band-pass energy at 2, 8 and 32 px, edge density and thin
 dark line density (stats.py's definitions, read inside the mask). Then plain-language findings where a gap passes a threshold
 (THRESHOLDS below), largest first, and 1x crops: for each class, the 256 px square where retail has the most of it, cut from both
@@ -38,13 +41,13 @@ from stats import (DISK5, EDGE_THRESH, FPS, THIN_THRESH, WORLD_BASE, find_window
 
 CLASSES = ['water', 'shore', 'level', 'slope', 'steep']
 SHORE_PX = 40
-EDGE_PX = 3
+EDGE_PX = 8   # half a 16 px height cell
 LEVEL, STEEP = .08, .5
 # A finding is reported when a gap passes its threshold: luma in 0-255 units, color as CIELAB distance of the class means, share
 # in points of the window, and the texture numbers as a ratio ours / retail outside [1/r, r].
 THRESHOLDS = {'share': .05, 'luma': 8.0, 'color': 6.0, 'spread': 1.3, 'band': 1.3, 'edges': 1.5, 'lines': 1.6}
 # Below these both sides are too faint for a ratio to mean anything (a share of pixels).
-FLOORS = {'edges': .01, 'lines': .0005}
+FLOORS = {'edges': .004, 'lines': .0003}
 MIN_PIXELS = 4000   # a class with fewer pixels on either side gets no texture comparison
 
 
@@ -90,6 +93,24 @@ def masks(screen, valid):
     return out
 
 
+def unmixed(rgb, ms):
+    """Drop from each dry class the pixels whose color is nearer this side's water than its land, and from the water those nearer the
+    land: a coast drawn off its height cells (retail's tiles) puts water pixels inside a shore mask. Medians of the side's own classes,
+    so it needs no world's colors. A side with too little water or land is left alone."""
+    water = ms['water']
+    dry = np.zeros_like(water)
+    for name in CLASSES[1:]:
+        dry |= ms[name]
+    if water.sum() < MIN_PIXELS or dry.sum() < MIN_PIXELS:
+        return ms
+    px = rgb.astype(np.float64)
+    wmed, lmed = np.median(px[water], axis=0), np.median(px[dry], axis=0)
+    nearer_water = np.linalg.norm(px - wmed, axis=2) < np.linalg.norm(px - lmed, axis=2)
+    out = {name: m & ~nearer_water for name, m in ms.items()}
+    out['water'] = water & nearer_water
+    return out
+
+
 def texture_maps(rgb):
     """Per-pixel maps the class statistics read: luma, edges, thin dark lines, and band-pass at 2, 8 and 32 px."""
     L = luma(rgb)
@@ -126,13 +147,28 @@ def side(pic_path, h, plain, size_check=None):
     inner[4:-4, 4:-4] = True
     cls = cell_classes(h, size / h.shape[0])
     screen = screen_classes(cls, h, plain, size)
-    return rgb, masks(screen, valid & inner)
+    return rgb, unmixed(rgb, masks(screen, valid & inner))
 
 
 def ratio(a, b):
     if not a or not b:
         return float('nan')
     return b / a
+
+
+def sizes(r, o):
+    """Every gap's size in threshold units, reported or not (1 is the threshold), so the trial log can tell a finding that cleared
+    from one that slipped just under its threshold."""
+    out = {'share': abs(o['share'] - r['share']) / THRESHOLDS['share']}
+    if 'luma' not in r or 'luma' not in o:
+        return out
+    out['luma'] = abs(o['luma'] - r['luma']) / THRESHOLDS['luma']
+    out['color'] = math.dist(r['lab'], o['lab']) / THRESHOLDS['color']
+    for key in ('spread', 'band2', 'band8', 'band32', 'edges', 'lines'):
+        t = THRESHOLDS['band' if key.startswith('band') else key]
+        q = ratio(r[key], o[key])
+        out[key] = 0.0 if max(r[key], o[key]) < FLOORS.get(key, 0) else (abs(math.log(q) / math.log(t)) if math.isfinite(q) and q > 0 else 2.0)
+    return {k: round(v, 3) for k, v in out.items()}
 
 
 def findings(name, r, o):
@@ -222,7 +258,7 @@ def window(d, out, crop):
     found = []
     for name in CLASSES:
         r, o = class_stats(rpic, rmaps, rm[name]), class_stats(opic, omaps, om[name])
-        result['classes'][name] = {'retail': r, 'ours': o}
+        result['classes'][name] = {'retail': r, 'ours': o, 'sizes': sizes(r, o)}
         found += findings(name, r, o)
         at = best_square(rm[name], crop)
         if at:
