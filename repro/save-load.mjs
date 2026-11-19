@@ -29,22 +29,21 @@ const image=page=>page.ev(`(async()=>{const b=await sculptCanvas.debugBake({x:24
 const normalize=s=>({...s,nodes:s.nodes.map(n=>({...n,hidden:Boolean(n.hidden)}))});
 try{
   const source=await open(0);
-  await source.send('Page.addScriptToEvaluateOnNewDocument',{source:`localStorage.setItem('nanolathe-map-editor-worlds',JSON.stringify({'shared-test':{name:'Shared planet',base:'green',colors:{slope:'#876543',sky:null,sun:'#ffeebb'},knobs:{beachFrom:'zhon',erosionRain:'0',lowTint:'.4'}}}));`});
-  await source.send('Page.navigate',{url:`${server}/?biome=green&world=shared-test&mapX=2&mapY=1&sea=95&scratch=save-test&gpuMB=512&heapMB=1536&sunColor=ffd9a8&terraceBreak=.7`});await source.ready();
+  // The map's world settings come from the address here (rows, a borrowed beach, the sun's color); a map saves them whole (owner, 2026-11-19).
+  await source.send('Page.navigate',{url:`${server}/?biome=green&mapX=2&mapY=1&sea=95&scratch=save-test&gpuMB=512&heapMB=1536&sunColor=ffd9a8&terraceBreak=.7&beachFrom=zhon&erosionRain=0&lowTint=.4`});await source.ready();
   await source.ev(`(()=>{const w=document.getElementById('weather');if(w.checked)w.click();const own=sculptDebug.sketch().materials.map(m=>m.worldGround?{...m,seed:3}:m),free=[...Array(15).keys()].map(i=>i+1).find(i=>!own.some(m=>m.slot===i)),sand={...Object.fromEntries(Object.entries(own.find(m=>m.worldGround)).filter(([k])=>!/^world/.test(k))),slot:free,name:'Second ground',seed:9};window.__fixture={slot:free,count:own.length+1};sculptDebug.scene([['hill',[[240,230],[430,260]],{card:{elevation:95,gullies:20}}],['paint',[[150,150]],{groundPreset:free,card:{diameter:120,amount:100,softness:0}}]],{ground:true,materials:[...own,sand]});const d=sculptRegion.mapData();d.name='Collaboration fixture';d.description='Self-contained save';d.starts=[{x:128,z:128},{x:768,z:256}];d.settings.minWind=7;d.features=[{kind:'deposit',v:0,x:8,z:8,metal:143}];sculptRegion.restoreMapData(d);return true;})()`);await source.ready();
   // Capture the blob produced by the real button; suppress the browser's disk download.
   await source.send('Browser.setDownloadBehavior',{behavior:'deny'});
   const saved=JSON.parse(await source.ev(`(async()=>{const original=URL.createObjectURL;URL.createObjectURL=blob=>{window.savedBlob=blob;return original(blob);};document.getElementById('save').click();return await savedBlob.text();})()`));
-  assert.equal(saved.worldSettings.name,'Shared planet');assert.equal(saved.worldSettings.colors.sky,null);assert.equal(saved.worldSettings.colors.sun,'#ffd9a8');assert.equal(saved.worldSettings.knobs.beachFrom,'zhon');
+  assert.equal(saved.worldSettings.name,'Green Planet');assert.equal(saved.worldSettings.colors.sun,'#ffd9a8');assert.equal(saved.worldSettings.knobs.beachFrom,'zhon');assert.equal(saved.worldSettings.knobs.erosionRain,'0');assert.ok(saved.worldSettings.surface?.length,'the surface layers are saved whole');
   // The map's materials travel in the save; the world it embeds carries its own two (the ground was given another seed above).
   const fixture=await source.ev('window.__fixture');assert.equal(saved.materials.find(m=>m.worldGround).seed,3);assert.equal(saved.materials.length,fixture.count);assert.deepEqual(saved.worldSettings.materials,saved.materials.filter(m=>Object.keys(m).some(k=>/^world[A-Z]/.test(k)&&m[k])));
-  // The fixture's stored world still holds lowTint, a removed row (round 7): it stays out of the save, as the open would drop it.
+  // lowTint is a removed row (round 7): an address that names it leaves it out of the save, as the open would drop it.
   assert.equal(saved.worldSettings.knobs.lowTint,undefined);
   const uniforms=await source.ev(`Object.fromEntries(Object.keys(sculptDebug.sketch().worldSettings.knobs).map(k=>[k,sculptCanvas.renderer.variant.get(k)]))`);
   const file=join(out,'map.json');writeFileSync(file,JSON.stringify(saved));const before=await image(source);
   const recipient=await open(1);
   await recipient.send('Page.navigate',{url:`${server}/?biome=red&mapX=1&mapY=1&scratch=recipient`});await recipient.ready();
-  assert.equal(await recipient.ev(`localStorage.getItem('nanolathe-map-editor-worlds')?.includes('Shared planet')||false`),false);
   const doc=await recipient.send('DOM.getDocument'),input=await recipient.send('DOM.querySelector',{nodeId:doc.root.nodeId,selector:'#file'});
   await recipient.send('DOM.setFileInputFiles',{nodeId:input.nodeId,files:[file]});await recipient.ready(`sculptDebug.biome==='green'&&sculptRegion.mapData().name==='Collaboration fixture'`);
   const restored=await recipient.ev('sculptDebug.sketch()');writeFileSync(join(out,'restored.json'),JSON.stringify(restored));
