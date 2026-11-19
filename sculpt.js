@@ -534,6 +534,8 @@ function syncCurveNumbers(c) {
   $('curve-point-x').disabled=i===0||i===ks.length-1;$('curve-point-x').min=ks[i-1]?.[0]+.01||0;$('curve-point-x').max=ks[i+1]?.[0]-.01||1;
   $('curve-point-y').min=curvePoint.side==='along'||!c.land?0:-1;$('curve-point-y').max=curvePoint.side==='along'?ALONG_HI:1.5;
   $('curve-point-delete').disabled=i===0||i===ks.length-1||ks.length<=2;
+  $('curve-point-delete').title=$('curve-point-delete').disabled?'The end points stay: select a point between them':'Delete the selected point';
+  $('curve-point-x').title=$('curve-point-x').disabled?'An end point stays at its edge: only its height moves':'';
 }
 function commitNumberKnots(ks) {
   const c=curveContext();if(curvePoint.side==='along')setCurve(roundKnots(ks),'along');
@@ -1708,6 +1710,13 @@ function renderLayers() {
   $('node-up').disabled||=selected>=nodes.length-1;$('node-down').disabled||=selected<=0;
   $('node-seed').disabled||=nodes[selected]?.seed===undefined;
   $('node-hide').textContent=nodes[selected]?.hidden?'Show':'Hide';
+  // A disabled list action says why (rule 9); a load, stroke or drag under way passes in a moment and needs no reason.
+  const busy=loading||Boolean(stroke||moving),why=(id,reason) => { const b=$(id); b.dataset.title??=b.title; b.title=b.disabled&&!busy?reason:b.dataset.title; };
+  for (const id of ['node-delete','node-hide']) why(id,'Select a shape first');
+  why('node-seed',selected<0?'Select a shape first':'This shape has no seed to change');
+  why('node-up',selected<0?'Select a shape first':'This shape is already at the top');
+  why('node-down',selected<0?'Select a shape first':'This shape is already at the bottom');
+  why('shape-duplicate','Select a shape first');
 }
 function nodeAction(kind) {
   const i=selected; if (i<0 || stroke || moving || loading || !ready) return;
