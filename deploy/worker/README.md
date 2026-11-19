@@ -20,7 +20,7 @@ account even though the free tier (10 GB, 1 M writes and 10 M reads a month) cov
 Try it:
 
 ```sh
-gzip -c save.json | curl -s -X POST --data-binary @- -H 'Content-Type: application/octet-stream' https://<worker>/maps   # {"id":"..."}
+gzip -c save.json | curl -s -X POST --data-binary @- -H 'Content-Type: application/octet-stream' -H 'Origin: https://terra.nanolathe.gg' https://<worker>/maps   # {"id":"..."}
 curl -s https://<worker>/maps/<id> | head -c 200
 ```
 
@@ -28,7 +28,7 @@ curl -s https://<worker>/maps/<id> | head -c 200
 
 | Request | Result |
 | --- | --- |
-| `POST /maps`, body is the gzipped save | `{"id": "<16 base32 chars>"}`. Refused with `{"error": "..."}`: 413 over 1 MB compressed or 16 MB uncompressed, 400 if not gzip, not JSON, or not a Terraform save (`format` `nanolathe-terrain-sculpt`, integer `version`, `nodes` list) |
+| `POST /maps`, body is the gzipped save | `{"id": "<16 base32 chars>"}`. Refused with `{"error": "..."}`: 413 over 1 MB compressed, 8 MB uncompressed, or 40 times its gzip size; 400 if not gzip, not JSON, or not a Terraform save (`format` `nanolathe-terrain-sculpt`, integer `version`, `nodes` list) |
 | `GET /maps/<id>` | the stored bytes with `Content-Encoding: gzip`, `Content-Type: application/json`, `Cache-Control: public, max-age=31536000, immutable`; 404 for an unknown id |
 | `DELETE /maps/<id>` with `Authorization: Bearer <ADMIN_TOKEN>` | `{"deleted": id}`; 401 without the token, 403 if no `ADMIN_TOKEN` is set |
 | `OPTIONS` | CORS preflight |
