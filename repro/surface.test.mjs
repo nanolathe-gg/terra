@@ -101,7 +101,7 @@ test('a surface from a save or a world file is checked and copied; a save carrie
   assert.throws(() => copySurface([{builtin: 'rock', where: [{fact: 'nope'}]}]), /unknown fact/);
   const w = world('green'), config = {biome: 'Green Planet', biomeId: 'green', materials: w.materials, surface: defaults.surface, defaults: {}, engineDefaults: {}};
   const plain = savedWorld(config, new URLSearchParams(), {name: 'Green Planet', colors: {}, knobs: {}});
-  assert.equal(plain.surface, undefined, 'a world that kept its own surface saves none');
+  assert.deepEqual(plain.surface, copySurface(defaults.surface), 'a map saves its surface layers whole, the built-in world\'s included (owner, 2026-11-19)');
   const edited = savedWorld(config, new URLSearchParams(), {name: 'Green Planet', colors: {}, knobs: {}, surface: copy});
   assert.deepEqual(copySavedWorld(JSON.parse(JSON.stringify(edited)), config).surface, copy, 'an edited surface round-trips');
 });

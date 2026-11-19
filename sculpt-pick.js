@@ -75,7 +75,7 @@ export function mountPick(host) {
   }
   // A swatch shows its thing's color unless the artist is choosing one in it (a rebuilt value would close the picker).
   const swatch = (id, color) => { const input = $(id); input.disabled = !color; if (color && document.activeElement !== input) input.value = color; };
-  const tag = (id, info) => { const e = $(id); e.textContent = info.tag; e.className = 'scope-tag scope-' + info.scope; };
+  const tag = (id, info) => { const e = $(id); e.textContent = info.tag ?? ''; e.className = 'scope-tag scope-' + info.scope; e.hidden = !info.tag; };
   // Settings rows (host.settings): sliders that edit through the World row's own range (host.setSetting), one undo step a release. A list
   // with the same rows keeps its elements and takes new values, except in the row being used, so a read after a release never replaces it.
   function fillRows(box, rows, slot) {

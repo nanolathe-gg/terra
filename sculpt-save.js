@@ -1,7 +1,7 @@
 import {worldKit,storedWorldKit,instantiateWorldKit,kitWithin,sameKitData} from './sculpt-world-kit.js';
 import {withWorldMaterials,worldOwnMaterials,worldKept,worldOwnFor,keptWorldMaterials} from './sculpt-materials.js';
-// The map carries its effective world settings, including defaults, URL overrides and the world's ground and water materials.
-// Keep browser/session parameters out of the recipe; removed controls are dropped on load.
+// The map carries its effective world settings whole: every row's value (defaults and URL overrides included), its colors, its world
+// materials and its surface layers. Keep browser/session parameters out of the recipe; removed controls are dropped on load.
 import {KNOBS} from './sculpt-knobs.js';
 import {worldHexColors,isTone} from './sculpt-scene.js';
 import {normalizeSet} from './sculpt-feature-set.js';
@@ -11,8 +11,9 @@ export const worldKeys=config => new Set([...Object.keys(config.defaults||{}),..
 export function savedWorld(config,settings,world) {
   const knobs={};
   for(const key of worldKeys(config)){const value=settings.get(key)??world.knobs?.[key]??config.defaults?.[key]??config.engineDefaults?.[key];if(value!==undefined&&value!==null)knobs[key]=String(value);}
-  // The world's surface layers where the artist changed them (docs/SURFACE_LAYERS.md); a world that kept its own carries none.
-  return {...storedWorldKit(config,world),materials:worldKept(withWorldMaterials(world.materials,config)),name:world.name||config.biome,base:config.biomeId,colors:worldHexColors(config,settings,world.colors||{}),knobs,...(world.surface?{surface:copySurface(world.surface)}:{})};
+  // The map saves its world whole (owner, 2026-11-19), its surface layers included, so retuning the built-in world never changes it.
+  const surface=world.surface??config.surface;
+  return {...storedWorldKit(config,world),materials:worldKept(withWorldMaterials(world.materials,config)),name:world.name||config.biome,base:config.biomeId,colors:worldHexColors(config,settings,world.colors||{}),knobs,...(surface?{surface:copySurface(surface)}:{})};
 }
 // A number written as text or a number: "abc", "NaN", "1e999" and "" are not.
 const finiteText=v => String(v).trim()!=='' && Number.isFinite(Number(v));
