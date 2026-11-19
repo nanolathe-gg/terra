@@ -808,6 +808,7 @@ export async function mountMapFeatures(api) {
   },true);
   canvas.addEventListener('pointerleave',() => { if (!gesture) { hover=null; api.schedule(); } },true);
   const typing=target => ['INPUT','SELECT','TEXTAREA'].includes(target?.tagName) || target?.isContentEditable;
+  const OPEN_ABOVE='details.top-menu[open],details.share-menu[open],details.status-details[open],.rail-button[aria-expanded="true"],#pane-map:not([hidden]),#pane-graphics:not([hidden]),#pane-export:not([hidden]),.app.curves-large,#surface-add[aria-expanded="true"]';
   doc.addEventListener('keydown',event => {
     if (typing(event.target) || doc.querySelector('dialog:modal')) return;   // a modal dialog (sculpt.js) has the keys
     if (event.code==='Space') { if (event.target?.tagName!=='BUTTON') space=true; return; }
@@ -818,7 +819,8 @@ export async function mountMapFeatures(api) {
     if (!mode) return;
     // Undo and Redo (sculpt.js) act with the tool still in hand; a gesture under way is dropped first.
     if ((event.metaKey||event.ctrlKey) && event.key.toLowerCase()==='z') { if (gesture) finishGesture(false); return; }
-    if (event.key==='Escape') { if (doc.querySelector('#map-features-panel details.top-menu[open]')) return;   // the open menu closes first (sculpt-ui.js closeTop)
+    // An open menu, flyout, panel or Find closes first (sculpt-ui.js closeTop); the tool goes on the next Escape.
+    if (event.key==='Escape') { if (doc.querySelector(OPEN_ABOVE) || doc.getElementById('find-results')?.hidden===false) return;
       stop(event); deactivate(); }
     else if (['Delete','Backspace'].includes(event.key)) { stop(event); if (!event.repeat && mode==='starts') removeStart(selectedStart); }
   },true);
