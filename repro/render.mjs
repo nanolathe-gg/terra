@@ -1,7 +1,8 @@
 // Render a reproduction scene and save its window: under Node on Dawn (repro/headless.mjs, the default), or in headless Chrome (WebGPU) with --chrome.
 //   node render.mjs <scene.json> <out-dir> [--server http://127.0.0.1:<yours>] [--port <cdp>] [--query 'sun=90&sunHeight=30&cavity=.5'] [--clay] [--chrome]
 //        [--map 4x4] [--configs DIR]
-// --query appends page parameters after the scene's own (review sun, knob trials); --clay ticks the Clay box.
+// --query sets page parameters over the scene's own: a key the scene's query also sets takes --query's value (review sun, knob trials,
+// a retail match probe of a map setting such as undulation); --clay ticks the Clay box.
 // The scene is {"biome": "green", "query": "", "ground": true, "strokes": [[kind, [[x,y],...], options], ...]}
 // (sculpt-scene.js sceneNodes). H12b: the scene is played on a 4x4 map (--map WxH for another) with every stroke shifted by --offset (default 0:
 // the window is the map's top-left 1024 px; --sea N sets the sea, default the map's), and the window is captured at 1x. Writes <out-dir>/ours.png (the
@@ -37,7 +38,9 @@ const [sceneFile, out] = args;
 }
 const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
 mkdirSync(out, {recursive: true});
-const search = `biome=${scene.biome}&mapX=${MAPX}&mapY=${MAPY}&scratch=1&gpuMB=512&heapMB=1536${seaArg !== '' ? '&sea=' + seaArg : ''}${scene.query ? '&' + scene.query : ''}${extraQuery ? '&' + extraQuery : ''}`;
+const params = new URLSearchParams(`biome=${scene.biome}&mapX=${MAPX}&mapY=${MAPY}&scratch=1&gpuMB=512&heapMB=1536${seaArg !== '' ? '&sea=' + seaArg : ''}${scene.query ? '&' + scene.query : ''}`);
+for (const [k, v] of new URLSearchParams(extraQuery)) params.set(k, v);   // the page reads a key's first value, so an appended one would lose
+const search = params.toString();
 const strokes = scene.strokes.map(([kind, points, options]) => [kind, points.map(([x, y]) => [x + OX, y + OY]), options]);
 const writeHeights = (sea, heights) => writeFileSync(`${out}/ours-heights.json`, JSON.stringify({grid: 512, sea, heights}));
 
