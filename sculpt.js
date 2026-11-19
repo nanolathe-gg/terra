@@ -2198,9 +2198,8 @@ $('blank').addEventListener('click',() => { if (stroke) return; applySeedControl
 const mapFileName=() => ($('map-name').value.trim().replace(/[^\w-]+/g,'_').replace(/^_+|_+$/g,'')||'map')+'.json';
 $('save').addEventListener('click',() => { if (!stroke) download(new Blob([JSON.stringify(sketch())],{type:'application/json'}),mapFileName()); });
 $('load').addEventListener('click',() => { if (!stroke) $('file').click(); });
-// With no map open yet (the first picker sent here), a file picker closed without a file, or a file that fails to load, goes back to
-// the picker: there is still nowhere to save a map drawn.
-let openingFile=false;
+// With no map open yet, a file picker closed without a file, or a file that fails to load, goes back to the picker: there is still
+// nowhere to save a map drawn. (From the first picker, the picker is already back behind the file chooser.)
 const backToPicker=() => { if (needsPicker() && !leavingForWorld && !$('new-map-dialog').open) openNewMap(true); };
 $('file').addEventListener('cancel',backToPicker);
 $('file').addEventListener('change',async () => {
@@ -3071,12 +3070,12 @@ function openNewMap(first=false, dimensionsFromMap=null) {
   const dimensions=()=>{const m=mapGeometry(Number($('new-map-width').value),Number($('new-map-height').value));$('new-map-pixels').textContent=`${m.width} × ${m.height} pixels`;$('new-map-custom').hidden=!custom;for(const b of $('new-map-sizes').children)b.setAttribute('aria-pressed',String(custom?b.dataset.size==='custom':Number(b.dataset.size)===m.unitsX&&m.unitsX===m.unitsY));};
   $('new-map-name').value='Untitled map';
   for(const b of $('new-map-sizes').children)b.onclick=()=>{custom=b.dataset.size==='custom';if(!custom)$('new-map-width').value=$('new-map-height').value=b.dataset.size;dimensions();if(custom)$('new-map-width').focus();};
-  $('new-map-open').onclick=()=>{if(!ready)return;openingFile=first;dialog.close();openingFile=false;$('load').click();};
+  $('new-map-open').onclick=()=>{if(!ready)return;dialog.close();$('load').click();};
   $('new-map-width').oninput=$('new-map-height').oninput=dimensions;dimensions();
   dialog.oncancel=e=>{if(first)e.preventDefault();};$('new-map-cancel').onclick=()=>dialog.close();
   // The first picker cannot be dismissed: Chrome lets Escape close a modal dialog despite preventDefault when nothing was clicked
   // first, and a map drawn then has no saved map to go into (saveWorking), so it was lost on reload. It comes back at once.
-  dialog.onclose=()=>{if(first&&needsPicker()&&!openingFile)setTimeout(()=>{if(needsPicker()&&!keepSaved&&!leavingForWorld&&!dialog.open)dialog.showModal();});};
+  dialog.onclose=()=>{if(first&&needsPicker())setTimeout(()=>{if(needsPicker()&&!keepSaved&&!leavingForWorld&&!dialog.open)dialog.showModal();});};
   // Create: the map open now stays in Maps (saved first); the tab reloads on a new map of its own.
   $('new-map-form').onsubmit=async e=>{e.preventDefault();if(!e.target.reportValidity())return;
     clearTimeout(autosaveTimer);if(!await leaveMap()){$('new-map-error').textContent='Your current map could not be saved in this browser. Save it as a file before starting a new map.';return;}

@@ -246,7 +246,7 @@
 .surface-settings .view-switch button:first-child{border-radius:5px 0 0 5px}.surface-settings .view-switch button:last-child{border-radius:0 5px 5px 0}.surface-settings .view-switch button+button{margin-left:-1px}.surface-settings .view-switch button[aria-pressed=true]{position:relative;z-index:1}
 .surface-settings .view-toggle{margin:10px 0 0}.surface-settings .view-image{display:block;width:100%;margin-top:12px}.surface-settings>h3{margin:16px 0 6px}
 .view-panels{display:flex;gap:4px}.view-panels button{flex:1;padding:5px 6px;font-size:11px;white-space:nowrap}
-.view-panels button[aria-expanded=true],#tab-map[aria-expanded=true],#open-graphics[aria-expanded=true],#open-export:not(.primary)[aria-expanded=true]{background:#344c42;border-color:#78ae8d;color:#d9ffe5}
+.view-panels button[aria-expanded=true],#tab-map[aria-expanded=true],#open-graphics[aria-expanded=true]{background:#344c42;border-color:#78ae8d;color:#d9ffe5}#open-export[aria-expanded=true]{box-shadow:0 0 0 1px #d9ffe5 inset}
 .surface-settings .editor-preferences{margin:16px 0 14px}.surface-settings>h2{padding-top:12px;margin-bottom:8px;border-top:1px solid var(--line)}
 .surface-export{top:60px;left:50%;transform:translateX(-50%);width:min(520px,calc(100vw - 40px))}
 /* The Shapes list ends above the navigator, which stays in reach under it. */
