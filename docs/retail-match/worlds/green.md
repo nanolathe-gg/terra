@@ -7,18 +7,21 @@
 | Window | Retail map | What it tests | Before round 1 | After round 2's port | After round 3's port | After round 4's port |
 | --- | --- | --- | --- | --- | --- | --- |
 | green-1 | pc games' evad river delta | broken hills (rock type `evad`) by the sea | shape .22, look .10 | shape .22, look .09 | shape .22, look .08 | shape .22, look .08 |
-| green-2 | great divide | long gentle grass slopes, a ridge | shape .16, look .20 | shape .16, look .20 | shape .16, look .17 | shape .16, look .17 |
-| green-3 | the barrier reef | islands and reef shallows | shape .08, look .09 | shape .08, look .10 | shape .08, look .10 | shape .08, look .10 |
-| green-4 | the pass | a rocky massif with grass in its folds | shape .63, look .23 | shape .63, look .23 | shape .63, look .23 | shape .63, look .23 |
-| green-5 | plains and passes | a terraced ridge on a rolling plain (`hill` strokes with Steps, rock `ridgestone`) | shape .18, look .70 | shape .12, look .35 | shape .12, look .35 | shape .12, look .35 |
+| green-2 | great divide | long gentle grass slopes, a ridge | shape .16, look .20 | shape .16, look .20 | shape .16, look .17 | shape .16, look .19 |
+| green-3 | the barrier reef | islands and reef shallows | shape .08, look .09 | shape .08, look .10 | shape .08, look .10 | shape .08, look .11 |
+| green-4 | the pass | a rocky massif with grass in its folds | shape .63, look .23 | shape .63, look .23 | shape .63, look .23 | shape .63, look .24 |
+| green-5 | plains and passes | a terraced ridge on a rolling plain (`hill` strokes with Steps, rock `ridgestone`) | shape .18, look .70 | shape .12, look .35 | shape .12, look .35 | shape .12, look .36 |
 | green-6 | wretched ridges | two ridges of dark blocky rock (rock `ridgeblock`) | shape .24, look .10 | shape .24, look .10 | shape .24, look .08 | shape .24, look .08 |
 | green-7 | two continents | open water and coast: **held out** | shape .19, look .12 | shape .19, look .12 | shape .19, look .12 | shape .19, look .12 |
 
 Means of the tuning windows: shape .25, look .24 before round 1; shape .24,
 look .18 after round 2's port; shape .24, look .17 after round 3's port
-(measured 2026-11-18); shape .24, look .17 after round 4's port (measured
-2026-11-19; green-1's change shows in its `flat:edges`, not its look). One
-render of all seven windows each.
+(measured 2026-11-18); shape .24, look .18 after round 4's port (measured
+2026-11-19, with main's shader changes of that day: wet rock at a cliff's
+foot, boulders in the shallows. Those moved green-2 .17 to .19, its gentle
+lines 0.46x to 0.28x retail, and green-3, green-4 and green-5 by .01.
+Green-1's port shows in its `flat:edges`, not its look). One render of all
+seven windows each.
 
 ### Which rock each window's strokes use
 
@@ -107,16 +110,18 @@ The harness now reports each class's darkest and brightest 1% (`dark`,
 preset can reach a window.
 
 The largest findings at the start of round 5 (measured, the port's base
-render, `$R/match/terraform-wt-port-green-r4/green/trial-000`):
+render after merging main, `$R/match/terraform-wt-port-green-r4-merged/green/trial-000`):
 
 - green-5 `flat:edges` 0.02x and `gentle:edges` 0.04x retail: the plain's
   grain and the gentle wrinkles (above, and item 4 below).
-- green-1 `shelf:edges` 0.08x: item 1 below.
+- green-1 `shelf:edges` 0.09x: item 1 below.
 - green-1 `gentle:edges` 0.11x: the softer lumps took the gentle ground's
   texture with them (round 4 saw this too). Look for it in the ground or
   a surface layer, not by raising the lumps again.
-- green-5 `slope:lines` 0.24x: the terrace risers (item 2).
-- green-3 `gentle:band32` 2.75x and `steep:edges` 2.53x: broad patches on
+- green-5 `slope:lines` 0.23x: the terrace risers (item 2).
+- green-2 `gentle:lines` 0.28x: its hatch, thinned by main's shader
+  changes of 2026-11-19 (was 0.46x the day before).
+- green-3 `gentle:band32` 2.75x and `steep:edges` 2.48x: broad patches on
   its gentle ground and busy cliff faces.
 - green-4 `steep:color` grayer by 14: the mosaic (item 3).
 - green-6 `steep:light`: ours' brightest 1% reach luma 107, retail's 123;
