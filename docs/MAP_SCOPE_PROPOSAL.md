@@ -59,8 +59,9 @@ world exists, but it delivers forks.
 **What it costs to keep.** `sculpt-world-kit.js` (20 KB),
 `sculpt-save.js` (7.5 KB), about 11 KB of world-material adopt/keep logic in
 `sculpt-materials.js`, and roughly 35 KB of `sculpt.js` (World panel, New
-world, Reset, import/export, adopt, boot reconciliation, rock scope). There
-are about 350 lines of tests for it.
+world, Reset, import/export, adopt, boot reconciliation, rock scope). Its
+tests are mainly `repro/world-kit.test.mjs` (213 lines) and
+`save.test.mjs` (68).
 
 ## 2. The proposal: one document, many starting points
 
@@ -91,8 +92,8 @@ Two tests decide it.
 | Tools (built-in list, authored, map tools) and brush cards | Config + world + map | **Map** (one list) |
 | Feature set and placements | Map, world seeds new maps | Map |
 | Erosion switch (`weather`), relief, softness, material weathering, deposit spread, transition detail | Map | Map: they change heights and art |
-| TA palette | World knob, toggle in View | Decide by what export does: export always uses the palette, so this is a **view → local** toggle |
-| Art/Clay (`clay`) | Map | **Local**: a view mode. It feeds `drawOptions`, so check that export forces Art |
+| TA palette | World knob (it sets the renderer's `uQuantize`), toggle in View | **Local** if export applies the palette regardless; map if it does not. Unverified |
+| Art/Clay (`clay`) | Map | **Local** (a view mode) if export forces Art. It feeds `drawOptions`; unverified |
 | `light` (hidden original/alternate) | Map | Map if it changes final art; otherwise remove it |
 | Camera, selection, open panel | Carried only through reloads | Local, per map id (IndexedDB meta, not the body) |
 | GPU budget, preview quality, panels, weathered view | Local | Local |
@@ -119,21 +120,22 @@ world. If the Maps list should stay uncluttered, add one optional mark,
 map with its look**. That is the owner's "create new map from this link". The
 separate world file format goes away; Download file is the map.
 
-### 2.3 One command replaces seven: Apply look from…
+### 2.3 One command for looks: Apply look from…
 
 **Apply look from…** replaces:
 
 - the world select (switch world)
-- Save as new world
 - Use for my world
 - Reset
-- Import world
-- Delete this world
+- Import world (a map file is a source)
 - Reset shapes to world defaults
+
+Save as new world and Delete this world need no replacement: you keep or
+delete a map.
 
 The dialog has three parts:
 
-1. **Source:** a built-in world, one of your maps, or a link.
+1. **Source:** a built-in world, one of your maps, a map file, or a link.
 2. **What to take**, one checkbox per World home card: Ground, Water, Rock
    types, Surface layers, Light & weather, Tools, Features. All are checked by
    default. Unchecked cards keep this map's settings.
@@ -149,15 +151,15 @@ These cover today's flows:
 | Use another map's rock types in this one | Apply look from that map, Rock types only |
 | Reset shapes to world defaults | Apply with no cards checked and "Reset every shape" |
 
-Partial application is something the current design cannot do at all, for
-example Desert's rocks under Green's ground.
+Today you can borrow single rock types (Copy/Paste, "Add a rock type
+from…"). Apply look adds whole cards from any source in one step, for example
+Desert's rock types and light under Green's ground.
 
-**What happens to shapes.** This is what `carryNodes` does today
-(`sculpt.js:1943`): settings a shape's artist changed by hand stay, and the
-rest take the new tool's defaults. A tool the new kit lacks becomes Landform,
-the round-trip loss the owner accepted on 2026-11-11. The memory note "a
-stroke's numbers must never change" is out of date; the code already carries
-unedited settings to the new defaults.
+**What happens to shapes.** This is what `carryNodes`/`carryStrokes` do today
+(`sculpt.js:1943`, `sculpt-tools.js:74`): settings a shape's artist changed
+by hand stay, and the rest take the new tool's defaults. A tool the new kit
+lacks becomes Landform, the round-trip loss the owner accepted on 2026-11-11.
+A stroke with no `edited` list keeps every number as it is.
 
 **Rocks and materials map by key, then by name, then to the default rock.**
 Ground and water map by role. Apply checks the 15 rock slots and the material
@@ -167,6 +169,10 @@ works this way.
 
 **Undo.** If the base world doesn't change (applying from another Green map,
 Reset, partial applies within one base), Apply is in place and one Undo step.
+A partial apply from a source with a different base (Desert's rock types into
+a Green map) keeps this map's base. Whether every card works under another
+base's engine data is unsized: the kit code already has a path for "a world
+rock type needs a material role this world does not have".
 Changing the base world reloads the page today (`goToWorld` →
 `leaveFor`), because the world config is loaded at boot. Two options
 (owner decision 3):
@@ -201,26 +207,50 @@ Recommendation: (a) now, (b) only if forks crowd the Maps list.
 This is the owner's call: it decides whether retuning a built-in world
 changes existing maps.
 
-| | A. Full snapshot | B. Sparse diff against the built-in | C. Full values plus "changed" marks |
+The question covers the kit as well as the rows. Built-in tools and the
+world's rock catalog are derived from config today on purpose, so that config
+revisions reach every world (`sculpt-world-kit.js:67`, `:79`).
+
+| | A. Full snapshot | B. Sparse diff against the built-in | C. Full values plus recorded "set on purpose" marks |
 | --- | --- | --- | --- |
 | Map is self-contained | Yes | No: it needs the same build's config | Yes |
-| Retuning Green changes existing maps | Never | Silently, including what share links show | Only through "Update unchanged settings from Green" |
-| "12 changes" and Reset | Computed by comparing with the built-in | Free | Exact: from the marks |
+| Retuning Green changes existing maps | Never | Silently, including what share links show | Only unmarked values, and only through "Update from Green" (or automatically, by policy) |
+| "12 changes" and Reset | Computed by comparing with today's built-in, which drifts as it is retuned | Free | Exact: the marks |
 | Size | About today's (~150 KB) | Smallest | About today's |
-| Precedent | Today's `worldSettings` | Today's world store | Strokes' `edited` marks (`markEdited`) |
 
-**Recommendation: C.** It matches "everything is in the map". It makes "12
-changes" exact instead of inferred. Before release, during heavy tuning, the
-owner may choose that unchanged values follow the built-in automatically on
-load (B's behavior) and switch that off at release. That is a policy choice,
-not a second storage path.
+**What a mark means under C.** A mark is recorded when a value is set, not
+computed by comparison. That differs from strokes' `edited` list, which
+`markEdited` computes at save time against the tool's defaults. Comparison
+breaks once the built-in is retuned: an old default suddenly "differs".
 
-C needs one fix. Today `edited` marks are written only into the browser's
-working copy (`workingCopy()`, `sculpt.js:1928`). Download file and share
-links use `sketch()`, which drops them, so a map that arrives by link can't
-tell edited values from defaults. Marks must be part of `sketch()`. The Worker
-needs no change: the marks sit inside `nodes` and inside the look, not in new
-top-level fields.
+- Editing a row, rock type, tool or material marks it.
+- **Apply look from a built-in world** takes its values for the checked cards
+  and clears their marks: they follow that world again.
+- **Apply look from a map** (including Start a map from "Ash Desert") copies
+  its values **and its marks**. Anything taken from a source with a different
+  base arrives marked, because it is not this base's.
+- **"12 changes"** counts marks: differences from the built-in base,
+  inherited ones included. The header says so: "Started from Ash Desert ·
+  based on Desert · 12 changes". Reset returns to built-in Desert; Apply look
+  from Ash Desert returns to Ash Desert.
+- **Kit:** the same rule per entry. Unmarked built-in tools and rock types
+  follow the base, which keeps today's "config revisions reach every world" for
+  untouched entries. Authored or edited entries are marked and stay.
+
+**Recommendation: C.** It matches "everything is in the map", it makes the
+count exact, and it keeps one storage path. Before release, during heavy
+tuning, the owner may choose that unmarked values follow the built-in
+automatically on load (B's behavior), and switch that off at release. That is
+a policy choice, not a second storage path.
+
+**Share links and files.** Strokes' `edited` lists are written only into the
+browser's working copy (`workingCopy()`, `sculpt.js:1928`). Download file and
+share links use `sketch()`, which drops them. A stroke without the list keeps
+every number on a world switch (`carryStrokes`), so a map that arrives by
+link does not carry its unedited settings to a new world's defaults. Put the
+lists, and the look's marks, in `sketch()`. I expect no Worker change, since
+the marks sit inside existing top-level fields **[inferred: I read only its
+top-level whitelist]**.
 
 **What stays in the built-in config whatever the choice:** engine-only world
 data (`engineDefaults`), the export catalog and climate, and the shape-preset
@@ -291,11 +321,13 @@ code.
 Each slice lands on its own and leaves the editor consistent.
 
 1. **Scope fixes, no model change:**
-   - take `view` out of `worldKeys`;
-   - make the palette toggle and Clay local;
-   - write `edited` marks in `sketch()`.
+   - take `view` out of `worldKeys` (a real bug);
+   - write strokes' `edited` lists in `sketch()`, so shared and downloaded
+     maps carry like local ones;
+   - make the palette toggle and Clay local, if export applies the palette
+     and forces Art (verify first).
 
-   These fix real bugs even if nothing else is built.
+   These help even if nothing else is built.
 2. **The map holds everything:**
    - World edits write the map only;
    - the world store becomes a read-only seed for New map;
@@ -314,8 +346,8 @@ and `share`. Add `config` for slice 4.
 
 ## 8. Owner decisions
 
-1. **Storage:** A, B or C (recommended: C). Before release, should unchanged
-   values follow built-in retuning automatically?
+1. **Storage:** A, B or C (recommended: C, with recorded marks). Before
+   release, should unmarked values follow built-in retuning automatically?
 2. **Starting points:** every map in Start a map, or only maps marked "Show
    in Start a map" (recommended: the mark).
 3. **Changing base world:** fork as today (recommended), or in place with
