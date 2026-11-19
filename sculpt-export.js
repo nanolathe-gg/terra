@@ -12,14 +12,16 @@ async function removeOldExports() {
 }
 const holdLock=name => new Promise(acquired => navigator.locks.request(name,() => new Promise(release => acquired(release))));
 // One worker per export: it is created when the artist exports (the program is several MB) and ends with the export, freeing its memory.
+// `stopped` answers a call made after a stop (a cancel during a blob read, say): postMessage into a terminated worker is silently
+// dropped, so the call would never settle and the pane would wait forever.
 function exporter() {
   const worker=new Worker(new URL('sculpt-export-worker.js',import.meta.url));
-  let waiting=null;
+  let waiting=null,stopped=false;
   const settle=(error,data) => { const w=waiting; waiting=null; if (error) w?.reject(error); else w?.resolve(data); };
   worker.onmessage=({data}) => settle(data.type==='error'?new Error(data.message):null,data);
-  worker.onerror=event => { event.preventDefault(); settle(new Error(event.message||'The map exporter could not start.')); };
-  return {call:(message,transfer=[]) => new Promise((resolve,reject) => { waiting={resolve,reject}; worker.postMessage(message,transfer); }),
-    stop:() => { worker.terminate(); settle(new DOMException('Export canceled.','AbortError')); }};
+  worker.onerror=event => { event.preventDefault(); stopped=true; settle(new Error(event.message||'The map exporter could not start.')); };
+  return {call:(message,transfer=[]) => new Promise((resolve,reject) => { if (stopped) return reject(new DOMException('Export canceled.','AbortError')); waiting={resolve,reject}; worker.postMessage(message,transfer); }),
+    stop:() => { stopped=true; worker.terminate(); settle(new DOMException('Export canceled.','AbortError')); }};
 }
 
 // What a map's export starts from without the pane: the OTA settings as the pane's fields open at a world's climate (setSettings: a number the
@@ -88,6 +90,7 @@ export function mountMapExport(api) {
       await api.stream.exportChunks(async (chunk,index,total) => {
         signal.throwIfAborted(); if (api.revision()!==token) throw new Error('Map changed during export.');
         const png=await chunk.png.arrayBuffer();
+        signal.throwIfAborted();
         const result=await worker.call({op:'chunk',x:chunk.x,y:chunk.y,width:chunk.width,height:chunk.height,png},[png]);
         // Projected from the slots received so far; a dense map reads within 10% of its final count after 5% of the slots.
         const projected=result.receivedTiles>=result.totalTiles/20?Math.round(result.uniqueTiles/result.receivedTiles*result.totalTiles):0;
