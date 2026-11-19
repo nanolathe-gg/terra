@@ -84,6 +84,8 @@ fn lsHash(c: vec2i, salt: u32) -> u32 { return lsPcg(bitcast<u32>(c.x) ^ lsPcg(b
 fn lsU(h: u32) -> f32 { return f32(h >> 8u) / 16777216.0; }
 fn lsR(k: i32) -> f32 { return LS_RMAX * exp2(-f32(k)); }
 // The largest class: 0, or with Boulders on one above it (class -1: a 32 px radius), which only the blocks' population reaches.
+// How deep under the sea the blocks at a wall's foot lie (units): deeper than the tallest of them, they would not show.
+const SHORE_BLOCK_DEPTH = 16.0;
 fn lsKMin() -> i32 { return select(0, -1, u.boulders > 0.0); }
 
 // Where stones are, how big and how buried, at p, from the engine's own masks: rock weather's debris (rockWeatherAt),
@@ -97,7 +99,20 @@ fn lsMaskCompute(c: vec2f) -> vec4f {
     if (u.scatterOn != 0) { paint = scatterAt(c); }
     if (u.looseSupply <= 0.0 && paint <= 0.0 && u.debrisAny<=0.0 && u.boulders <= 0.0) { return none; }
     let h0 = baseHeight(c);
-    if (routeProtection(c) > 0.05 || h0 < u.sea + 1.0) { return none; }
+    if (routeProtection(c) > 0.05) { return none; }
+    if (h0 < u.sea + 1.0) {
+        // Boulders in the water: blocks that came off a wall standing at the water lie in the shallows at its foot, the larger ones breaking the
+        // surface: within SHORE_BLOCK_DEPTH of the sea, thinning with depth, under a wall as on land.
+        if (u.boulders <= 0.0 || h0 < u.sea - SHORE_BLOCK_DEPTH) { return none; }
+        var far = 0.0;
+        for (var j = 0; j < 8; j++) { far = max(far, max(baseHeight(c + LS_WAYS[j] * 40.0) - h0, 0.7 * (baseHeight(c + LS_WAYS[j] * 80.0) - h0))); }
+        // No slope limit as on land: the bed at a wall's foot falls 6 to 10 units in 10 px, and a sample a few px inland is the wall itself.
+        let under = smoothstep(18.0, 40.0, far);
+        let shallow = 1.0 - smoothstep(0.4 * SHORE_BLOCK_DEPTH, SHORE_BLOCK_DEPTH, u.sea - h0);
+        // As the loose population (its own share and median, per cell), not the runout blocks': a wall's foot gathers blocks of every size, the
+        // small ones breaking the surface at the waterline and only the large further out. Boulders makes them blocks (lsStone).
+        return vec4f(min(0.98, 1.6 * u.boulders * under * shallow * depositsAt(c)), max(2.0 * u.rock[rs & rockMask].looseSize, 12.0), 0.2, 0.0);
+    }
     let accumulated=rockWeatherAt(c);
     let tm = timeMapsAt(c);
     let deposit = tm.deposit;
@@ -525,7 +540,10 @@ fn looseStones(p: vec2f) -> LsOut {
                 if (lsSuppressed(k, st)) { continue; }
                 let s = lsStone(p - st.c, st);
                 if (s.y < edge) { edge = s.y; edgeFines = st.fines; }
-                let hh = s.x * st.r * LS_HEIGHT * (0.75 + 0.5 * lsU(lsPcg(st.h0 ^ 0x51u)));
+                var hh = s.x * st.r * LS_HEIGHT * (0.75 + 0.5 * lsU(lsPcg(st.h0 ^ 0x51u)));
+                // A block in the water at a wall's foot (lsMaskCompute) rests on the bed under its center, level, not draped over the steep bed:
+                // its seaward side stands clear of the bed and the shallower ones break the surface.
+                if (s.x > 0.0) { let bed = baseHeight(st.c); if (bed < u.sea) { hh += bed - baseHeight(p); } }
                 if (hh > best) {
                     best = hh; bestR = st.r;
                     cover = smoothstep(0.0, 0.15, s.x) * select(1.0, 0.55, lsU(lsPcg(st.h0 ^ 0x7f4a7c15u)) < u.stoneMoss);
