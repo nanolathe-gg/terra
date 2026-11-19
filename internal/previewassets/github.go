@@ -101,7 +101,15 @@ func (c client) asset(l Lock) (releaseAsset, error) {
 			return a, nil
 		}
 	}
-	return releaseAsset{}, fmt.Errorf("preview asset %s is not published in release %s", l.Asset, l.Tag)
+	return releaseAsset{}, missingAssetError{asset: l.Asset, tag: l.Tag}
+}
+
+// missingAssetError answers a release that exists without the bundle's asset (a release made
+// by hand, or a create whose upload did not finish): publish uploads into it instead of failing.
+type missingAssetError struct{ asset, tag string }
+
+func (e missingAssetError) Error() string {
+	return fmt.Sprintf("preview asset %s is not published in release %s", e.asset, e.tag)
 }
 func (c client) download(l Lock, a releaseAsset) ([]byte, error) {
 	data, err := c.get(fmt.Sprintf("/repos/%s/releases/assets/%d", l.Repository, a.ID), "application/octet-stream")
@@ -223,6 +231,12 @@ func publish(root, dir, repository string) (Lock, error) {
 			return l, err
 		}
 		if err = run(root, "gh", "release", "create", l.Tag, archive, "--repo", repository, "--verify-tag", "--prerelease", "--latest=false", "--title", "Editor preview assets "+hash[:12], "--notes-file", notes); err != nil {
+			return l, err
+		}
+	} else if _, missing := err.(missingAssetError); missing {
+		// The release exists but its asset does not: upload into it, so a partial publish
+		// (a hand-made release, or a create whose upload failed) recovers by running publish again.
+		if err = run(root, "gh", "release", "upload", l.Tag, archive, "--repo", repository, "--clobber"); err != nil {
 			return l, err
 		}
 	} else if err != nil {

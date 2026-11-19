@@ -153,8 +153,15 @@ func TestUnpublishedOrChangedReleaseFails(t *testing.T) {
 			}))
 			defer s.Close()
 			c := client{base: s.URL, http: s.Client(), cache: t.TempDir()}
-			if err := c.published(l); err == nil {
+			err := c.published(l)
+			if err == nil {
 				t.Fatal("invalid publication accepted")
+			}
+			if mode == "no-asset" {
+				// publish recovers from this one by uploading into the existing release.
+				if _, ok := err.(missingAssetError); !ok {
+					t.Fatal("a release without its asset must answer the typed error publish recovers from")
+				}
 			}
 		})
 	}
