@@ -1000,7 +1000,8 @@ export const CONTROLS = {
 const NAMES = { tree: 'Tree', burnt: 'TreeDead', shrub: 'Shrub', rock: 'Rock', scar: 'Smudge' };
 
 // ctx.bodyOnly skips the burn sequence and the burnt successor (the editor's view needs only body and shadow; export needs them all).
-// Body, shadow and gameplay do not depend on it: each draws from its own seeded stream.
+// Body, shadow and gameplay do not depend on it: each draws from its own seeded stream. `partial` says it left something out, so a
+// body-only result with partial false is all the export packs of the feature.
 export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
   const P = { ...DEFAULTS[kind], ...params };
   if (kind === 'tree' && P.species === 'broadleaf' && P.canopyStyle) {
@@ -1009,7 +1010,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
   }
   if (P.trunkColor && P.trunk?.length) P.trunk = recolorStops(P.trunk, {from: P.trunk[Math.floor(P.trunk.length / 2)], to: P.trunkColor});
   const rr = rng(mix32(seed, 0xBEEF));
-  let body, shadow = null, bodyBlend = 1, burn = null, burnt = null, gameplay = {}, footprint = [1, 1];
+  let body, shadow = null, bodyBlend = 1, burn = null, burnt = null, gameplay = {}, footprint = [1, 1], partial = false;
   const L = lightOf(ctx);
   if (kind === 'tree' && (P.species === 'dead' || P.species === 'deadConifer')) {   // a standing dead tree (retail Green's Tree1-6Dead): the bare successor's drawing as a tree of its own, which neither burns nor leaves a successor
     const B = generateFeature('burnt', { species: P.species === 'deadConifer' ? 'conifer' : 'broadleaf', height: P.height, width: P.width, forks: P.forks ?? 3, ash: P.ash ?? 0.15, shadowLen: P.shadowLen, shadowColor: P.shadowColor, trunk: P.trunk, trunkColor: P.trunkColor }, seed, ctx);
@@ -1026,7 +1027,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
       if (tendril) { const B = tendrilFrame(P, seed, ctx, true); burnt = { body: cropSprite(B.body), shadow: tintSprite(shadowSprite(B.R, B.body.ax, B.body.ay, shadowColors(P, ctx), rng(mix32(seed, 42))), ctx, 0), gameplay: { energy: 25, metal: 0, blocking: true, reclaimable: true, flamable: false } }; }
       else burnt = generateFeature('burnt', bp, mix32(seed, 6), ctx);
       burn = treeBurn(body, burnt.body, seed, conifer);
-    }
+    } else partial = true;
     const sizeFrac = clamp((P.height - 55) / 17, 0, 1);
     gameplay = { energy: pickValue(P.energy, sizeFrac, rr), metal: 0, blocking: true, reclaimable: true, flamable: true, burnTicks: 192, spreadChance: conifer ? 30 : 90 };
   } else if (kind === 'burnt') {
@@ -1036,7 +1037,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
     gameplay = { energy: pickValue(P.energy, undefined, rr), metal: 0, blocking: true, reclaimable: true, flamable: false };
   } else if (kind === 'shrub') {
     body = tintSprite(shrubFrame(P, seed, ctx).body, ctx, ctx.tint?.up ?? 0.7);
-    if (!ctx.bodyOnly) burn = shrubBurn(body, seed);
+    if (!ctx.bodyOnly) burn = shrubBurn(body, seed); else partial = true;
     gameplay = { energy: pickValue(P.energy, undefined, rr), metal: 0, blocking: false, reclaimable: true, flamable: true, burnTicks: 84, spreadChance: 30 };
   } else if (kind === 'rock') {
     const R = rockFrame(P, seed, ctx);
@@ -1054,7 +1055,7 @@ export function generateFeature(kind, params = {}, seed = 1, ctx = {}) {
   } else throw new Error('unknown kind ' + kind);
   return {
     kind, name: `${NAMES[kind]}_${(seed >>> 0).toString(36)}`, seed, params: P, footprint, body, shadow,
-    shadowBlend: 0.5, bodyBlend, burn, burnt: kind === 'tree' ? burnt : null, gameplay,
+    shadowBlend: 0.5, bodyBlend, burn, burnt: kind === 'tree' ? burnt : null, gameplay, partial,
   };
 }
 export function generateVariants(kind, count, params = {}, baseSeed = 1, ctx = {}) {

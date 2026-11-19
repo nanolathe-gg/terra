@@ -1238,6 +1238,12 @@ fn rockGrain(slot: u32, pixel: vec2f) -> vec3f {
 }
 // A rock slot's colour as the draw lays it flat (rockFlat): its material's mean, so the material's Color is the rock's.
 fn slotRock(slot: u32) -> vec3f { return rockMaterialMean(slot); }
+// The mean of a rock slot's five bed colours (bedColor), the colour its beds' tints are measured from.
+fn bedMean(slot: u32) -> vec3f {
+    let m = rockMaterialMean(slot); var sum = vec3f(0.0);
+    for (var k = 1; k <= 5; k++) { sum += saturate(m + u.rock[slot & rockMask].rockColors[k].rgb); }
+    return sum * 0.2;
+}
 // B4: a rock's thickness along the sun's line through a point of its surface, height units. From just inside the surface, away from the sun
 // on a lit face (the rock behind what the sun lights) and toward it on a shaded face (the rock the sun's light crosses to get there), the
 // length of that line lying under the heights and 3 units over the plain over 24 steps of 1.5 (36 at most: thick). Over the plain: the ground
@@ -1821,10 +1827,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     var fineColor=mix(sourceColor,mix(sandWeathered()*finesTint,sourceColor*.9,strataMix),lying.z*.65);
     // The map's Debris material (worldDebris, Materials), where it has one: the debris is that material, its grain at the art pixel, in place of
     // the rock's for the fragments and of the weathered sand for the fines (lightened as sand is, and tinted by the source rock alike). The
-    // source's beds still colour it through Strata, as they colour the rock's. Only where debris lies (depositCover): no debris, no change.
+    // source's beds still colour it through Strata, as they colour the rock's: a bed tints the material by how its colour stands against the
+    // mean of its rock's beds (bedMean), so the material shows at any Strata and the beds still read through it. (Laying the bed's colour in
+    // its place hid the material wholly at Strata .5 or more with Bed contrast 1, Desert's defaults.) Only where debris lies (depositCover):
+    // no debris, no change.
     if(depositCover>0.0&&u.debrisGround>=0&&u.ground[u32(u.debrisGround) & groundMask].cacheLayer>=0){
         let art=materialPigment(grainPixel(pixel),u32(u.debrisGround));
-        let coarse=mix(art,bedColor,strataMix);
+        let coarse=art*mix(vec3f(1.0),clamp((bedColor+.01)/(bedMean(ds)+.01),vec3f(.25),vec3f(4.0)),strataMix);
         fineColor=mix(coarse,mix(mix(art,vec3f(1.0),u.sandLight*.55)*finesTint,coarse*.9,strataMix),lying.z*.65);
     }
     surfSrc[1]=fineColor;surfMask[1]=depositCover;

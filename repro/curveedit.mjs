@@ -74,9 +74,10 @@ async function editWorld(world, port) {
     const moved = async () => ev(`(() => { const n = sculptDebug.nodes().at(-1), far = sculptDebug.corner(10, 10).authored; return Math.max(...n.points.map(p => Math.abs(sculptDebug.corner(p.x, p.y).authored - far))); })()`);
     const grid = () => ev(`(() => { const o = []; for (let y = 100; y < 1000; y += 30) for (let x = 100; x < 1000; x += 30) o.push(sculptDebug.corner(x, y).authored); return o; })()`);
     // the editor canvas, scrolled into view, its box in page pixels
-    const box = async () => ev(`(() => { const c = document.getElementById('section-preview'), d = c.closest('details'); if (d) d.open = true; c.scrollIntoView({block: 'center'}); const r = c.getBoundingClientRect(); return {x: r.left, y: r.top, w: r.width, h: r.height, cw: c.width, ch: c.height}; })()`);
+    const box = async () => ev(`(() => { const c = document.getElementById('section-preview'), d = c.closest('details'); if (d) d.open = true; c.scrollIntoView({block: 'center'}),window.scrollTo(0,0); const r = c.getBoundingClientRect(); return {x: r.left, y: r.top, w: r.width, h: r.height, cw: c.width, ch: c.height}; })()`);
     // a front knot's page position, read from the page's own section layout (the canvas is drawn at the pixels it is shown in, both sides across)
     const knotXY = async (b, x, v) => { const q = await ev(`sculptDebug.sectionPoint('front', ${x}, ${v})`); return [q.x, q.y]; };
+    const dbl = async pt => { for (const n of [1, 2]) { await send('Input.dispatchMouseEvent', {type: 'mousePressed', x: pt.x, y: pt.y, button: 'left', buttons: 1, clickCount: n}); await send('Input.dispatchMouseEvent', {type: 'mouseReleased', x: pt.x, y: pt.y, button: 'left', buttons: 0, clickCount: n}); } await sleep(300); };
     const drag = async (from, to, extra = {}) => { await mouse('mousePressed', ...from, extra); await mouse('mouseMoved', ...to); await sleep(60); await mouse('mouseReleased', ...to); await sleep(250); };
     try {
       await ready(ev); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
@@ -128,13 +129,21 @@ async function editWorld(world, port) {
       await drag(await knotXY(b, ...base[3]), await knotXY(b, base[3][0], base[3][1] + .15));
       let c = await ev('sculptDebug.curve()');
       check('drag a knot', c?.knots?.length === base.length && c.knots[3][1] > base[3][1] + .1 && c.knots.every((k, i) => i === 3 || Math.abs(k[1] - base[i][1]) < 1e-6), c);
-      await drag(await knotXY(b, .5, 1.25), await knotXY(b, .5, 1.25));   // click on empty canvas: a knot is added, above 1 (a lip)
+      const lip = await knotXY(b, .5, 1.25);
+      await drag(lip, lip);   // a single click on empty canvas changes nothing
+      const clicked = await ev('sculptDebug.curve()');
+      check('a click on empty canvas adds no knot', same(clicked, c), {before: c, after: clicked});
+      await dbl({x: lip[0], y: lip[1]});   // a double-click adds a knot, above 1 (a lip)
       c = await ev('sculptDebug.curve()');
-      check('add a knot (a lip above 1)', c?.knots?.length === base.length + 1 && c.knots.some(k => k[1] > 1.1), c);
+      check('double-click adds a knot (a lip above 1)', c?.knots?.length === base.length + 1 && c.knots.some(k => k[1] > 1.1), c);
       const lipIdx = c.knots.findIndex(k => k[1] > 1.1), bk = await knotXY(b, ...c.knots[lipIdx]);
       await mouse('mousePressed', ...bk, {modifiers: 8}); await mouse('mouseReleased', ...bk, {modifiers: 8}); await sleep(250);   // Shift-click removes
       c = await ev('sculptDebug.curve()');
       check('remove a knot', c?.knots?.length === base.length && !c.knots.some(k => k[1] > 1.1), c);
+      await dbl({x: lip[0], y: lip[1]}); c = await ev('sculptDebug.curve()');
+      const lip2 = await knotXY(b, ...c.knots[c.knots.findIndex(k => k[1] > 1.1)]);
+      await dbl({x: lip2[0], y: lip2[1]}); c = await ev('sculptDebug.curve()');   // a double-click on a knot removes it
+      check('double-click removes a knot', c?.knots?.length === base.length && !c.knots.some(k => k[1] > 1.1), c);
       await ev(`document.getElementById('curve-reset').click(); true`); await sleep(200); c = await ev('sculptDebug.curve()');
       check('reset to the form', c?.form === 'cliff' && !c.knots, c);
       // 3. lean and facing, then a stroke that carries them with knots of its own
@@ -203,11 +212,10 @@ async function editWorld(world, port) {
       const top0 = Math.max(...await crestHeights()); await setValue('lf-elevation', targetElevation, 'input'); await sleep(300); await ev('sculptCanvas.idle()'); await sleep(500);
       const top1 = Math.max(...await crestHeights());
       check('the elevation sets the crest', (await nodes())[L0].params.elevation===targetElevation && Math.abs(top1-targetElevation)<6 && Math.abs(top1-top0)>20, {top0,top1,plain,targetElevation,params:(await nodes())[L0].params.elevation});
-      await ev(`document.getElementById('along-preview').scrollIntoView({block: 'center'}); true`); await sleep(300);
+      await ev(`document.getElementById('along-preview').scrollIntoView({block: 'center'}),window.scrollTo(0,0); true`); await sleep(300);
       const ap = await ev('sculptDebug.alongPoint(.5, 1)'), apLow = await ev('sculptDebug.alongPoint(.5, .3)');
       await mouse('mouseMoved', ap.x, ap.y); await mouse('mousePressed', ap.x, ap.y); await mouse('mouseReleased', ap.x, ap.y); await sleep(200);
       check('a click on the along curve picks a place', Math.abs((await ev('sculptDebug.place()')) - .5) < .04 && (await ev('JSON.stringify(sculptRegion.sectionMark())')) !== 'null');
-      const dbl = async pt => { for (const n of [1, 2]) { await send('Input.dispatchMouseEvent', {type: 'mousePressed', x: pt.x, y: pt.y, button: 'left', buttons: 1, clickCount: n}); await send('Input.dispatchMouseEvent', {type: 'mouseReleased', x: pt.x, y: pt.y, button: 'left', buttons: 0, clickCount: n}); } await sleep(300); };
       await dbl(apLow);
       let al = await ev('sculptDebug.along()');
       check('double-clicking the along curve adds a knot', al?.length === 3 && Math.abs(al[1][0] - .5) < .05, al);

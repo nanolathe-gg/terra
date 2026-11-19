@@ -39,3 +39,25 @@ test('a kept node preparation follows edits in place to the node, the defaults a
   config.seaLevel = 40;
   assert.equal(text(prepare(a, geom, context())), text(prepareNode(a, geom, context())));
 });
+
+// Paged fields compare by text only the nodes an edit's rectangle reaches (the host calls changed() with a rectangle that holds an edited
+// node's reach before and after); a whole change compares every node.
+test('paged fields prepare again the nodes an edit reaches and keep the others without comparing them', async t => {
+  t.mock.timers.enable({apis: ['setTimeout']});   // the coarse fill waits for a device that never comes: its timers must not hold the run open
+  const {createPagedFields} = await import('../sculpt-gpu-fields.js');
+  const config = {seaLevel: 75, baseHeight: 99, defaults: {spurCount: '0'}}, context = () => shapeContext({config, settings: new Map(), seed: 5, minH: -15, maxH: 375});
+  const a = hill(960, 11), b = hill(3000, 12), nodes = [a, b];   // a lies across the first page border
+  const fields = createPagedFields({worldSize: 4097, worldGrid: 2049, baseHeight: 99, maskKeys: [], nodes: () => nodes, device: () => null, context, budget: () => ({total: 2048 * 1048576, minimum: 300 * 1048576})});
+  fields.changed();
+  const before = fields.pageInfo().ring, stringify = JSON.stringify, seen = new Set();
+  JSON.stringify = (v, ...rest) => { if (v === a || v === b) seen.add(v); return stringify(v, ...rest); };
+  try {
+    a.params = {...a.params, fingers: .6, fingerSize: 1};   // a coast pass: the ring the pages need grows
+    fields.changed({x0: 380, y0: 50, x1: 700, y1: 300});
+    assert.ok(seen.has(a), 'the edited node is compared');
+    assert.ok(!seen.has(b), 'a node the rectangle misses keeps its preparation');
+    assert.ok(fields.pageInfo().ring > before, 'the edit reaches the ring');
+    seen.clear(); fields.changed();
+    assert.ok(seen.has(a) && seen.has(b), 'a whole change compares every node');
+  } finally { JSON.stringify = stringify; }
+});

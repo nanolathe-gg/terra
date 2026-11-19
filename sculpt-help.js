@@ -36,7 +36,8 @@ export function mountHelp(){
   const previews=fetch('ui-previews/manifest.json').then(r=>r.ok?r.json():null).catch(()=>null);
   let hoverTimer,frameTimer,owner,revision=0;
   const hide=()=>{clearTimeout(hoverTimer);clearTimeout(frameTimer);revision++;owner?.removeAttribute('aria-describedby');owner=null;tip.hidden=true;tip.replaceChildren();};
-  const position=target=>{const r=target.getBoundingClientRect();tip.style.left=Math.max(8,Math.min(innerWidth-tip.offsetWidth-8,r.left<innerWidth/2?r.right+10:r.left-tip.offsetWidth-10))+'px';tip.style.top=Math.max(8,Math.min(innerHeight-tip.offsetHeight-8,r.top))+'px';};
+  // A tool in a rail flyout takes its card beside the flyout, not over the flyout's other tools.
+  const position=target=>{const r=target.getBoundingClientRect(),a=(target.closest('.tool-flyout')||target).getBoundingClientRect();tip.style.left=Math.max(8,Math.min(innerWidth-tip.offsetWidth-8,a.left<innerWidth/2?a.right+10:a.left-tip.offsetWidth-10))+'px';tip.style.top=Math.max(8,Math.min(innerHeight-tip.offsetHeight-8,r.top))+'px';};
   const show=target=>{
     clearTimeout(frameTimer);
     owner?.removeAttribute('aria-describedby');owner=target;const token=++revision;

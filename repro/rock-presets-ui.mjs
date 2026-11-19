@@ -36,7 +36,7 @@ try {
   const capture = () => ev(`(async()=>{const b=await sculptCanvas.debugBake({x:300,y:240,width:512,height:512}),c=document.createElement('canvas');c.width=c.height=512;c.getContext('2d').drawImage(b,0,0);return c.toDataURL();})()`);
   const shot = async (selector, name, whole = false) => {
     await ready();
-    const r = await ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});const d=e.closest('details');if(d)d.open=true;e.scrollIntoView({block:'center',behavior:'instant'});const b=e.getBoundingClientRect();return {x:b.x-6,y:b.y-30,width:b.width+12,height:b.height+60};})()`);
+    const r = await ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});const d=e.closest('details');if(d)d.open=true;e.scrollIntoView({block:'center',behavior:'instant'}),window.scrollTo(0,0);const b=e.getBoundingClientRect();return {x:b.x-6,y:b.y-30,width:b.width+12,height:b.height+60};})()`);
     await sleep(500);
     // The tool tab's clip lands elsewhere in headless Chrome (its scroll is not yet drawn), so that one is the whole window.
     const s = await send('Page.captureScreenshot', whole ? {format: 'png'} : {format: 'png', clip: {...r, scale: 1}});

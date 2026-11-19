@@ -5,12 +5,12 @@ import {configureMap,mapGeometry,mountMapCanvas,validMapSize} from './sculpt-map
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,worldHome,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-column.js';
-import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,layerCopyMissing,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,roleName,worldKey,LIBRARY} from './sculpt-materials.js';
+import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,layerCopyMissing,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,roleName,worldKey,LIBRARY,materialRef,materialSlotFor} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
-import {ROCK_PRESETS,ROCK_HEADLINES,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials,dropRockMaterials} from './sculpt-rock-presets.js';
+import {ROCK_PRESETS,ROCK_HEADLINES,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials,dropRockMaterials,rockRef,rockSlotFor} from './sculpt-rock-presets.js';
 import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf,waterTone} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES,worldControlRequirement,WORLD_PRIMARY_CONTROLS} from './sculpt-control-schema.js';
-import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
+import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps,fingerReach} from './sculpt-shape-presets.js';
 import {strokeKind,shapeFrom,savedToolCard,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,borrowBeach,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
   shapeContext as shapeContextIn,worldShapeKey,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,rgbColor,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,regionalCheck,repeatCheck,pagedTime,heightsNode} from './sculpt-scene.js';
 import {createGpuFields,createPagedFields,createShapeEngine,TIME_APRON,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER,lfcWidth,heightsBounds} from './sculpt-gpu-fields.js';
@@ -37,8 +37,8 @@ const $ = id => document.getElementById(id);
 const canvas = $('terrain'), overlay = $('overlay');
 const experiment = new URLSearchParams(location.search);
 // Saved maps (sculpt-maps.js): each map in this browser is its own entry and this tab edits one. The editor writes nothing to the address; its
-// own reloads leave what the next page needs with the tab, read here once as if it were in the address. A world switch carries the tab's map
-// into the new world (see carryNodes). Scratch pages (`scratch`, the checks' comparison sketches) save nothing.
+// own reloads leave what the next page needs with the tab, read here once as if it were in the address. A world switch carries a copy of the tab's map
+// into the new world (goToWorld, carryNodes). Scratch pages (`scratch`, the checks' comparison sketches) save nothing.
 const sessionStore=(()=>{try{return sessionStorage;}catch(_){return null;}})();
 const tabState=readTab(sessionStore);for(const [key,value] of Object.entries(tabState.next??{}))experiment.set(key,String(value));
 const SAVING=!experiment.has('scratch');
@@ -73,7 +73,7 @@ const HELP = {
 let mapUpdate=() => {},mapFeatures=null,mapMetadata=null,mapRevision=0;
 const mapData=() => ({...mapFeatures?.serialize(),...mapMetadata?.serialize()});
 function restoreMapData(data={}) { mapFeatures?.load(data||{}); mapMetadata?.load(data||{}); mapRevision++; }
-function mapChanged() { mapRevision++; checkpoint(true); schedule(false); }
+function mapChanged(act) { mapRevision++; checkpoint(true,act); schedule(false); }
 let config, renderer, grid, size, spacing, services;
 // A world's configuration file, by the same relative path on a static host and on the Go server: config/<world>.json.
 const configUrl=world=>`config/${encodeURIComponent(world)}.json`;
@@ -312,6 +312,7 @@ function updateControls() {
   // The side panel's Selection block is the Select tool with no shape selected: its hint, or the selected features' values. A selected
   // shape's own actions are the bar on the map (#selection-hud) and the head of its card.
   $('selection-panel').hidden=featureActive||picking||tool!=='move'||(hasSelection&&!featureSelection);
+  $('pick-panel').hidden=!picking||Boolean(selectedNode?.params);   // Pick with no shape's card to show: what Pick does, so the panel is not blank
   $('feature-selection').hidden=!featureSelection;$('shape-selection-actions').hidden=!selectionActive;
   $('selection-empty').hidden=hasSelection||featureSelection;
   $('path-actions').hidden=$('path-row').hidden=!pathEditing||!hasSelection;
@@ -363,6 +364,7 @@ function updateControls() {
   const fixed=['erase','landform'].includes(kind);
   $('amount-control').hidden=fixed;
   $('amount-label').textContent=kind==='smooth' || isCover(kind)?'Strength':kind==='fissure'?'Depth':'Rise';
+  $('card-size-name').textContent=kind==='smooth' || isCover(kind)?'Size & strength':kind==='erase'?'Size & edge':'Size & height';   // the section's rows: a brush sets no height
   const [lo,hi]=amountRange(kind); $('amount').min=String(lo); $('amount').max=String(hi);
   $('amount').value=String(clamp(Number($('amount').value),lo,hi));
   const amountNow=Number($('amount').value);
@@ -532,6 +534,8 @@ function syncCurveNumbers(c) {
   $('curve-point-x').disabled=i===0||i===ks.length-1;$('curve-point-x').min=ks[i-1]?.[0]+.01||0;$('curve-point-x').max=ks[i+1]?.[0]-.01||1;
   $('curve-point-y').min=curvePoint.side==='along'||!c.land?0:-1;$('curve-point-y').max=curvePoint.side==='along'?ALONG_HI:1.5;
   $('curve-point-delete').disabled=i===0||i===ks.length-1||ks.length<=2;
+  $('curve-point-delete').title=$('curve-point-delete').disabled?'The end points stay: select a point between them':'Delete the selected point';
+  $('curve-point-x').title=$('curve-point-x').disabled?'An end point stays at its edge: only its height moves':'';
 }
 function commitNumberKnots(ks) {
   const c=curveContext();if(curvePoint.side==='along')setCurve(roundKnots(ks),'along');
@@ -636,13 +640,9 @@ function curveEditorEvents() {
     if (Math.hypot(L.xc-p.px,L.yv(0)-p.py)<9) { drag={lean:true}; cv.setPointerCapture(e.pointerId); return; }
     const h=hit(c,L,p);
     if (h && e.shiftKey) { if (remove(c,{...h,edit:h.edit||'front'}) && selected>=0) { checkpoint(); queueWeather(); } return; }
-    if(h){curvePoint={side:h.edit||'front',i:h.i};syncCurveNumbers(c);}
-    if (h) drag={side:h.side,edit:h.edit||'front',i:h.i};
-    else {
-      const side=p.px<L.xc?'back':'front',edit=side==='back'&&!sidesLinked(c)&&c.land?'back':'front',x=clamp(distShare(L,side,p.px),.01,.99);
-      const list=(edit==='back'?backKnots(c):frontKnots(c)).map(k => [...k]); let j=list.findIndex(k => k[0]>x); if (j<0) j=list.length-1;
-      list.splice(j,0,[x,vOf(c,L,p.py)]); curvePoint={side:edit,i:j};drag={side,edit,i:j}; edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c));
-    }
+    if (!h) return;   // a press on empty canvas changes nothing: a double-click adds a knot, as on the along curve
+    curvePoint={side:h.edit||'front',i:h.i};syncCurveNumbers(c);
+    drag={side:h.side,edit:h.edit||'front',i:h.i};
     cv.setPointerCapture(e.pointerId);
   });
   cv.addEventListener('pointermove',e => {
@@ -654,10 +654,19 @@ function curveEditorEvents() {
     k[1]=vOf(c,L,p.py); drag.edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c));
   });
   cv.addEventListener('pointerup',finish); cv.addEventListener('pointercancel',finish);
-  cv.addEventListener('dblclick',e => { const c=curveContext(),h=hit(c,sectionLayout(c),at(e)); if (h && remove(c,{...h,edit:h.edit||'front'}) && selected>=0) { checkpoint(); queueWeather(); } });
+  // Double-click: on a knot removes it, on empty canvas adds one at the pointer (both curve editors work the same way).
+  cv.addEventListener('dblclick',e => {
+    const p=at(e),c=curveContext(),L=sectionLayout(c),h=hit(c,L,p);
+    if (h) { if (remove(c,{...h,edit:h.edit||'front'}) && selected>=0) { checkpoint(); queueWeather(); } return; }
+    if (Math.hypot(L.xc-p.px,L.yv(0)-p.py)<9) return;   // the lean diamond
+    const side=p.px<L.xc?'back':'front',edit=side==='back'&&!sidesLinked(c)&&c.land?'back':'front',x=clamp(distShare(L,side,p.px),.01,.99);
+    const list=(edit==='back'?backKnots(c):frontKnots(c)).map(k => [...k]); let j=list.findIndex(k => k[0]>x); if (j<0) j=list.length-1;
+    list.splice(j,0,[x,vOf(c,L,p.py)]); curvePoint={side:edit,i:j}; edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c));
+    if (selected>=0) { checkpoint(); queueWeather(); }
+  });
 }
 // Drag a knot to edit height. Click or drag elsewhere to inspect the section
-// along the path; double-click adds a knot and Shift-click removes one.
+// along the path; double-click adds a knot, and double-click or Shift-click removes one.
 function alongEditorEvents() {
   const cv=$('along-preview'); let pointer=null,drag=-1,moved=false;
   const at=e => { const r=cv.getBoundingClientRect(); return {px:(e.clientX-r.left)*cv.width/r.width,py:(e.clientY-r.top)*cv.height/r.height}; };
@@ -791,7 +800,7 @@ function nodeBounds(n) {
 function landformExtent(n,q=nodeShapeParams(n)) {
   const radius=q.radius||40,k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1;
   return {reach:landformReach({...q,radius},k),
-    coast:q.fingers>0||q.shoreLayers>=1||q.shorePlates>0?Math.max(q.fingers>0?.5*radius+3*spacing:0,q.shoreLayers>=1?coastLayerReach(q):0,q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0)+2*spacing:0):null,
+    coast:q.fingers>0||q.shoreLayers>=1||q.shorePlates>0?Math.max(q.fingers>0?fingerReach(q,radius)+3*spacing:0,q.shoreLayers>=1?coastLayerReach(q):0,q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0)+2*spacing:0):null,
     prism:q.iceFacets>0&&facetShape(q)===2?lfcWidth(q)*k+2*spacing:null,
     spur:Math.round(q.spurCount)>=1?(q.spurLength||0)*(q.spurForks>0?2.1:1.6)*k+radius*Math.max(1,((q.spurWidth||.8)+(q.spurBulb||0)*.7)*1.7):null};
 }
@@ -805,6 +814,9 @@ function evaluate(from=0,rect=null) {
   if(materialCovers){materialTerrainDirty=true;markChanged();return;}
   regionalFields.changed(regionalDirtyRect(from,rect)); markChanged();
 }
+// The earliest stage a material change since the last compile reached: a layer whose pipeline was still compiling kept its old picture, so
+// the tiles draw again from there once it is generated (renderer.onmaterials).
+let materialStage=null;
 // The renderer holds the materials in use: the world's ground and water, and those a visible stroke chose.
 function syncMaterials() {
   if (!renderer) return;
@@ -822,7 +834,9 @@ function setRendererMaterials(next) {
   // A slot's cache layers and the world surfaces it draws (its roles: the solid reads which slot is the rock's, and no scan covers it).
   const layers=list=>[...list].sort(([a],[b])=>a-b).map(([slot,m])=>[slot,...materialStates(m),...Object.keys(m).filter(k=>/^world[A-Z]/.test(k)&&m[k]).sort(),m.worldLayer??''].join(':')).join(',');
   const height=layers(before)===layers(after)&&[...after].every(([slot,m])=>materialHeightKey(m)===materialHeightKey(before.get(slot)));
-  return [height?null:'C',uniform,'F'].filter(Boolean).sort()[0];
+  const stage=[height?null:'C',uniform,'F'].filter(Boolean).sort()[0];
+  materialStage=renderer.materialsCompiling()?[materialStage,stage].filter(Boolean).sort()[0]:stage;
+  return stage;
 }
 function restoreMaterials(materials) {
   mapMaterials=structuredClone(materials); nodes=keepStrokeMaterials(nodes,mapMaterials); syncMaterialChoices(); syncMaterials(); materialEditor?.refresh(); keepWorldMaterials(); surfacePanel?.refresh();
@@ -1169,7 +1183,7 @@ function regionalReadApron(n) {
     // Signed-distance normals read ten neighbors and a derivative. A new
     // tongue can reach another tongue before reaching its original shore,
     // so keep the connection band as well as the visible finger reach.
-    if (q.fingers>0) cells+=Math.ceil(3*(.5*q.radius+spacing*3)/spacing)+32;
+    if (q.fingers>0) cells+=Math.ceil(3*(fingerReach(q)+spacing*3)/spacing)+32;
     if (Math.round(q.shoreLayers)>=1) cells+=Math.ceil(coastLayerReach(q)/spacing)+2;
   }
   if(Math.round(q.layerStyle)===1&&Math.round(q.shoreLayers)>=1&&n.kind==='landform'){
@@ -1209,7 +1223,7 @@ function makeRegionalFields() {
   const common={worldSize,worldGrid,baseHeight:config.baseHeight,maskKeys:MASK_KEYS,nodes:() => nodes,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving||controlsEditing||worldInputQueue.active),gestureSettled:()=>mapCanvas?.refineWhileHeld?.()??false};
   // pageRing (a ring by hand) and timeApron are test hooks of the page ring rule and the Time pass's window; no page needs them.
   const query=new URLSearchParams(location.search);
-  return pagedWanted()?createPagedFields({...common,budget:gpuBudget,heapBudget:() => fieldsHeapBudget,foregroundPending:()=>Boolean(mapCanvas?.gpuWorkPending?.()||mapCanvas?.foregroundPending?.()),prepareBackground:bytes=>mapCanvas?.prepareBackground?.(bytes)??true,apron:Number(query.get('timeApron')||TIME_APRON),forceRing:Number(query.get('pageRing')||0)}):createGpuFields(common);
+  return pagedWanted()?createPagedFields({...common,budget:gpuBudget,heapBudget:() => fieldsHeapBudget,foregroundPending:()=>Boolean(mapCanvas?.gpuWorkPending?.()||mapCanvas?.foregroundPending?.()),prepareBackground:bytes=>mapCanvas?.prepareBackground?.(bytes)??true,cpuCopied:()=>mapCanvas?.schedule(),apron:Number(query.get('timeApron')||TIME_APRON),forceRing:Number(query.get('pageRing')||0)}):createGpuFields(common);
 }
 // Every application receives a bounded prefix window. Temporary global views
 // let the existing brush routines keep their row strides; no node retains a
@@ -1344,8 +1358,11 @@ function regionalHeightCell(x,y) {
 // release, and a map just opened has none yet), and for a weathered view (`weathered`, the canvas's Weathered view) where Weathering is on, the
 // Time pass's height there too. The map's overlays (a shape's path, the features) keep the height a point last had until it is, so they do not
 // jump as old, coarse and final heights arrive.
+// A failed Time pass leaves the view on the heights it had (the authored height where the pass would have changed it): no pass is coming
+// until Weathering is turned off and on again, so those are the heights the overlays take.
 function heightKnown(x,y,weathered=true) {
   if (stroke || moving) return false;
+  if (weatherState==='failed') weathered=false;
   if (pagedOn()) return regionalFields.heightKnown?.(x,y,weathered)??true;
   if (regionalFields.pending?.()) return false;
   if (!weathered || !weatherOn()) return true;
@@ -1597,12 +1614,15 @@ function moveSelectedShapes(dx,dy) {
 let shapeClipboard=null;
 function copyShapes() {
   const group=selectedShapes(); if (!group.length || stroke || moving || loading || !ready) return false;
-  shapeClipboard={nodes:cloneNodes(group.map(i => nodes[i])),pastes:0};
+  // A copy's rock type and material are remembered by identity, not slot: a slot freed by a delete (or an undo) may hold another by paste time.
+  const refs=group.map(i => { const p=nodes[i].params??{},rock=Math.round(p.rockPreset??-1),ground=p.groundPreset; return {rock:rock>0?rockRef(mapRocks,rock):undefined,ground:Number.isInteger(ground)&&ground>0?materialRef(mapMaterials,ground):undefined}; });
+  shapeClipboard={nodes:cloneNodes(group.map(i => nodes[i])),refs,pastes:0};
   status(group.length>1?`Copied ${group.length} shapes.`:`Copied ${shapeName(group[0])}.`); return true;
 }
 function pasteShapes(verb='Pasted') {
   if (!shapeClipboard || stroke || moving || loading || !ready) return false;
   const copies=cloneNodes(shapeClipboard.nodes),step=32*(shapeClipboard.pastes+1);
+  copies.forEach((n,k) => { const ref=shapeClipboard.refs[k]; if (ref.rock!==undefined) n.params.rockPreset=rockSlotFor(mapRocks,ref.rock); if (ref.ground!==undefined) n.params.groundPreset=materialSlotFor(mapMaterials,ref.ground); });
   const m=fitToMap(copies.flatMap(n => n.points),[1,0,0,1,step,step]);
   if (!m) { status('The copied shapes do not fit on this map.'); return true; }
   shapeClipboard.pastes++; cancelWeather();
@@ -1698,6 +1718,13 @@ function renderLayers() {
   $('node-up').disabled||=selected>=nodes.length-1;$('node-down').disabled||=selected<=0;
   $('node-seed').disabled||=nodes[selected]?.seed===undefined;
   $('node-hide').textContent=nodes[selected]?.hidden?'Show':'Hide';
+  // A disabled list action says why (rule 9); a load, stroke or drag under way passes in a moment and needs no reason.
+  const busy=loading||Boolean(stroke||moving),why=(id,reason) => { const b=$(id); b.dataset.title??=b.title; b.title=b.disabled&&!busy?reason:b.dataset.title; };
+  for (const id of ['node-delete','node-hide']) why(id,'Select a shape first');
+  why('node-seed',selected<0?'Select a shape first':'This shape has no seed to change');
+  why('node-up',selected<0?'Select a shape first':'This shape is already at the top');
+  why('node-down',selected<0?'Select a shape first':'This shape is already at the bottom');
+  why('shape-duplicate','Select a shape first');
 }
 function nodeAction(kind) {
   const i=selected; if (i<0 || stroke || moving || loading || !ready) return;
@@ -1716,7 +1743,8 @@ function flushEval() {
 }
 // What a history entry changed against the one before it, in the editor's words, for Undo and Redo: "the change to Plateau 1", "deleting
 // Hill 2", "adding Ramp 3", "renaming the map", joined with "and".
-function changeName(prev,next) {
+// `act`: what a features or starts edit did ("placing a tree", sculpt-features.js changed), named in place of "the change to features".
+function changeName(prev,next,act='') {
   if (!prev) return '';
   const same=k => JSON.stringify(prev[k])===JSON.stringify(next[k]),acts=[],changes=[];
   const named=(list,i) => list[i]?`${shapeLabel(list[i])} ${i+1}`:'';
@@ -1733,8 +1761,9 @@ function changeName(prev,next) {
   if (data(['name'])) acts.push('renaming the map');
   if (data(['description'])) changes.push('the map’s description');
   if (data(['settings'])) changes.push('the map’s game settings');
-  if (data(['features','featureSet','fill'])) changes.push('features');
-  if (data(['starts'])) changes.push('start positions');
+  const features=data(['features','featureSet','fill']),starts=data(['starts']);
+  if (act && (features || starts)) acts.push(act);
+  else { if (features) changes.push('features'); if (starts) changes.push('start positions'); }
   if (!same('tools')) changes.push('this map’s tools');
   return [...acts,...(changes.length?[`the change to ${changes.join(' and ')}`]:[])].join(' and ');
 }
@@ -1742,10 +1771,10 @@ function syncHistoryNames() {
   const back=historyIndex>0?history[historyIndex].name:'',ahead=history[historyIndex+1]?.name??'';
   $('undo').title=`Undo${back?' '+back:''} · ⌘ / Ctrl Z`;$('redo').title=`Redo${ahead?' '+ahead:''} · ⌘ / Ctrl Shift Z`;
 }
-function checkpoint(mapOnly=false) {
+function checkpoint(mapOnly=false,act='') {
   flushEval(); keepWorldMaterials();
-  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); history.at(-1).name=changeName(history.at(-2),history.at(-1)); if (history.length>48) history.shift(); historyIndex=history.length-1;
-  renderLayers(); updateControls(); persistLater(); pickCard?.refresh();   // a pinned pixel reads again after every committed change
+  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); history.at(-1).name=changeName(history.at(-2),history.at(-1),act); if (history.length>48) history.shift(); historyIndex=history.length-1;
+  renderLayers(); updateControls(); persistLater(0); pickCard?.refresh();   // saved at once (persistLater); a pinned pixel reads again after every committed change
 }
 // A card change commits one undo step — never mid-gesture, where a checkpoint would capture a
 // half-drawn stroke or a half-moved selection (the gesture's own commit carries the change).
@@ -1927,15 +1956,22 @@ $('reset-strokes').onclick=() => {
   selected=-1;alsoSelected=[]; pathPoint=-1; pathAdding=false; evaluate(0); regionalFields.changed(); checkpoint(); queueWeather(); schedule();
   status('Reset every stroke to this world\'s defaults.');
 };
-function persistLater() {
+// Saves the map `delay` ms after the last call. A committed change (checkpoint: a stroke's end, a move, a card change) passes 0: the save runs
+// in the next task, after the change's own draw is scheduled, so a reload right after it keeps it (FLOWS #6). Continuous changes (slider
+// drags) keep the 450 ms wait, so a drag saves once at its end. Commits that come faster than 200 ms apart (a held arrow key nudging a
+// shape) wait for a pause of 200 ms instead of saving each time. A save costs about 5 ms of main thread at 40 shapes and 15 ms at 300.
+let lastSaveAt=-Infinity,saveHeld=false;   // saveHeld: commits are coming faster than 200 ms apart
+function persistLater(delay=450) {
   if (!SAVING) { $('save-state').textContent='Comparison sketch · use Map › Save as link or Download file to keep it.'; return; }
   if (!mapStore) { $('save-state').textContent=mapsNote||'Saving in this browser is unavailable. Use Save to keep this map as a file.'; return; }
+  if (delay<200) { saveHeld=saveHeld || performance.now()-lastSaveAt<200; if (saveHeld) delay=200; }
   clearTimeout(autosaveTimer); autosaveTimer=setTimeout(async () => {
+    saveHeld=false;
     if (stroke || moving || loading) { persistLater(); return; }
-    keepSaved=false;
+    keepSaved=false; lastSaveAt=performance.now();
     // Await the write: its promise is always truthy, and 'saved' must not show before IndexedDB answers.
     if (await saveWorking()) $('save-state').textContent='Your map is saved in this browser (Maps lists every map you keep here).';
-  },450);
+  },delay);
 }
 let keepSaved=false;   // set while this tab leaves for another map: leaving the page must not write the old one again
 addEventListener('pagehide',() => { worldInputQueue.flush();if (!stroke && !moving && !loading && !keepSaved) saveWorking(); });
@@ -2395,15 +2431,23 @@ function restorePlace() {
   if (view||panel||experiment.has('shape')) { const url=new URL(location.href); for (const key of ['view','panel','shape']) url.searchParams.delete(key); window.history.replaceState(null,'',url); }
   return Boolean(view);
 }
-// Another world for this tab's map: it is saved, then the page reloads in that world and carries it there, and the artist's place
-// (placeParams). A scratch page stays a scratch page.
-async function goToWorld(base,id,extra) {
+// Another world for this tab's map: it is saved, then a copy of it is saved as a new map (owner, 2026-11-19: "Fork it"), and the page
+// reloads in that world on the copy, which it carries there (carryNodes), with the artist's place (placeParams). The original stays in Maps
+// as it was, in its own world, with its tools. Without a store (or on a scratch page) the tab's map is carried, as before; so it is with `fork`
+// false, when the map's world itself goes (Delete this world) or becomes yours (Use for my world).
+async function goToWorld(base,id,extra,fork=true) {
   worldInputQueue.flush();
   if (!stroke && !moving && !loading) await saveWorking();
   extra={...placeParams(),...extra};
   const next={biome:base,...(id && id!==base?{world:id}:{}),...(experiment.has('scratch')?{scratch:experiment.get('scratch')}:{}),...(config.map?{mapX:config.map.unitsX,mapY:config.map.unitsY,sea:config.seaLevel}:{})};
   for (const [key,value] of Object.entries(extra||{})) if (value!=='' && value!==null && value!==undefined) next[key]=value; else delete next[key];
-  if (leaveFor(tabMapId,next)) keepSaved=true;
+  let target=tabMapId;
+  if (fork && SAVING && ready && tabMapId && mapStore) {
+    try { const copy=workingCopy(),copyId=newMapId(); await mapStore.put(copyId,copy,mapMeta(copyId,copy)); target=copyId; next.forkedFrom=activeWorld().name; }
+    catch (err) { error('A copy of your map for the other world could not be kept in this browser ('+err.message+'). The map stays in '+activeWorld().name+'.'); return; }
+  }
+  clearTimeout(autosaveTimer);
+  if (leaveFor(target,next)) keepSaved=true;
 }
 // Your own worlds in this browser's store: each on a built-in world this server has.
 const ownWorlds=() => Object.entries(worlds).filter(([id,w]) => !(id in (config.biomes||{})) && w.base in (config.biomes||{}));
@@ -2552,7 +2596,7 @@ function buildWorldPanel() {
   };
   const isCustom=!(worldId in (config.biomes||{}));
   $('world-delete').hidden=!isCustom;$('world-delete').textContent='Delete this world';
-  $('world-delete').onclick=() => { delete worlds[worldId]; saveWorlds(); goToWorld(config.biomeId); };
+  $('world-delete').onclick=() => { delete worlds[worldId]; saveWorlds(); goToWorld(config.biomeId,undefined,undefined,false); };
   // A world a map brought (its world differed from yours): say so, and offer to make it yours. Your earlier one stays, renamed.
   const from=worlds[worldId]?.openedFrom,target=from?(worlds[from.world]?.name||config.biomes?.[from.world]||from.world):'';
   $('world-from').hidden=$('world-adopt').hidden=!from;
@@ -2562,7 +2606,7 @@ function buildWorldPanel() {
     $('world-adopt').onclick=() => {
       const {openedFrom,...adopted}=worlds[worldId];
       if (worlds[from.world]) { const keep=`${target} before ${from.map}`.slice(0,120); worlds[keep.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,24)+'-'+Math.random().toString(36).slice(2,6)]={...worlds[from.world],name:keep}; }
-      worlds[from.world]={...adopted,name:target}; delete worlds[worldId]; saveWorlds(); goToWorld(adopted.base,from.world);
+      worlds[from.world]={...adopted,name:target}; delete worlds[worldId]; saveWorlds(); goToWorld(adopted.base,from.world,undefined,false);
     };
   }
 }
@@ -2711,7 +2755,7 @@ function syncRockPanel() {
   $('rock-chips').replaceChildren(...[...list.options].map(option=>{
     const slot=Number(option.value),chip=document.createElement('button'),swatch=document.createElement('span'),name=slot===0?worldRockName(config):option.textContent;
     chip.type='button';chip.className='rock-chip';chip.setAttribute('role','radio');chip.setAttribute('aria-checked',String(slot===rockSelected));chip.dataset.slot=option.value;chip.tabIndex=slot===rockSelected?0:-1;chip.title=slot===0?`${name}: the world\u2019s rock type`:name;
-    swatch.className='rock-swatch';swatch.style.background=rockHex(slot);chip.append(swatch,name);
+    swatch.className='rock-swatch';swatch.style.background=rockHex(slot);const label=document.createElement('span');label.className='rock-chip-name';label.textContent=name;chip.append(swatch,label);
     chip.onkeydown=e=>{const keys=['ArrowRight','ArrowDown','ArrowLeft','ArrowUp','Home','End'];if(!keys.includes(e.key))return;e.preventDefault();const chips=[...$('rock-chips').children],i=chips.indexOf(chip),next=e.key==='Home'?0:e.key==='End'?chips.length-1:(i+(e.key==='ArrowRight'||e.key==='ArrowDown'?1:-1)+chips.length)%chips.length;chips[next].click();$('rock-chips').querySelector('[aria-checked=true]').focus();};
     chip.onclick=()=>{list.value=option.value;list.dispatchEvent(new Event('change'));};
     return chip;
@@ -2971,6 +3015,8 @@ async function bootMap(pending=null) {
   mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
   renderer=mapCanvas.renderer; renderer.onerror=message => error(message); materialUseKey='[]'; syncMaterials();
+  // A material's pipeline started or finished compiling (sculpt-material-cache.js): the export says why it waits, and a generated layer is drawn.
+  renderer.onmaterials=done=>{ if(done)worldChanged({stage:materialStage??'C',world:false}); if(!renderer.materialsCompiling())materialStage=null; updateControls(); schedule(); };
   // A material's drawn color read back (sculpt-material-cache.js readMeans): the Color pickers show it.
   renderer.onmeans=()=>{syncRockColors();refreshShallowRow();surfacePanel?.refresh();materialEditor?.refreshColors?.();pickCard?.colors();};   // the world's ground and water are materials: a renderer has none until told
   worldChanged(renderer.setColors(worldColors()));$('export').textContent='Save view image';
@@ -2982,12 +3028,12 @@ async function bootMap(pending=null) {
   syncColumnPanel=mountColumnPanel(()=>rockSelected>0?presetColumn():({column:columnForEdit(),bedColors:renderer.slotColors(0).beds,edited:Boolean(columnOverride)}),
     column=>rockSelected>0?editPresetColumn(column):editColumn(column),()=>rockSelected>0?checkpoint(true):commitColumn(),
     ()=>{if(rockSelected>0){const rock=mapRocks.find(r=>r.slot===rockSelected);editRocks(setRock(mapRocks,rockSelected,{knobs:rock.knobs,column:null}));checkpoint(true);}else{editColumn(null);commitColumn();}});
-  const saved=experiment.has('newMap')?null:workingMap,shared=experiment.has('shared');let resave=false;
+  const saved=experiment.has('newMap')?null:workingMap,shared=experiment.has('shared');let resave=false,forkNote='';
   if (saved) {
     try {
       const same=saved.biome===config.biomeId && (saved.world||saved.biome)===worldId;
       loadSketch(saved,!same);resave=!same||Boolean(tabState.next);   // carried or handed over: saved as it now opens, so a refresh opens it here
-      status(shared?'Opened a shared map. It is saved as a new map; your other maps are in Maps.':experiment.has('opened')?'Opened the map file. It is saved as a new map; your other maps are in Maps.':same?'Reopened your map.':'Carried your map into this world.');
+      status(shared?'Opened a shared map. It is saved as a new map; your other maps are in Maps.':experiment.has('opened')?'Opened the map file. It is saved as a new map; your other maps are in Maps.':experiment.has('forkedFrom')?(forkNote=`Copied your map into this world as a new map. The original is unchanged in ${experiment.get('forkedFrom')}; both are in Maps.`):same?'Reopened your map.':'Carried your map into this world.');
       if(shared)announceShared();
       showOwnWorldNote(shared);   // the map forks as an opened map does
     } catch (err) {
@@ -3009,6 +3055,7 @@ async function bootMap(pending=null) {
   updateControls(); resize(); schedule(); queueWeather();
   // A new map opens at Fit, to see all of it; a world switch where the artist was (restorePlace); every other load at 1x, centered on the map.
   if (!restorePlace()) $(experiment.has('newMap')?'fit':'one').click();
+  if (forkNote) status(forkNote);   // after the restored selection's own line
   if (shareError) error(shareError);
   $('new-map').disabled=false;
   if(experiment.has('newMap')){$('map-name').value=experiment.get('mapName')||'Untitled map';$('map-name').dispatchEvent(new Event('input'));saveWorking();}
@@ -3092,7 +3139,7 @@ function openNewMap(first=false, dimensionsFromMap=null) {
   $('new-map-form').onsubmit=async e=>{e.preventDefault();if(!e.target.reportValidity())return;
     clearTimeout(autosaveTimer);if(!await leaveMap()){$('new-map-error').textContent='Your current map could not be saved in this browser. Save it as a file before starting a new map.';return;}
     const own=!(picked in (config.biomes||{}))&&worlds[picked];
-    const next={biome:own?own.base:picked,...(own?{world:picked}:{}),mapName:$('new-map-name').value.trim()||'Untitled map',mapX:$('new-map-width').value,mapY:$('new-map-height').value,newMap:1,...(dimensionsFromMap?{sea:dimensionsFromMap.sea}:{})};
+    const next={biome:own?own.base:picked,...(own?{world:picked}:{}),mapName:$('new-map-name').value.trim()||'Untitled map',mapX:$('new-map-width').value,mapY:$('new-map-height').value,newMap:1,...(Number.isInteger(dimensionsFromMap?.sea)?{sea:dimensionsFromMap.sea}:{})};
     if(leaveFor(mapStore?newMapId():null,next))keepSaved=true;
   };
   dialog.showModal();
