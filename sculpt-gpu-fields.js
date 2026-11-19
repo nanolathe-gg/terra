@@ -1422,7 +1422,7 @@ export function createPagedFields(opts) {
     for (const k of [...cpuWanted]) {
       if (gesture() || foregroundPending() || opts.prepareBackground?.(SIDE*SIDE*8)===false) { cpuTimer = setTimeout(pumpCpu, 100); return; }
       cpuWanted.delete(k); const pg = pagesMap.get(k); if (!pg) continue;
-      pg.pins++; cpuReading++;   // not evicted while its buffers are read
+      pg.pins++; cpuReading++; pg.cpuBusy = true;   // not evicted while its buffers are read
       try {
         if (pg.target) {
           current(pg);
@@ -1433,9 +1433,10 @@ export function createPagedFields(opts) {
           const w = pg.weather, raw = await readBuffer(device(), w.weather, 0, 2 * CORE * CORE * 4);
           if (pg.weather === w) pg.cpuW = {base: new Float32Array(raw, 0, CORE * CORE), e: new Float32Array(raw, CORE * CORE * 4, CORE * CORE),source:w};
         }
-      } catch (err) { error = err; fail(err); } finally { unpin(pg); cpuReading--; }
+      } catch (err) { error = err; fail(err); } finally { unpin(pg); cpuReading--; pg.cpuBusy = false; }
     }
     trim();
+    opts.cpuCopied?.();   // the overlays that wait for a page's heights (heightKnown) draw again
   }
 
   // ---- the coarse lattice
@@ -1525,6 +1526,7 @@ export function createPagedFields(opts) {
       pg.weatherMs = performance.now() - t0; weatherRuns++; weatherMsTotal += pg.weatherMs;
       touch(pg); wantCpu(pg);
     } catch (err) {
+      if (timeKey === key && pg.staleSeq === seq) pg.weatherFailed = seq;   // heightKnown stops waiting for this result: the page's weather stays as it was
       if(err.name!=='AbortError'||timeKey===key&&pg.staleSeq===seq)throw err;
     } finally {
       uniforms.forEach(b => b.destroy());
@@ -1768,9 +1770,16 @@ export function createPagedFields(opts) {
     // pass's current result. The overlays hold a point's last height until it is (sculpt.js heightKnown).
     heightKnown: (x, y, weathered = true) => {
       const ix = clamp(Math.round(x / spacing), 0, worldGrid - 1), iy = clamp(Math.round(y / spacing), 0, worldGrid - 1), pg = pageAt(ix, iy);
-      if (pg?.target) { if (!pg.cpu || pg.cpuRev !== pg.rev) return false; }
-      else if (!coarseHave[Math.round(iy / COARSE) * coarseW + Math.round(ix / COARSE)] || (pg && coarseQueue.has(pg.key))) return false;
-      return !weathered || !time || !pg?.weather || (!pg.stale && pg.cpuW?.source === pg.weather);
+      if (pg?.target && pg.cpu && pg.cpuRev === pg.rev) return !weathered || !time || !pg.weather || (!pg.stale && pg.cpuW?.source === pg.weather) || pg.weatherFailed === pg.staleSeq;
+      if (pg?.target) {
+        if (pg.cpuRev !== pg.rev || pg.cpuBusy) return false;   // a new target or an edit: its copy is on its way (ensureShape, changed)
+        // trim() let the copy go and nothing has changed since. The copy is asked for again once a revision (a page in view, touched so the
+        // copy is not the first trim lets go); until it lands the answer waits, and once it has been asked for, the page answers as one with no
+        // target does, from the coarse lattice, which sample reads too. More pages in view than CPU_PAGES then read once each, not in turn forever.
+        if (pg.cpuAsked !== pg.rev) { pg.cpuAsked = pg.rev; touch(pg); wantCpu(pg); return false; }
+        if (cpuWanted.has(pg.key)) return false;
+      }
+      return Boolean(coarseHave[Math.round(iy / COARSE) * coarseW + Math.round(ix / COARSE)]) && !(pg && coarseQueue.has(pg.key));
     },
     changed, refit: () => { const before = RING; check(); if (RING !== before) changed(); }, ready: () => Promise.resolve(), pending: () => false,
     readAsync: async (request, o) => readRect(toCells(request), o),

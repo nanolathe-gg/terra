@@ -1209,7 +1209,7 @@ function makeRegionalFields() {
   const common={worldSize,worldGrid,baseHeight:config.baseHeight,maskKeys:MASK_KEYS,nodes:() => nodes,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving||controlsEditing||worldInputQueue.active),gestureSettled:()=>mapCanvas?.refineWhileHeld?.()??false};
   // pageRing (a ring by hand) and timeApron are test hooks of the page ring rule and the Time pass's window; no page needs them.
   const query=new URLSearchParams(location.search);
-  return pagedWanted()?createPagedFields({...common,budget:gpuBudget,heapBudget:() => fieldsHeapBudget,foregroundPending:()=>Boolean(mapCanvas?.gpuWorkPending?.()||mapCanvas?.foregroundPending?.()),prepareBackground:bytes=>mapCanvas?.prepareBackground?.(bytes)??true,apron:Number(query.get('timeApron')||TIME_APRON),forceRing:Number(query.get('pageRing')||0)}):createGpuFields(common);
+  return pagedWanted()?createPagedFields({...common,budget:gpuBudget,heapBudget:() => fieldsHeapBudget,foregroundPending:()=>Boolean(mapCanvas?.gpuWorkPending?.()||mapCanvas?.foregroundPending?.()),prepareBackground:bytes=>mapCanvas?.prepareBackground?.(bytes)??true,cpuCopied:()=>mapCanvas?.schedule(),apron:Number(query.get('timeApron')||TIME_APRON),forceRing:Number(query.get('pageRing')||0)}):createGpuFields(common);
 }
 // Every application receives a bounded prefix window. Temporary global views
 // let the existing brush routines keep their row strides; no node retains a
@@ -1344,8 +1344,11 @@ function regionalHeightCell(x,y) {
 // release, and a map just opened has none yet), and for a weathered view (`weathered`, the canvas's Weathered view) where Weathering is on, the
 // Time pass's height there too. The map's overlays (a shape's path, the features) keep the height a point last had until it is, so they do not
 // jump as old, coarse and final heights arrive.
+// A failed Time pass leaves the view on the heights it had (the authored height where the pass would have changed it): no pass is coming
+// until Weathering is turned off and on again, so those are the heights the overlays take.
 function heightKnown(x,y,weathered=true) {
   if (stroke || moving) return false;
+  if (weatherState==='failed') weathered=false;
   if (pagedOn()) return regionalFields.heightKnown?.(x,y,weathered)??true;
   if (regionalFields.pending?.()) return false;
   if (!weathered || !weatherOn()) return true;
