@@ -1784,6 +1784,7 @@ export function createPagedFields(opts) {
         // target does, from the coarse lattice, which sample reads too. More pages in view than CPU_PAGES then read once each, not in turn forever.
         if (pg.cpuAsked !== pg.rev) { pg.cpuAsked = pg.rev; touch(pg); wantCpu(pg); return false; }
         if (cpuWanted.has(pg.key)) return false;
+        return coarseHave[Math.round(iy / COARSE) * coarseW + Math.round(ix / COARSE)] && !coarseQueue.has(pg.key) ? 'coarse' : false;   // a feature keeps a lift it has (sculpt-features.js anchor)
       }
       return Boolean(coarseHave[Math.round(iy / COARSE) * coarseW + Math.round(ix / COARSE)]) && !(pg && coarseQueue.has(pg.key));
     },
