@@ -23,7 +23,7 @@ mask loses EDGE_PX px (half a cell) at its border, so a number describes the cla
 drawn by its tiles, not by its heights, so a mask can still hold the other side of a waterline: a dry class drops pixels whose color
 within COAST_PX of a waterline is nearer that side's own water than that class's own color, and the water drops pixels nearer the land
 (`unmixed`). Per class and side:
-share of the window, mean color (sRGB and CIELAB), luma mean and spread, band-pass energy at 2, 8 and 32 px, edge density and thin
+share of the window, mean color (sRGB and CIELAB), luma mean and spread, the luma range (its 1st and 99th percentiles), band-pass energy at 2, 8 and 32 px, edge density and thin
 dark line density (stats.py's definitions, read inside the mask). Then plain-language findings where a gap passes a threshold
 (THRESHOLDS below), largest first, and 1x crops: for each class, the 256 px square where retail has the most of it, cut from both
 pictures at the same place and doubled (nearest neighbor) so a picture reader keeps single pixels.
@@ -53,7 +53,11 @@ FLAT, LEVEL, STEEP = .03, .08, .5
 SHELF_DEPTH = 32   # height units below the sea: retail Green's shelf is light to about 25 and dark from 40, and ours follows it
 # A finding is reported when a gap passes its threshold: luma in 0-255 units, color as CIELAB distance of the class means, share
 # in points of the window, and the texture numbers as a ratio ours / retail outside [1/r, r].
-THRESHOLDS = {'share': .05, 'luma': 8.0, 'color': 6.0, 'spread': 1.3, 'band': 1.3, 'edges': 1.5, 'lines': 1.6}
+# The range is the 1st and 99th luma percentiles: a side reaching darker or brighter than the other by `range` luma draws pixels the
+# other never does here (dots too dark, flecks too bright), which a mean or an edge count can miss or even reward. Both pictures use
+# the game's palette, so a percentile lands on a palette color, about 5 luma apart in the grass and rock range: 8 is more than one
+# step.
+THRESHOLDS = {'share': .05, 'luma': 8.0, 'range': 8.0, 'color': 6.0, 'spread': 1.3, 'band': 1.3, 'edges': 1.5, 'lines': 1.6}
 # Below these both sides are too faint for a ratio to mean anything (a share of pixels).
 FLOORS = {'edges': .004, 'lines': .0003}
 MIN_PIXELS = 4000   # a class with fewer pixels on either side gets no texture comparison
@@ -156,6 +160,8 @@ def class_stats(rgb, maps, m):
         'lab': [float(v) for v in maps['lab'][m].mean(axis=0)],
         'luma': float(maps['L'][m].mean()),
         'spread': float(maps['L'][m].std()),
+        'dark': float(np.percentile(maps['L'][m], 1)),
+        'light': float(np.percentile(maps['L'][m], 99)),
         'edges': float(maps['edge'][m].mean()),
         'lines': float(maps['thin'][m].mean()),
         **{f'band{s}': float(b[m].std()) for s, b in maps['bands'].items()},
@@ -192,6 +198,8 @@ def sizes(r, o):
         return out
     out['luma'] = abs(o['luma'] - r['luma']) / THRESHOLDS['luma']
     out['color'] = math.dist(r['lab'], o['lab']) / THRESHOLDS['color']
+    for key in ('dark', 'light'):
+        out[key] = abs(o[key] - r[key]) / THRESHOLDS['range']
     for key in ('spread', 'band2', 'band8', 'band32', 'edges', 'lines'):
         t = THRESHOLDS['band' if key.startswith('band') else key]
         q = ratio(r[key], o[key])
@@ -210,6 +218,16 @@ def findings(name, r, o):
     dl = o['luma'] - r['luma']
     if abs(dl) >= THRESHOLDS['luma']:
         out.append((abs(dl) / THRESHOLDS['luma'], f'{name}:luma', f"{name}: ours {'brighter' if dl > 0 else 'darker'} by {abs(dl):.0f} luma (retail {r['luma']:.0f}, ours {o['luma']:.0f})"))
+    dd = o['dark'] - r['dark']
+    if abs(dd) >= THRESHOLDS['range']:
+        out.append((abs(dd) / THRESHOLDS['range'], f'{name}:dark', f"{name}: " + (
+            f"ours' darkest 1% reach luma {o['dark']:.0f}, retail's stop at {r['dark']:.0f}: dots or lines darker than retail draws here" if dd < 0 else
+            f"ours' darkest 1% only reach luma {o['dark']:.0f}, retail's {r['dark']:.0f}: retail's darkest specks or shadows are missing")))
+    dh = o['light'] - r['light']
+    if abs(dh) >= THRESHOLDS['range']:
+        out.append((abs(dh) / THRESHOLDS['range'], f'{name}:light', f"{name}: " + (
+            f"ours' brightest 1% reach luma {o['light']:.0f}, retail's stop at {r['light']:.0f}: flecks or highlights brighter than retail draws here" if dh > 0 else
+            f"ours' brightest 1% only reach luma {o['light']:.0f}, retail's {r['light']:.0f}: retail's bright flecks or lit edges are missing")))
     dc = math.dist(r['lab'], o['lab'])
     if dc >= THRESHOLDS['color']:
         rl, ol = r['lab'], o['lab']
@@ -307,12 +325,13 @@ def table_md(name, res):
         rows += [f"- **{f['size']:.1f}** {f['text']}" for f in res['findings'][:12]]
     else:
         rows += ['No class gap passes a threshold.']
-    rows += ['', '| class | share r / o | luma r / o | spread r / o | grain 2px r / o | 8px r / o | 32px r / o | edges r / o | lines r / o |',
-             '| --- | --- | --- | --- | --- | --- | --- | --- | --- |']
+    rows += ['', '| class | share r / o | luma r / o | darkest-brightest r / o | spread r / o | grain 2px r / o | 8px r / o | 32px r / o | edges r / o | lines r / o |',
+             '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |']
     for c, v in res['classes'].items():
         r, o = v['retail'], v['ours']
+        rng = lambda v: f"{v['dark']:.0f}-{v['light']:.0f}" if 'dark' in v else '-'
         cell = lambda k, f='{:.0f}': (f.format(r[k]) if k in r else '-') + ' / ' + (f.format(o[k]) if k in o else '-')
-        rows.append(f"| {c} | {r['share']:.0%} / {o['share']:.0%} | {cell('luma')} | {cell('spread', '{:.1f}')} | {cell('band2', '{:.2f}')} | "
+        rows.append(f"| {c} | {r['share']:.0%} / {o['share']:.0%} | {cell('luma')} | {rng(r)} / {rng(o)} | {cell('spread', '{:.1f}')} | {cell('band2', '{:.2f}')} | "
                     f"{cell('band8', '{:.2f}')} | {cell('band32', '{:.2f}')} | {cell('edges', '{:.3f}')} | {cell('lines', '{:.4f}')} |")
     if res['crops']:
         rows += ['', 'Crops (retail left, ours right, 2x): ' + ', '.join(f'[{c}]({p})' for c, p in res['crops'].items())]

@@ -100,7 +100,7 @@ def finding_sizes(classes, window):
     return {f'{c}:{m}': s for c, v in classes.get(window, {}).get('classes', {}).items() for m, s in v.get('sizes', {}).items()}
 
 
-LABELS = {'luma': 'luma', 'spread': 'spread', 'band2': 'grain 2px', 'band8': 'texture 8px', 'band32': 'patches 32px', 'edges': 'edges', 'lines': 'lines'}
+LABELS = {'luma': 'luma', 'dark': 'darkest', 'light': 'brightest', 'spread': 'spread', 'band2': 'grain 2px', 'band8': 'texture 8px', 'band32': 'patches 32px', 'edges': 'edges', 'lines': 'lines'}
 
 
 def class_moves(base_dir, trial_dir, window, top=4):
@@ -118,7 +118,7 @@ def class_moves(base_dir, trial_dir, window, top=4):
             if k not in o or k not in ob:
                 continue
             x, y = ob[k], o[k]
-            if k == 'luma':
+            if k in ('luma', 'dark', 'light'):
                 size = abs(y - x) / 4.0
                 text = f"{cls} {label} {x:.0f}->{y:.0f} (retail {r.get(k, float('nan')):.0f})"
             else:
