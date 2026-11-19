@@ -4,19 +4,19 @@
 
 `repro/scenes/green-<n>.json`; retail data in `$R/repro-r7/green-<n>/`.
 
-| Window | Retail map | What it tests | Before round 1 | Main after round 2's port |
-| --- | --- | --- | --- | --- |
-| green-1 | pc games' evad river delta | broken hills (rock type `evad`) by the sea | shape .22, look .10 | shape .22, look .09 |
-| green-2 | great divide | long gentle grass slopes, a ridge | shape .16, look .20 | shape .16, look .20 |
-| green-3 | the barrier reef | islands and reef shallows | shape .08, look .09 | shape .08, look .10 |
-| green-4 | the pass | a rocky massif with grass in its folds | shape .63, look .23 | shape .63, look .23 |
-| green-5 | plains and passes | a terraced ridge on a rolling plain (`hill` strokes with Steps, rock `ridgestone`) | shape .18, look .70 | shape .12, look .35 |
-| green-6 | wretched ridges | two ridges | shape .24, look .10 | shape .24, look .10 |
-| green-7 | two continents | open water and coast: **held out** | shape .19, look .12 | shape .19, look .12 |
+| Window | Retail map | What it tests | Before round 1 | After round 2's port | After round 3's port |
+| --- | --- | --- | --- | --- | --- |
+| green-1 | pc games' evad river delta | broken hills (rock type `evad`) by the sea | shape .22, look .10 | shape .22, look .09 | shape .22, look .08 |
+| green-2 | great divide | long gentle grass slopes, a ridge | shape .16, look .20 | shape .16, look .20 | shape .16, look .17 |
+| green-3 | the barrier reef | islands and reef shallows | shape .08, look .09 | shape .08, look .10 | shape .08, look .10 |
+| green-4 | the pass | a rocky massif with grass in its folds | shape .63, look .23 | shape .63, look .23 | shape .63, look .23 |
+| green-5 | plains and passes | a terraced ridge on a rolling plain (`hill` strokes with Steps, rock `ridgestone`) | shape .18, look .70 | shape .12, look .35 | shape .12, look .35 |
+| green-6 | wretched ridges | two ridges of dark blocky rock (rock `ridgeblock`) | shape .24, look .10 | shape .24, look .10 | shape .24, look .08 |
+| green-7 | two continents | open water and coast: **held out** | shape .19, look .12 | shape .19, look .12 | shape .19, look .12 |
 
 Means of the tuning windows: shape .25, look .24 before round 1; shape .24,
-look .18 on main after round 2's port (measured 2026-11-18, one render of
-all seven windows).
+look .18 after round 2's port; shape .24, look .17 after round 3's port
+(measured 2026-11-18, one render of all seven windows each).
 
 ### Which rock each window's strokes use
 
@@ -28,7 +28,8 @@ A rock type changes only the windows whose strokes use its slot (PLAYBOOK.md,
 | green-1 | 2 | `evad` |
 | green-3 | 2 | `evad` |
 | green-5 | 5 | `ridgestone` (Terraced greenstone, round 2) |
-| green-2, green-4, green-6, green-7 | none set (0) | the world's own rock (the rock keys in `knobDefaults`) |
+| green-6 | 6 | `ridgeblock` (Blocky ridge, round 3; material `green-darkrock`) |
+| green-2, green-4, green-7 | none set (0) | the world's own rock (the rock keys in `knobDefaults`) |
 
 Re-check with `grep -o '"rockPreset": [-0-9]*' repro/scenes/green-<n>.json`
 after any shape-lane edit.
@@ -64,8 +65,9 @@ These notes are by eye, from the base crops in
 
 ## Known from earlier rounds (docs/BIOME_CATALOG.md, "Green Planet")
 
-- Green's slope hatch comes from contour bands 1.3 units apart: `banding`
-  .6, no jag (`bandJag` 0). Bands do draw on green-5's ridge flanks, but
+- Green's slope hatch comes from contour bands 1.3 units apart with a line
+  darkness of .65 (`world.column.bands`): `banding` .6, no jag (`bandJag`
+  0). Bands do draw on green-5's ridge flanks, but
   faintly (measured 2026-11-18: doubling `banding` changed 8.5% of green-5's
   pixels, all on the flanks), and never on its plain, because they start at
   slope 0.07. `bandLevel` (Lines on level ground) draws them on slopes
@@ -77,67 +79,64 @@ These notes are by eye, from the base crops in
 - No rock coasts on Green. Shores are a natural sand-grass edge.
 - Hills must stay grassy. Rock on a hill is cracks and patches, not a cap.
 
-## Start here (round 3)
+## Start here (round 4)
 
-Round 2 (branch `match-green-3`, 81 of 300 trials, report in
-`$R/match/terraform-wt-match-green-3/green/REPORT.md`) was reviewed and
-partly ported to main on 2026-11-18:
+Round 3 (branch `match-green-4`, 66 of 300 trials, report in
+`$R/match/terraform-wt-match-green-4/green/REPORT.md`) was reviewed and
+partly ported to main on 2026-11-18. Rounds 1 and 2 are in git history
+(this section's earlier versions).
 
-- **Ported:** the `evad` recipe as cracks and patches in grass, then
-  weathered faces (green-1 look .10 to .09; green-3's busy faces calmer, and
-  the pale waterline rim mostly gone). Green-5's map: five `hill` strokes
-  with Steps (`terraces` 8, `ledge` 30, `terraceJitter` 80, `breakup` 60) on
-  a new rock type `ridgestone` (slot 5, round 2's greenstone tuning), and
-  its query `undulation=14&undulationArt=0.3`.
-- **Changed in the port:** round 2 tuned the shared `greenstone`, which the
-  Knob, Cup knoll and Rock fin tools draw; the port moved that tuning into
-  `ridgestone` and left `greenstone` as it was. Round 2 kept `undulation`
-  14 at full art (look .31), which drew crumpled hummocks on green-5's plain
-  that retail's plain does not have; the port keeps the height relief and
-  shows 0.3 of it in the art (look .35, shape .12 either way; at 0.6 the
-  look is .33). The owner judges that look in the editor.
-- **Not ported:** green-6's `greenridge` rock (look .10 to .09). At 1x
-  retail's ridges are dark rock with blocky vertical buttresses and a clean
-  foot; `greenridge` drew fine horizontal strata, lighter, with a brown
-  debris halo at the foot that retail does not have.
+- **Ported:** green-6's own rock type `ridgeblock` (slot 6: 20 px blocks,
+  thick beds, deep joints, no debris) with a darker material copy
+  `green-darkrock` (look .10 to .08; by eye dark and blocky with a clean
+  foot, still less vertical than retail's buttresses). Green-1's query
+  `undulationArt=0.3` (look .09 to .08; the dimples are gone).
+- **Changed in the port:** round 3 set the contour line darkness to .5,
+  which matched the line count but nearly erased the lines and cost green-2
+  .03. The port uses .65: green-2 look .20 to .17, slope lines 1.5x retail
+  (were 2.35x), no other window moved, held-out green-7 unchanged.
+- **Not ported:** the water material change. By eye it put light flecks and
+  purple blotches on the open water, which had been a fine diagonal ripple
+  like retail's; the shelf it aimed at stayed smooth.
 
-Round 2's proposals:
+The harness now splits water into `deep` and `shelf`, and level ground into
+`flat` (slope under .03) and `gentle` (.03 to .08), so this round's numbers
+are not comparable class by class with earlier rounds. The largest findings
+at the start of round 4 (measured, the port's base render):
 
-1. **Contour hatch on near-level ground (6.1): built, and mostly not
-   Green's gap.** `bandLevel` is now a strength of its own (0 to 2) on slopes
-   0.004 to 0.09, gone before the slope class, so it no longer crowds the
-   slopes (measured 2026-11-18 on all seven windows: at 2, green-2's slope
-   lines .00443 to .00452, where the old reach control took them to .00586;
-   at 0 the picture is unchanged). But by eye retail Green's level ground is
-   mostly clean. The "level" lines retail has sit on the gentle parts of
-   green-2's hatched slope and on green-5's ridge flanks. At 2, green-5's
-   look fell .35 to .24 by drawing squiggles across its plain that retail
-   does not have: do not keep that. **Green-2's real gap is line
-   character:** retail's hatch is thin, faint, even wavy lines about 5 px
-   apart across the whole slope (spacing 1.3 fits it); ours are bold black
-   dashes in clumps (slope lines .0044 against .0019). Two tries that did
-   not fix it (scratch, green-2 alone): band step 3.7 (look .17 but blobby
-   ledges, not a hatch) and a lighter line, `world.column.bands` [1.3, 0.4]
-   (.27). Next: `bandJag`, `bandSoftness`, `terraceBreak`, and the rock
-   type green-2's strokes use; if none gives an even fine hatch, propose a
-   control for the bands' dash breakup (fixed noise in `contourBands`).
-2. **Thin dark lines on terraced faces (6.2): untested.** It asked to
-   "expose" `bandFade`, which the world's data can already set (now listed
-   in section 1 of the reference, with the other data-only settings). Probe
-   `bandFade` and `terraceCalm` first.
-3. **Shallow-water texture (6.3), a noise-warped surface fact for the
-   rock/grass mosaic (6.4), a contour-following material node (6.5), a
-   shore texture stage (6.6):** each cites trials; none was checked against
-   the code yet.
+- green-1 `shelf:edges` 0.08x retail: retail's shelf carries dark blue
+  specks and streaks, ours a smooth mottle. The deep water is within the
+  threshold: a fix must move `shelf`, not `deep`.
+- green-1 `flat:edges` 17.6x: by eye our plain's grain is brighter and
+  harder than retail's dark, soft grain. The ground material's grain
+  contrast, not relief.
+- green-5 `gentle:edges` 0.04x and `flat:edges` 0.02x: by eye retail's
+  gentle ground near the ridge carries small lumpy wrinkles at 5-15 px with
+  light rims, not contour lines; ours has a few long creases. Try
+  `wrinkles`, `lumpRelief` and `gentleRelief` before round 3's proposal 6.1.
+- green-5 `slope:lines` 0.24x and `steep:lines` 0.35x: the terrace risers'
+  dark lines (round 3's 6.2). A wider band step does not draw them
+  (measured: slope lines .00108 to .00091 at step 2.6, .00119 at 4), so this
+  likely needs a new effect.
+- green-3 `shore:edges` 0.35x and green-4 `steep:color` (the rock/grass
+  mosaic): round 3 proposed engine work for both without a surface-layer
+  trial. Try the surface layers first.
+- green-2: the hatch clumps because our slope is lumpy under it; the map's
+  `undulation` is not the cause (measured: at 0, or with its art share at
+  0, the slope crop renders the same). Look at the strokes' `heightVary`,
+  `widthVary` and `varySize`, and at the world's relief controls.
 
-Leads for round 3:
+Round 3's proposals, checked:
 
-- green-6 still wants dark, blocky, vertically jointed ridges with no
-  debris apron: a rock type of its own along those lines.
-- green-4's mosaic of rock and grass: round 2's `greenfold` tries (trials
-  024 and 075) are the starting point.
-- green-2's and green-5's level-ground lines: wait for proposal 1, or try
-  `bandFade` and a rock type with its own `banding` on the gentle strokes.
+1. **6.1, lines on gentle grades but not plains:** doubtful for green-5
+   (see above). On green-2 retail's hatch starts where the plain turns into
+   slope. If it is still wanted, `bandLevel`'s slope range (0.004 to 0.09)
+   may simply start too low, which is a retune, not a new control.
+2. **6.2, a dark line on terrace risers:** holds (measured above).
+3. **6.3 mosaic and 6.4 shore texture:** not evidenced; no surface-layer
+   trials.
+4. **6.5, the ground's grain:** its Scatter evidence was wrong (see the
+   brief's rules of evidence). Retry with dots of 1 px or more.
 
 ## Pilot notes (2026-11-18)
 

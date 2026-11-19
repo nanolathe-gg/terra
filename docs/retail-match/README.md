@@ -201,7 +201,19 @@ Change nothing else:
   anything renders.
 - **Claims you make by eye cite a crop or pair path.** A model that sees
   pictures can be fooled into seeing a match. If the numbers and your eye
-  disagree, say so, and do not keep the change.
+  disagree, say so, and do not keep the change. When you try several
+  values, keep the one both prefer: round 3 kept a line darkness of .5,
+  which cost its window .03, although its own trial at .65 scored better
+  and looked as right.
+- **Say what moved, and where.** A keep's description names the class
+  that changed, read from the trial's numbers and crops, not from what you
+  meant to change. Round 3 wrote that its water change textured the shelf;
+  it had put flecks on the open water instead (now `deep`, not `shelf`).
+- **Read the code before you write that a node or control does nothing.**
+  Round 3 reported that an unwired Scatter node reads zero; it reads the
+  pixel's position (`sculpt-materials.js`, `programSource`), and only a
+  disabled node gives zero. Its dots were 0.7 px, which is the likelier
+  reason they did not show.
 - **Scores can be gamed.** In past rounds, a flat gray matched retail's
   average brightness, scattered dark boulders improved a score, and
   blotches added "texture". Reject any change that improves a score by
