@@ -343,7 +343,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       if(!result.reused)Promise.resolve(result.digest).then(d=>{entry.digest=d??null;},()=>{});
       if(result.reused)kept(entry);
       else if(measureFinal)renderer.previousChunk.then(()=>{if(!changedSince(atSerial,entry.input,'E')){entry.finalCostMs=performance.now()-costAt;entry.finalCostBudget=costBudget;}},()=>{});
-      const key=rect.x+','+rect.y+','+canonicalSize+','+scale;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
+      const key=rect.x+','+rect.y+','+canonicalSize+','+scale;if(bakedBefore.has(key))rebakes++;if(bakedBefore.size>=4096)bakedBefore.clear();bakedBefore.add(key);metrics();return entry;
     }finally{feed.release?.();}
     const fields=await region(request,options,signal,readWeather);
     // H7 2b: the scene changed while this bake waited for its fields; its image would be dropped, so it never reaches the GPU.
@@ -354,7 +354,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     renderer.setBudget(gpuBudget,steadyGPU()+cacheBytes+copyBytes);signal?.throwIfAborted();
     const atSerial=serial,atRev={...rev},result=await renderer.renderChunk(fields,{...options,quality:'full',signal,stale,deferPipelines:!exportArt,deferCompletion:!exportArt});bakes++;
     const bitmap=await createImageBitmap(result.canvas,0,0,rect.width,rect.height,{colorSpaceConversion:'none'}),entry={...rect,bitmap,bytes:rect.width*rect.height*4,weathered:readWeather,serial:atSerial,rev:atRev,shapeRev:fields.revision,weatherRevB:fields.weatherRevB??(readWeather?-1:atRev.B),level:1,input:{x:fields.gridOrigin[0],y:fields.gridOrigin[1],width:(fields.gridWidth-1)*fields.gridSpacing,height:(fields.gridHeight-1)*fields.gridSpacing},heightPatch:keepHeight(fields)};
-    const key=rect.x+','+rect.y+','+canonicalSize;if(bakedBefore.has(key))rebakes++;bakedBefore.add(key);metrics();return entry;
+    const key=rect.x+','+rect.y+','+canonicalSize;if(bakedBefore.has(key))rebakes++;if(bakedBefore.size>=4096)bakedBefore.clear();bakedBefore.add(key);metrics();return entry;
   }
   // H7 2a: the overview is sampled once per edit, over the edit's dirty rectangle only, in slices that leave the frame free.
   // A 4 x 4 lattice of the 128 x 128 points (the same points the full overview samples) comes first and fills its blocks, so a
