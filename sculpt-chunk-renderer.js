@@ -273,7 +273,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     this.trimColorTiles(enough);this.trimWorking(new Set([this.activeInput,this.activeLevel]),enough);return enough();
   }
   async allocate(region,gridWidth,gridHeight,world_width,world_height,fed=false,scale=1,pixelScale=scale) {
-    region=alignedFieldRegion(region,scale);this.geometryValid=false;
+    region=alignedFieldRegion(region,scale);this.geometryValid=false;this.inputsPacked=false;   // fresh textures; the upload or feed that follows writes them raw
     this.voxel.clear();
     const rasterScale=this.fastRaster?pixelScale:scale<1?scale:Math.max(1,scale/2),width=Math.ceil(world_width/rasterScale),height=Math.ceil(world_height/rasterScale);   // Preview raster and output share pixels; finals retain supersampling.
     const fieldScale=fieldLevel(scale),fw=fieldDimension(region.fieldsWidth,scale),fh=fieldDimension(region.fieldsHeight,scale),gw=gridWidth,gh=gridHeight;
@@ -339,6 +339,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     return Array.isArray(supplied)?supplied:(this.config.maskKeys??MASK_KEYS).map(k=>supplied?.[k]??request.fields?.[k]);
   }
   upload(request,region,{gw,gh},planes) {
+    this.inputsPacked=false;   // the raw planes this writes are what the bake reads
     const fields=request.fields,n=request.gridWidth*(request.gridHeight??request.gridWidth),w=request.gridWidth,h=request.gridHeight??request.gridWidth;
     if(!fields?.h||fields.h.length!==n)throw new Error('nanolathe: invalid regional height field');
     const spacing=request.gridSpacing??region.gridSpacing,origin=request.gridOrigin??region.gridOrigin;
@@ -425,6 +426,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   // arithmetic as the CPU read (the weather blend) and `upload` (the export clamp, the byte conversions, the edge repeat), in f32. The
   // painted flags come back as a 25-bit word (one small mapped read), then set the same uniforms `upload` does.
   async feedFromGpu(request,region,{gw,gh},feed,passes) {
+    this.inputsPacked=false;   // the feed writes the raw lattice the bake reads
     const device=this.device,spacing=region.gridSpacing,ox=Math.round(region.gridOrigin[0]/spacing),oy=Math.round(region.gridOrigin[1]/spacing);
     this.f('uChunkGridOrigin',[ox,oy]);
     const encoder=device.createCommandEncoder({label:'chunk feed'});
@@ -478,6 +480,9 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       encoder.copyBufferToTexture({buffer:this.maskPackBuffer,bytesPerRow:row*4,rowsPerImage:rows},{texture:this.colorMaskTexture,origin:[0,y,0]},[width,rows,3]);
       encoder.copyBufferToTexture({buffer:this.maskPackBuffer,offset:row*rows*12,bytesPerRow:row*4,rowsPerImage:rows},{texture:this.gridTexture,origin:[0,y,0]},[width,rows,3]);
     }
+    // The packed form replaced the raw inputs in place; a bake or draw outside this
+    // chunk's own upload-to-draw sequence (the console timers) must not read them as raw.
+    this.inputsPacked=true;
   }
 
   // Geometry and surface textures transfer from the mutable workspace; only

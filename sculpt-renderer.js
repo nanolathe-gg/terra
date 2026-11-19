@@ -1422,6 +1422,10 @@ export class TerrainRenderer {
   // Milliseconds from submitting one bake to the GPU finishing it, with
   // the GPU idle before; lastBakeGPU holds the pass's own GPU time.
   async timeBake() {
+    // The color pass packs the chunk's mask and grid inputs in place at every draw, so a
+    // console re-bake after a draw would bake the packed form and time garbage; the real
+    // pass's own GPU time is lastBakeGPU (sculptDebug.bakeGpuMs).
+    if (this.inputsPacked) throw new Error('bakeMs answers only while the chunk holds raw inputs; the last draw packed them in place for the color pass. Read bakeGpuMs, the last real bake\'s own GPU time, instead.');
     await this.device.queue.onSubmittedWorkDone();
     const timer = this.timer(), start = performance.now(), dirty = this.fieldsDirty;
     // Each retry bakes again; if the last attempt still misses, its encoder is never submitted, so the fields go back to unbaked and the timer's slot is freed.
@@ -1444,6 +1448,9 @@ export class TerrainRenderer {
   // The same for one draw (options as draw()); the fields are baked first,
   // so this times the terrain pass alone. Returns {ms, gpuMs}.
   async timeDraw(options = {}) {
+    // As timeBake: after a draw the inputs hold the packed form, so a re-draw would pack
+    // it again and draw garbage; the last real draw's GPU time is lastGPU.
+    if (this.inputsPacked) throw new Error('drawMs answers only while the chunk holds raw inputs; the last draw packed them in place for the color pass. Read the last real draw\'s GPU time (renderer.lastGPU) instead.');
     if (this.fieldsDirty) await this.withPipelines(() => this.bakeFields());
     await this.device.queue.onSubmittedWorkDone();
     const start = performance.now();
