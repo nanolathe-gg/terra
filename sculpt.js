@@ -5,9 +5,9 @@ import {configureMap,mapGeometry,mountMapCanvas,validMapSize} from './sculpt-map
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,worldHome,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-column.js';
-import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,layerCopyMissing,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,roleName,worldKey,LIBRARY} from './sculpt-materials.js';
+import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,layerCopyMissing,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,roleName,worldKey,LIBRARY,materialRef,materialSlotFor} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
-import {ROCK_PRESETS,ROCK_HEADLINES,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials,dropRockMaterials} from './sculpt-rock-presets.js';
+import {ROCK_PRESETS,ROCK_HEADLINES,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials,dropRockMaterials,rockRef,rockSlotFor} from './sculpt-rock-presets.js';
 import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf,waterTone} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES,worldControlRequirement,WORLD_PRIMARY_CONTROLS} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
@@ -1604,12 +1604,15 @@ function moveSelectedShapes(dx,dy) {
 let shapeClipboard=null;
 function copyShapes() {
   const group=selectedShapes(); if (!group.length || stroke || moving || loading || !ready) return false;
-  shapeClipboard={nodes:cloneNodes(group.map(i => nodes[i])),pastes:0};
+  // A copy's rock type and material are remembered by identity, not slot: a slot freed by a delete (or an undo) may hold another by paste time.
+  const refs=group.map(i => { const p=nodes[i].params??{},rock=Math.round(p.rockPreset??-1),ground=p.groundPreset; return {rock:rock>0?rockRef(mapRocks,rock):undefined,ground:Number.isInteger(ground)&&ground>0?materialRef(mapMaterials,ground):undefined}; });
+  shapeClipboard={nodes:cloneNodes(group.map(i => nodes[i])),refs,pastes:0};
   status(group.length>1?`Copied ${group.length} shapes.`:`Copied ${shapeName(group[0])}.`); return true;
 }
 function pasteShapes(verb='Pasted') {
   if (!shapeClipboard || stroke || moving || loading || !ready) return false;
   const copies=cloneNodes(shapeClipboard.nodes),step=32*(shapeClipboard.pastes+1);
+  copies.forEach((n,k) => { const ref=shapeClipboard.refs[k]; if (ref.rock!==undefined) n.params.rockPreset=rockSlotFor(mapRocks,ref.rock); if (ref.ground!==undefined) n.params.groundPreset=materialSlotFor(mapMaterials,ref.ground); });
   const m=fitToMap(copies.flatMap(n => n.points),[1,0,0,1,step,step]);
   if (!m) { status('The copied shapes do not fit on this map.'); return true; }
   shapeClipboard.pastes++; cancelWeather();

@@ -254,6 +254,11 @@ export function rocksBeneath(nodes,index,rocks,reaches){
  for(let i=0;i<Math.min(index,nodes.length);i++){const n=nodes[i];if(n?.kind!=='landform'||n.hidden)continue;const k=strokeRock(n,rocks);if(k>0&&reaches(n))slots.add(k);}
  return [...slots];
 }
+// A rock type as copied shapes remember it (sculpt.js copyShapes): its key and name, not its slot, which a deleted rock type frees for the
+// next one added. rockSlotFor finds it again at paste time: the rock type with its key, else its name; Rock beneath (-1) when the map no longer
+// has it, or `ref` is null (the copied choice named no rock type).
+export const rockRef=(rocks,slot)=>{const r=rocks.find(x=>x.slot===slot);return r?{key:r.key??null,name:r.name}:null;};
+export function rockSlotFor(rocks,ref){const r=ref&&((ref.key&&rocks.find(x=>x.key===ref.key))||rocks.find(x=>x.name===ref.name));return r?r.slot:-1;}
 // Strokes whose choice the list does not hold go to Rock beneath (a stroke carried from another map, a preset deleted elsewhere).
 export const keepStrokeRocks=(nodes,rocks)=>nodes.map(n=>n.params&&n.params.rockPreset!==undefined&&strokeRock(n,rocks)!==Math.round(n.params.rockPreset)?{...n,params:{...n.params,rockPreset:-1}}:n);
 // The slots in use: those a shown landform stroke chooses (slot 0 needs no slot of the table). Only these reach the renderer (setRocks): a

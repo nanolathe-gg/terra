@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {NODES, LIBRARY, MAX_NODES, MATERIAL_SLOTS, copyMaterial, copyMaterials, blankMaterial, makeNode, orderNodes, nodeTypes, compileMaterial, programKey, programSource, stagePlan,
   materialReliefBound, materialRenderKey, soloMaterial, colorSources, materialColor, recolorMaterial, controlSpec, controlRange, nodeParams, withWorldMaterials, worldOwnFor, worldMaterials, adoptWorldMaterials, worldOwnMaterials, keptWorldMaterials, mergeWorldMaterials, worldKept, addMaterial, duplicateMaterial, setMaterial,
-  assignMaterial, deleteMaterial, strokeMaterial, keepStrokeMaterials, materialsInUse, materialUsers, materialText, parseMaterialText, reseedMaterial, materialTint} from '../sculpt-materials.js';
+  assignMaterial, deleteMaterial, strokeMaterial, keepStrokeMaterials, materialRef, materialSlotFor, materialsInUse, materialUsers, materialText, parseMaterialText, reseedMaterial, materialTint} from '../sculpt-materials.js';
 import {graphPositions, fitGraph, graphGrid, cardHeight, CARD} from '../sculpt-material-graph.js';
 import {savedWorld, copySavedWorld} from '../sculpt-save.js';
 
@@ -184,6 +184,20 @@ test('a map always has a ground and a water material, and an older save falls ba
   assert.throws(() => copyMaterials([list[0], {...list[0], slot: 3}]), /Only one material/);
   // Fields of an earlier format are dropped: what is left is a material with only its Material node.
   assert.deepEqual(copyMaterials([{slot: 1, name: 'Old', steps: [], knobs: {}}])[0].nodes.map(n => n.type), ['output']);
+});
+
+test('a copied stroke finds its material by identity, not by its old slot (CODE.md #3)', () => {
+  let list = worldMaterials(config);
+  const sand = addMaterial(list, LIBRARY['desert-ground'], 'Sand'); list = sand.materials;
+  const ref = materialRef(list, sand.slot);
+  assert.equal(materialSlotFor(list, ref), sand.slot);
+  list = deleteMaterial(list, [], sand.slot).materials;
+  const moss = addMaterial(list, LIBRARY['desert-ground'], 'Moss'); list = moss.materials;
+  assert.equal(moss.slot, sand.slot, 'the new material takes the freed slot');
+  assert.equal(materialSlotFor(list, ref), -1, 'the copy goes to the ground beneath, not to the material now in its slot');
+  const water = list.find(m => m.worldWater);
+  assert.equal(materialSlotFor(list, materialRef(list, water.slot)), -1, 'water is not a stroke\'s ground');
+  assert.equal(materialSlotFor(list, null), -1);
 });
 
 test('adding, assigning, deleting and what strokes keep', () => {
