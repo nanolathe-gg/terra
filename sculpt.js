@@ -805,6 +805,9 @@ function evaluate(from=0,rect=null) {
   if(materialCovers){materialTerrainDirty=true;markChanged();return;}
   regionalFields.changed(regionalDirtyRect(from,rect)); markChanged();
 }
+// The earliest stage a material change since the last compile reached: a layer whose pipeline was still compiling kept its old picture, so
+// the tiles draw again from there once it is generated (renderer.onmaterials).
+let materialStage=null;
 // The renderer holds the materials in use: the world's ground and water, and those a visible stroke chose.
 function syncMaterials() {
   if (!renderer) return;
@@ -822,7 +825,9 @@ function setRendererMaterials(next) {
   // A slot's cache layers and the world surfaces it draws (its roles: the solid reads which slot is the rock's, and no scan covers it).
   const layers=list=>[...list].sort(([a],[b])=>a-b).map(([slot,m])=>[slot,...materialStates(m),...Object.keys(m).filter(k=>/^world[A-Z]/.test(k)&&m[k]).sort(),m.worldLayer??''].join(':')).join(',');
   const height=layers(before)===layers(after)&&[...after].every(([slot,m])=>materialHeightKey(m)===materialHeightKey(before.get(slot)));
-  return [height?null:'C',uniform,'F'].filter(Boolean).sort()[0];
+  const stage=[height?null:'C',uniform,'F'].filter(Boolean).sort()[0];
+  materialStage=renderer.materialsCompiling()?[materialStage,stage].filter(Boolean).sort()[0]:stage;
+  return stage;
 }
 function restoreMaterials(materials) {
   mapMaterials=structuredClone(materials); nodes=keepStrokeMaterials(nodes,mapMaterials); syncMaterialChoices(); syncMaterials(); materialEditor?.refresh(); keepWorldMaterials(); surfacePanel?.refresh();
@@ -2974,6 +2979,8 @@ async function bootMap(pending=null) {
   mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
   renderer=mapCanvas.renderer; renderer.onerror=message => error(message); materialUseKey='[]'; syncMaterials();
+  // A material's pipeline started or finished compiling (sculpt-material-cache.js): the export says why it waits, and a generated layer is drawn.
+  renderer.onmaterials=done=>{ if(done)worldChanged({stage:materialStage??'C',world:false}); if(!renderer.materialsCompiling())materialStage=null; updateControls(); schedule(); };
   // A material's drawn color read back (sculpt-material-cache.js readMeans): the Color pickers show it.
   renderer.onmeans=()=>{syncRockColors();refreshShallowRow();surfacePanel?.refresh();materialEditor?.refreshColors?.();pickCard?.colors();};   // the world's ground and water are materials: a renderer has none until told
   worldChanged(renderer.setColors(worldColors()));$('export').textContent='Save view image';
