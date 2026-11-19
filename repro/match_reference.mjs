@@ -44,6 +44,19 @@ for (const [group, list] of KNOBS) {
 }
 L.push('### Colors', '', 'Set as `?key=rrggbb` in a `--query`, or in the world file where the world names it.', '');
 head(['key', 'what']); for (const [k, label] of COLOR_KEYS) row([`\`${k}\``, label]); L.push('');
+// Settings the world's data may set that have no World panel row (materials/defaults.json knobs that are neither a row nor a stroke field):
+// engine numbers such as the bands' upper slope. Round 2 asked for `bandFade` to be "exposed" without knowing it could already be set.
+{
+  const rows = new Set(KNOBS.flatMap(([, list]) => list.map(r => r[0])));
+  const strokeKeys = new Set([...scene.SHAPE_FIELDS.map(f => f[0]), ...scene.LANDFORM_KEYS, ...scene.SECTION_KEYS]);
+  const hidden = Object.keys(defaults.knobs ?? {}).filter(k => !rows.has(k) && !strokeKeys.has(k)).sort();
+  L.push('### Data-only settings (no panel row)', '', 'The renderer reads these too. They have no World panel row and no range check, so probe them with care and',
+    'read how the code uses one before you rely on it (`grep -n "<key>" sculpt-renderer.js engine-*.wgsl`). Set them like a World control:',
+    '`world.knobDefaults`, a rock type\'s knobs where marked "rock", or `--query`.', '');
+  head(['key', 'default', 'world', 'rock']);
+  for (const k of hidden) row([`\`${k}\``, num(defaults.knobs[k]), k in own ? num(own[k]) : '', rockKeys.has(k) ? 'yes' : '']);
+  L.push('');
+}
 
 L.push('## 2. Material nodes', '', 'A material is a node graph in `materials/textures.json` (key → {name, seed, nodes, controls, palette, dither}).',
   `Limits: ${mats.MAX_NODES} nodes, ${mats.MAX_STOPS} gradient stops, ${mats.MAX_PALETTE} palette entries. Node fields: \`id\`, \`type\`, \`kind\` (when the type has kinds),`,

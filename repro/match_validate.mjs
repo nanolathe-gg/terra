@@ -133,6 +133,20 @@ for (const f of scenes) {
     }
   });
 }
+// A rock type edited since the base that more than one map or a tool draws: round 2 tuned Green's shared greenstone for green-5 alone,
+// which also changed the Knob, Cup knoll and Rock fin tools. A change for one map belongs in a new rock type.
+if (baseCommit) {
+  let before = {};
+  try { before = JSON.parse(execFileSync('git', ['-C', repo, 'show', `${baseCommit}:materials/${world}.json`], {encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']})).world?.rock?.recipes ?? {}; } catch {}
+  const slotOf = new Map(rocks.map(r => [r.key, r.slot]));
+  for (const [key, recipe] of Object.entries(recipes)) {
+    if (!before[key] || JSON.stringify(before[key]) === JSON.stringify(recipe)) continue;
+    const tools = (w.tools ?? []).filter(t => t.rock === key).map(t => t.label ?? t.id);
+    const users = scenes.filter(f => (load(`repro/scenes/${f}`).strokes ?? []).some(([, , o]) => o?.card?.rockPreset === slotOf.get(key))).map(f => f.replace('.json', ''));
+    if (tools.length || users.length > 1)
+      warnings.push(`world.rock.recipes.${key} changed since the base, and it is shared: ${[tools.length ? `the ${tools.join(', ')} tool${tools.length > 1 ? 's' : ''}` : '', users.length ? `windows ${users.join(', ')}` : ''].filter(Boolean).join(' and ')} draw it. This is a world change: judge it on every window it reaches and the tools. For one map's look, add a new rock type instead (append it to world.rock.presets) and give that map's strokes its slot.`);
+  }
+}
 for (const k of Object.keys(w.knobDefaults ?? {})) if ((pinned.get(k)?.length ?? 0) === scenes.length && scenes.length)
   warnings.push(`world.knobDefaults.${k}: every window's scene sets its own ${k} (its query), so this world default reaches none of them. It is a map setting: change it per window in the scene's query (the map lane).`);
 for (const [k] of new URLSearchParams(query)) if (pinned.has(k)) console.log(`note: --query ${k} overrides the scenes' own value (${pinned.get(k).join(', ')}) in every window it renders.`);
