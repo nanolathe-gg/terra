@@ -3,7 +3,7 @@ import {MATERIAL_SLOTS} from './sculpt-materials.js';
 import {shapePaths,simplifyPath} from './sculpt-paths.js';
 import {invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {isRiver, isBraided, riverWidth, riverCurvature} from './sculpt-river.js';
-import {strokeCurve, scatterSize, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, landformDigs, impactOn, bucklingOn, secondaryNear, impactSetup, impactPoint, impactEnd, impactSpread, impactWeight, landformPeak, rockClaimMargin} from './sculpt-shape-presets.js';
+import {strokeCurve, scatterSize, leanSetup, variability, CV_N, sampleKnots, landformSides, landformReach, landformBackSide, alongKnots, landformElevation, landformSteps, landformShore, landformBeach, landformMakesWater, talusOn, landformSigned, landformDigs, impactOn, bucklingOn, secondaryNear, impactSetup, impactPoint, impactEnd, impactSpread, impactWeight, landformPeak, rockClaimMargin, fingerReach} from './sculpt-shape-presets.js';
 // H6 (Green): shape on the GPU. Evaluates the brushes Green's windows use (paint, erase, deep, shallow, mountain, hill and the ground
 // node) with the compute passes of engine-shape.wgsl, and keeps a CPU copy of the 31 authored planes that the existing consumers read.
 //
@@ -527,7 +527,7 @@ function coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facet = 0
       u: {fcMode: facet, fcL: L, fcStrength: clamp(q.iceFacets, 0, 1), fcStep: Math.max(0, q.crystalStep ?? 0), fcSurface: Math.round(q.facetSurface || 0) >= 1 ? 1 : 0, fcShare: .2 + .5 * am, coPutW: 1, coBx0: boxF.x0, coBy0: boxF.y0, coBx1: boxF.x1, coBy1: boxF.y1}};
   }
   // Lobe variety grows a few fingers up to about three times the usual length: their reach grows with it, so a spit is not cut off flat.
-  const fReach = .5 * radius * (1 + 1.95 * clamp(q.fingerVary || 0, 0, 1)), fLimit = fReach + spacing * 3, lReach = layers ? coastLayerReach(q) : 0, reach = Math.max(fingers ? fLimit : 0, lReach, beach ? BEACH_REACH : 0, plates ? Math.max(plWater, plLand) + 2 * spacing : 0);
+  const fReach = fingerReach(q, radius), fLimit = fReach + spacing * 3, lReach = layers ? coastLayerReach(q) : 0, reach = Math.max(fingers ? fLimit : 0, lReach, beach ? BEACH_REACH : 0, plates ? Math.max(plWater, plLand) + 2 * spacing : 0);
   const m = Math.ceil(reach / spacing) + 12, box = expand(region, m, grid), blurR = Math.max(1, Math.round(10 * refSpacing / spacing));
   const n = Math.max(1, Math.round(q.shoreLayers)), W = Math.max(4, q.layerPx), vary = clamp(q.layerVary, 0, 1), scal = layers && Math.round(q.layerStyle) === 1;
   const Rc = Math.max(8, q.layerCircle), cv = clamp(q.lavaCircleVary || 0, 0, 1), C = Rc * 1.3;

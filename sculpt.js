@@ -10,7 +10,7 @@ import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_HEADLINES,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials,dropRockMaterials} from './sculpt-rock-presets.js';
 import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf,waterTone} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES,worldControlRequirement,WORLD_PRIMARY_CONTROLS} from './sculpt-control-schema.js';
-import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
+import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps,fingerReach} from './sculpt-shape-presets.js';
 import {strokeKind,shapeFrom,savedToolCard,MASK_KEYS,SHAPE_FIELDS,isCover,strokeParams,sceneNodes,addDefaults,borrowBeach,DEFAULT_SEED,worldSetting as worldSettingIn,worldDefault as worldDefaultIn,shapeDefaults as shapeDefaultsIn,toolDefaults as toolDefaultsIn,strokeCard as strokeCardIn,groundDefaults as groundDefaultsIn,migrateRiver,
   shapeContext as shapeContextIn,worldShapeKey,timeKnobs,SURFACE_SLIDER_IDS,surfaceSliders,drawOptions,materialKnobs as materialKnobsIn,materialRequest,worldHexColors,rendererColors,rgbColor,TIME_SLIDER_IDS,surfaceGroupsHidden,weatheredCell,weatheredHeights,bilinearCells,regionalCheck,repeatCheck,pagedTime,heightsNode} from './sculpt-scene.js';
 import {createGpuFields,createPagedFields,createShapeEngine,TIME_APRON,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER,lfcWidth,heightsBounds} from './sculpt-gpu-fields.js';
@@ -791,7 +791,7 @@ function nodeBounds(n) {
 function landformExtent(n,q=nodeShapeParams(n)) {
   const radius=q.radius||40,k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1;
   return {reach:landformReach({...q,radius},k),
-    coast:q.fingers>0||q.shoreLayers>=1||q.shorePlates>0?Math.max(q.fingers>0?.5*radius+3*spacing:0,q.shoreLayers>=1?coastLayerReach(q):0,q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0)+2*spacing:0):null,
+    coast:q.fingers>0||q.shoreLayers>=1||q.shorePlates>0?Math.max(q.fingers>0?fingerReach(q,radius)+3*spacing:0,q.shoreLayers>=1?coastLayerReach(q):0,q.shorePlates>0?Math.max(q.plateWaterPx||0,q.plateLandPx||0)+2*spacing:0):null,
     prism:q.iceFacets>0&&facetShape(q)===2?lfcWidth(q)*k+2*spacing:null,
     spur:Math.round(q.spurCount)>=1?(q.spurLength||0)*(q.spurForks>0?2.1:1.6)*k+radius*Math.max(1,((q.spurWidth||.8)+(q.spurBulb||0)*.7)*1.7):null};
 }
@@ -1169,7 +1169,7 @@ function regionalReadApron(n) {
     // Signed-distance normals read ten neighbors and a derivative. A new
     // tongue can reach another tongue before reaching its original shore,
     // so keep the connection band as well as the visible finger reach.
-    if (q.fingers>0) cells+=Math.ceil(3*(.5*q.radius+spacing*3)/spacing)+32;
+    if (q.fingers>0) cells+=Math.ceil(3*(fingerReach(q)+spacing*3)/spacing)+32;
     if (Math.round(q.shoreLayers)>=1) cells+=Math.ceil(coastLayerReach(q)/spacing)+2;
   }
   if(Math.round(q.layerStyle)===1&&Math.round(q.shoreLayers)>=1&&n.kind==='landform'){
