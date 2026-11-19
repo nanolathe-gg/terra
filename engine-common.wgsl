@@ -254,7 +254,7 @@ struct Uniforms {
     bandLine: f32,        // darkness of the line along each riser (the column block's `bands`)
     bandJag: f32,         // pixel-scale wiggle of the band lines, in band steps (0: smooth)
     bandFade: f32,        // slope where bands are gone (they fade from 0.35/0.75 of it)
-    bandLevel: f32,       // how far bands reach onto level ground: 0 from slope 0.07-0.18, 1 from 0.004-0.03
+    bandLevel: f32,       // strength of the bands on near-level ground (slope 0.004-0.09), times the slopes'
     sun: vec3f,           // the renderer's light, for lit crack walls
     crystalInk: f32,      // crystal outlines: 0 soft 92% dark, 1 crisp pure black
     // Painted masks (card C5).
