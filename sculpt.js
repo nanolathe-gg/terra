@@ -122,11 +122,11 @@ function buildShapeOptions() {
   $('lf-rock-edit').onclick=() => { const {slots}=cardRock(); openRockType(slots.length===1?slots[0]:null); };
   $('lf-rock').addEventListener('change',followCardRock);
   $('cracks-look').onclick=() => { const {slots}=cardRock(); openRockType(slots.length===1?slots[0]:null,'cracks-bands'); };
-  $('curve-form').addEventListener('change',() => { const f=$('curve-form').value; setCurve(f?{form:f}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
-  $('curve-reset').addEventListener('click',() => { const c=currentCurve(); setCurve(c?.form?{form:c.form}:null); if (selected>=0) { checkpoint(); queueWeather(); } });
-  $('along-reset').addEventListener('click',() => { setCurve(null,'along'); if (selected>=0) { checkpoint(); queueWeather(); } });
-  $('curve-link').addEventListener('click',() => { toggleLink(); if (selected>=0) { checkpoint(); queueWeather(); } });
-  $('curve-mirror').addEventListener('click',() => { mirrorSides(); if (selected>=0) { checkpoint(); queueWeather(); } });
+  $('curve-form').addEventListener('change',() => { const f=$('curve-form').value; setCurve(f?{form:f}:null); commitCard(); });
+  $('curve-reset').addEventListener('click',() => { const c=currentCurve(); setCurve(c?.form?{form:c.form}:null); commitCard(); });
+  $('along-reset').addEventListener('click',() => { setCurve(null,'along'); commitCard(); });
+  $('curve-link').addEventListener('click',() => { toggleLink(); commitCard(); });
+  $('curve-mirror').addEventListener('click',() => { mirrorSides(); commitCard(); });
   curveEditorEvents(); alongEditorEvents(); curveNumberEvents();
   for (const id of ['section-preview','along-preview']) new ResizeObserver(() => { if (!$('section-preview-control').hidden) drawSection(); }).observe($(id));
   for (const [key,id] of SHAPE_FIELDS) $(id).addEventListener('input',() => {
@@ -145,7 +145,7 @@ function buildShapeOptions() {
   // below: snapshot it for Undo and restart the refinement the input handler
   // canceled. Without this the page stays "paused while editing" and Export
   // never re-enables (review A1, 2026-10-27).
-  for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
+  for (const [,id] of SHAPE_FIELDS) $(id).addEventListener('change',commitCard);
 }
 let toolSettings={};
 // The card's Rock row adding a rock type (syncRockChoices' "add:" choices): added first, so the row's own input handler gives the shape the new slot, and
@@ -531,7 +531,7 @@ function commitNumberKnots(ks) {
   const c=curveContext();if(curvePoint.side==='along')setCurve(roundKnots(ks),'along');
   else if(curvePoint.side==='back'&&!sidesLinked(c))storeSection(c,frontKnots(c),ks);
   else storeSection(c,ks,backKnots(c));
-  if(selected>=0){checkpoint();queueWeather();}
+  commitCard();
 }
 function curveNumberEvents() {
   $('curve-point-side').onchange=()=>{curvePoint={side:$('curve-point-side').value,i:0};drawSection();};
@@ -904,7 +904,7 @@ function surfaceHost() {
     // The material a built-in that draws a world role takes (Materials panel; the rock built-ins the world's rock): its name, or null.
     roleMaterial:builtin=>{const m=roleCopy(builtin);return m?{name:m.name,color:hex(m),own:own(m)}:null;},
     // A layer's material's own Color (sculpt-materials.js recolorMaterial): its copy, or for a built-in that draws a role, the role's.
-    recolor:(layer,rgb,commit)=>{const m=layer.material!=null?layerMaterial(layer):roleCopy(layer.builtin);if(!m)return;editMaterials(setMaterial(mapMaterials,m.slot,recolorMaterial(m,rgb,drawnColor(m))));if(commit)checkpoint(true);},
+    recolor:(layer,rgb,commit)=>{const m=layer.material!=null?layerMaterial(layer):roleCopy(layer.builtin);if(!m)return;editMaterials(setMaterial(mapMaterials,m.slot,recolorMaterial(m,rgb,drawnColor(m))));if(commit&&!stroke&&!moving)checkpoint(true);},
     slotMaterial:slot=>{const m=mapMaterials.find(m=>m.slot===slot);return m?{name:m.name,color:hex(m)}:null;},
     // Layers hidden while the artist designs (their keys): a view of this page only, never saved, undone or exported.
     // The design view (Hide and Solo in World › Surface): the map says it is on and that an export still draws every layer.
@@ -1732,6 +1732,13 @@ function checkpoint(mapOnly=false) {
   history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); history.at(-1).name=changeName(history.at(-2),history.at(-1)); if (history.length>48) history.shift(); historyIndex=history.length-1;
   renderLayers(); updateControls(); persistLater(); pickCard?.refresh();   // a pinned pixel reads again after every committed change
 }
+// A card change commits one undo step — never mid-gesture, where a checkpoint would capture a
+// half-drawn stroke or a half-moved selection (the gesture's own commit carries the change).
+// changeSelected and the seed handler guard the same way; the card's keyboard-reached controls
+// can fire while the pointer is captured elsewhere.
+function commitCard() {
+  if (selected>=0 && !stroke && !moving) { checkpoint(); queueWeather(); }
+}
 function moveHistory(delta) {
   const next=historyIndex+delta; if (!ready || loading || stroke || moving || mapFeatures?.busy || next<0 || next>=history.length) return;
   const saved=history[next].world?.stored;worldStoreTransaction++;
@@ -2044,7 +2051,7 @@ document.querySelector('.tool-groups').addEventListener('click',event => {
   updateControls();schedule();persistLater();
 });
 for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls({},[id]); });
-for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('change',() => { if (selected>=0) { checkpoint(); queueWeather(); } });
+for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('change',commitCard);
 for (const [id,kind] of [['node-seed','seed'],['node-delete','delete'],['node-up','up'],['node-down','down'],['node-hide','hide']]) $(id).addEventListener('click',() => nodeAction(kind));
 $('shape-duplicate').addEventListener('click',duplicateShapes);
 // Features and Starts are two entries on the rail for the one tool (sculpt-features.js): Features opens it to place, Starts in its starts mode.
@@ -2818,10 +2825,10 @@ function mountRockPanel() {
   $('rock-absorb-world').onchange=()=>{const off=$('rock-absorb-world').checked;if(rockSelected===0){worldAbsorb(off?null:shown().absorb);worldInputQueue.end();}else setPresetColors({absorb:off?null:shown().absorb},true);};
   $('rock-add').onchange=()=>{
     const key=$('rock-add').value;$('rock-add').value='';if(!key)return;
-    try{const slot=addRockType(key);selectRock(slot);checkpoint(true);}catch(err){rockNote(err.message);}
+    try{const slot=addRockType(key);selectRock(slot);if(!stroke&&!moving)checkpoint(true);}catch(err){rockNote(err.message);}
   };
   $('rock-duplicate').onclick=()=>{
-    try{const copy=duplicateRock(mapRocks,rockSelected,selectedRock());finishRockAddition({...copy,materials:mapMaterials});selectRock(copy.slot);checkpoint(true);}catch(err){rockNote(err.message);}
+    try{const copy=duplicateRock(mapRocks,rockSelected,selectedRock());finishRockAddition({...copy,materials:mapMaterials});selectRock(copy.slot);if(!stroke&&!moving)checkpoint(true);}catch(err){rockNote(err.message);}
   };
   const rename=()=>{
     if(rockSelected===0)return;
