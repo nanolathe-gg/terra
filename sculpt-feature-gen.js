@@ -238,7 +238,7 @@ function makeShadow(body, o, r) {
   for (let Y = 0; Y < h; Y++) for (let X = 0; X < w; X++) {
     // inverse shear
     const Yr = Y - sh.ay, hgtScaled = -Yr / (up || 1);       // height above ground in body px
-    const hg = up === 0 ? 0 : hgtScaled;                       // a zero `up` (artist-set shadowLen 0) throws no shadow at all; a negative one flips the screen direction by its sign
+    const hg = up > 0 ? hgtScaled : hgtScaled;                 // (negative `up` flips the screen direction)
     const xb = (X - sh.ax) - side * shx * Math.max(0, hg);
     const yb = groundY - hg - body.ay + body.ay;               // body row (relative to the sprite top)
     const bx = Math.round(xb + body.ax), by = Math.round(yb);
