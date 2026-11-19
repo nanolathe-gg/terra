@@ -102,32 +102,49 @@ export async function mountMapFeatures(api) {
   }
   // ---- pixels: a worker draws sprites and paints deposits and vents ----
   // The worker answers every job (a job's own failure comes back as its error). An error on the worker itself (it failed to load, or it died) fails
-  // every job in flight and ends that worker: a job after it starts a new one (one that failed less than 2 s ago fails at once instead, so a
+  // every waiting job and ends that worker: a job after it starts a new one (one that failed less than 2 s ago fails at once instead, so a
   // generator that cannot load is not started again on every draw). Such a failure is marked `lost`, so the sprite and thumbnail caches
-  // drop the entry and ask again, where a job's own error is kept (it would fail the same way). A job given an abort signal is rejected, and
-  // forgotten, when it aborts; the worker's answer is then dropped.
-  let worker=null,jobId=0,lost=null;
-  const jobs=new Map();
+  // drop the entry and ask again, where a job's own error is kept (it would fail the same way). Jobs wait here, in order, and only
+  // IN_FLIGHT at a time are posted, so a job given an abort signal that aborts before its turn is never drawn (a light slider's stale
+  // sprites, say); one already posted is rejected and forgotten, and the worker's answer is then dropped.
+  const IN_FLIGHT=2;
+  let worker=null,jobId=0,lost=null,inFlight=0;
+  const jobs=new Map(),queue=[];
+  const lostError=() => Object.assign(new Error(lost.message),{lost:true});
+  function startWorker() {
+    const own=new Worker(new URL('./sculpt-feature-worker.js',import.meta.url),{type:'module'});
+    own.onmessage=({data}) => {
+      if (worker===own) inFlight--;
+      const job=jobs.get(data.id); jobs.delete(data.id);
+      if (job) { job.done(); if (data.error) job.reject(new Error(data.error)); else job.resolve(data); }
+      pump();
+    };
+    own.onerror=event => {
+      const message=event.message||'The feature generator could not start.';
+      own.terminate(); if (worker===own) { worker=null; inFlight=0; } lost={at:performance.now(),message};
+      queue.length=0;
+      for (const [id,job] of jobs) { jobs.delete(id); job.done(); job.reject(lostError()); }
+      status(message);
+    };
+    return own;
+  }
+  function pump() {
+    while (inFlight<IN_FLIGHT && queue.length) {
+      const id=queue.shift(),job=jobs.get(id); if (!job) continue;   // aborted while it waited
+      if (!worker && lost && performance.now()-lost.at<2000) { jobs.delete(id); job.done(); job.reject(lostError()); continue; }
+      worker??=startWorker(); inFlight++;
+      worker.postMessage({...job.message,id},job.transfer); job.message=job.transfer=null;
+    }
+  }
   function work(message,transfer=[],signal=null) {
     if (signal?.aborted) return Promise.reject(signal.reason);
-    if (!worker && lost && performance.now()-lost.at<2000) return Promise.reject(Object.assign(new Error(lost.message),{lost:true}));
-    if (!worker) {
-      const own=new Worker(new URL('./sculpt-feature-worker.js',import.meta.url),{type:'module'});
-      own.onmessage=({data}) => { const job=jobs.get(data.id); jobs.delete(data.id); if (!job) return; job.done(); if (data.error) job.reject(new Error(data.error)); else job.resolve(data); };
-      own.onerror=event => {
-        const message=event.message||'The feature generator could not start.';
-        own.terminate(); if (worker===own) worker=null; lost={at:performance.now(),message};
-        for (const [id,job] of jobs) if (job.worker===own) { jobs.delete(id); job.done(); job.reject(Object.assign(new Error(message),{lost:true})); }
-        status(message);
-      };
-      worker=own;
-    }
-    const id=++jobId,own=worker;
+    if (!worker && lost && performance.now()-lost.at<2000) return Promise.reject(lostError());
+    const id=++jobId;
     return new Promise((resolve,reject) => {
       const abort=() => { if (jobs.delete(id)) reject(signal.reason); };
       signal?.addEventListener('abort',abort,{once:true});
-      jobs.set(id,{resolve,reject,worker:own,done:() => signal?.removeEventListener('abort',abort)});
-      own.postMessage({...message,id},transfer);
+      jobs.set(id,{resolve,reject,message,transfer,done:() => signal?.removeEventListener('abort',abort)});
+      queue.push(id); pump();
     });
   }
   // The map's light for the generator: its sun in the sprites' view (TA's view looks down (0, south 1, up 2): x east, y the sun's
@@ -146,23 +163,34 @@ export async function mountMapFeatures(api) {
     const alpha=new Uint8Array(s.w*s.h); for (let i=0;i<alpha.length;i++) alpha[i]=s.rgba[i*4+3]?1:0;
     return {bitmap:await createImageBitmap(new ImageData(s.rgba,s.w,s.h)),w:s.w,h:s.h,ax:s.ax,ay:s.ay,alpha};
   }
+  // A variant's sprite for the view, by its key (recipe and light). `frames`: its palette frames, when the body-only drawing is all the
+  // export packs of it (rocks, scars, dead trees), so the export reuses them; the export draws the rest (burn frames, the burnt
+  // successor) itself. A new light prunes the old light's entries, and a pruned entry aborts its job: dragging the sun asks for one
+  // light's sprites, not one set per step.
   const sprites=new Map();
+  let spriteLight=null;
   const spriteKey=(v,sun) => { const at=lightKey(sun); if (v.keyLight!==at) { v.key=v.kind+'|'+v.seed+'|'+JSON.stringify(v.params)+'|'+at; v.keyLight=at; } return v.key; };
   function sprite(v) {
     const sun=light(); if (!sun || !v || GROUND_KINDS.includes(v.kind)) return null;
+    if (lightKey(sun)!==spriteLight) { spriteLight=lightKey(sun); prune(); }
     const k=spriteKey(v,sun);
     let e=sprites.get(k);
     if (!e) {
-      e={ready:false}; sprites.set(k,e);
-      work({type:'sprite',kind:v.kind,params:v.params,seed:v.seed,light:sun}).then(async r => {
-        Object.assign(e,{body:await bitmapOf(r.body),shadow:await bitmapOf(r.shadow),bodyBlend:r.bodyBlend,shadowBlend:r.shadowBlend,gameplay:r.gameplay,ready:true});
+      e={ready:false,job:new AbortController()}; sprites.set(k,e);
+      work({type:'sprite',kind:v.kind,params:v.params,seed:v.seed,light:sun},[],e.job.signal).then(async r => {
+        e.job=null;
+        Object.assign(e,{body:await bitmapOf(r.body),shadow:await bitmapOf(r.shadow),frames:r.frames,bodyBlend:r.bodyBlend,shadowBlend:r.shadowBlend,gameplay:r.gameplay,ready:true});
         if (sprites.get(k)!==e) return release(e);
         refreshVariants(); refreshSelection(); api.schedule();
-      },err => { if (err.lost) { if (sprites.get(k)===e) sprites.delete(k); } else e.error=err.message; status('A feature could not be drawn: '+err.message); });
+      },err => {
+        if (e.job?.signal.aborted) return;   // pruned: nobody waits for it
+        e.job=null;
+        if (err.lost) { if (sprites.get(k)===e) sprites.delete(k); } else e.error=err.message; status('A feature could not be drawn: '+err.message);
+      });
     }
     return e.ready?e:null;
   }
-  function release(e) { e.body?.bitmap.close?.(); e.shadow?.bitmap.close?.(); e.bitmap?.close?.(); }
+  function release(e) { e.job?.abort(); e.body?.bitmap.close?.(); e.shadow?.bitmap.close?.(); e.bitmap?.close?.(); }
   // Keep only the current set's pixels.
   function prune() {
     const sun=light(),keep=new Set();
@@ -908,6 +936,11 @@ export async function mountMapFeatures(api) {
     const def=(n,keys) => defs.push({name:n,keys:[...keys,['filename',b]].map(([k,v]) => [k,String(v)])});
     const seq=(n,frames) => { sequences.push({name:n,frames}); return n; };
     const full=(kind,params,seed) => work({type:'full',kind,params,seed,light:sun},[],signal);
+    // A variant's frames: the view's sprite at this light when it holds them all, else a drawing of its own.
+    const framesOf=v => {
+      const e=sprites.get(spriteKey(v,sun));
+      return e?.ready && e.frames?{body:e.frames.body,shadow:e.frames.shadow,burn:null,burnt:null,bodyBlend:e.bodyBlend,gameplay:e.gameplay}:full(v.kind,v.params,v.seed);
+    };
     const successors={},successorSeed=set.scar?.recipes.reduce((a,b) => a.id<b.id?a:b)?.seed??4783;
     const smudge=async () => successors.smudge??=(async () => { const f=await full('scar',{type:'smudge'},hash32(successorSeed,0x5d06e));
       def(`${P}Smudge`,[['description','Scorch Mark'],['footprintx',1],['footprintz',1],['height',0],['seqname',seq(`${b}sm`,[frameOf(f.body)])],['animtrans',1],['reclaimable',0],['blocking',0],['featuredead',`${P}Smudge`]]); return `${P}Smudge`; })();
@@ -919,7 +952,7 @@ export async function mountMapFeatures(api) {
       const n=nameOf(p),v=variantOf(p),i=p.v+1;
       if (p.kind==='deposit') { def(n,[['description','Metal'],['footprintx',3],['footprintz',3],['height',4],['seqname',transparent()],['metal',p.metal],['damage',32009],['indestructible',1],['reclaimable',0],['blocking',0],['shadtrans',1]]); continue; }
       if (p.kind==='vent') { def(n,[['description','Thermal Vent'],['footprintx',1],['footprintz',1],['height',0],['seqname',transparent()],['animating',1],['geothermal',1],['indestructible',1],['blocking',0]]); continue; }
-      const f=await full(p.kind,v.params,v.seed),g=f.gameplay,[fw,fz]=v.footprint;
+      const f=await framesOf(v),g=f.gameplay,[fw,fz]=v.footprint;
       if (p.kind==='tree') {
         const dead=await smudge(),burn=f.burn?.map(s => frameOf(s,2));   // 96 frames of 2 ticks: the 192-tick burn (spec section 4); a dead tree (species dead) neither burns nor leaves a burnt successor
         if (!f.burn) def(n,[['description','Dead Tree'],['footprintx',fw],['footprintz',fz],['height',40],['seqname',seq(`${b}t${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}t${i}s`,[frameOf(f.shadow)])],['energy',g.energy],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['flamable',0],['reclaimable',1],['blocking',1]]);

@@ -66,6 +66,8 @@ test('the view draws the same body and shadow as the export, without burn frames
     const full = generateFeature(kind, v.params, v.seed, {light: {x: -0.62, y: -0.03}, palette}), view = generateFeature(kind, v.params, v.seed, {light: {x: -0.62, y: -0.03}, bodyOnly: true, palette});
     for (const part of ['body', 'shadow']) assert.deepEqual(view[part] && [...view[part].idx, ...view[part].a, view[part].ax, view[part].ay], full[part] && [...full[part].idx, ...full[part].a, full[part].ax, full[part].ay], `${kind} ${part}`);
     assert.deepEqual(view.gameplay, full.gameplay);
+    // partial: the body-only drawing left out frames the export packs, so the export cannot reuse the view's sprite for it
+    assert.equal(full.partial, false); assert.equal(view.partial, Boolean(full.burn || full.burnt), `${kind} partial`);
     if (kind === 'tree' && !String(v.params.species).startsWith('dead')) assert.ok(full.burn && !view.burn && !view.burnt);
     if (String(v.params.species).startsWith('dead')) assert.ok(!full.burn && !full.burnt);   // a dead tree neither burns nor leaves a successor
   }
