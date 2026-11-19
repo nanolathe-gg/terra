@@ -77,7 +77,10 @@ export async function postMap(base, gz, fetcher = fetch, {timeout = SHARE_TIMEOU
     const why = await detail(response);
     throw new Error(response.status === 413 ? 'This map is too large to share as a link. Use Save to keep it as a file.' : `The save-link service refused this map${why ? ': ' + why.replace(/\.+$/, '') : ` (error ${response.status})`}.`);
   }
-  const {id} = await response.json();
+  let answer;
+  try { answer = await response.json(); }
+  catch { throw new Error('The save-link service sent an answer this editor does not understand.'); }
+  const {id} = answer;
   if (!ID_RE.test(id || '')) throw new Error('The save-link service sent an answer this editor does not understand.');
   return id;
 }
