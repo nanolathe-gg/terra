@@ -778,7 +778,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         // Generated deposits and vents sit where the export puts them and take their colors from the export art under them
         // (sculpt-features.js): one anchor read or one 128 px patch per idle frame, after the view's own images and only once the
         // weather the export reads is in.
-        if(!suspended&&!rerun&&!readWaiting&&token===serial&&viewToken===viewEpoch&&!previewing&&!navigating()&&!holding&&quiet>=1000&&(!api.canExport||api.canExport())&&await features?.fitGround?.(state()))rerun=true;
+        // Not while a material compiles: the fit reads export art, which waits for the compile, and the frame would wait with it (the compile's
+        // end redraws, which marks the fits stale again: sculpt.js renderer.onmaterials).
+        if(!suspended&&!rerun&&!readWaiting&&token===serial&&viewToken===viewEpoch&&!previewing&&!navigating()&&!holding&&quiet>=1000&&(!api.canExport||api.canExport())&&!renderer.materialsCompiling()&&await features?.fitGround?.(state()))rerun=true;
       }
       if(!rerun&&!interacting()&&!foregroundPending()&&(!api.canExport||api.canExport()))api.renderProgress?.(null);
       const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
