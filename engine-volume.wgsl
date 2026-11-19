@@ -377,7 +377,12 @@ fn voxelDensity(p:vec3f)->f32 {
     let relief=clamp((faces-spall+inclusion)*u.rock[rs & rockMask].rockFace*.25*voxelRelief(p.xy,slope),-1.0,1.0);
     // The fine layers run on across the blocks, so a layered rock's lines are cut only by its joints, not wiped from every whole block.
     let fine=clamp(lamina*u.rock[rs & rockMask].rockFace*.25*voxelRelief(p.xy,slope),-1.0,1.0);
-    return draped*(1.0-share*min(blocks.y,1.0))+(8.0*blocks.x-3.0*(relief+fine)*min(blocks.y,1.0))*share;
+    let solid=draped*(1.0-share*min(blocks.y,1.0))+(8.0*blocks.x-3.0*(relief+fine)*min(blocks.y,1.0))*share;
+    // Loose stones (Boulders, debris, scatter) stand on the blocks: the blocks are cut from the surface before the stones, so where a stone lies
+    // the solid keeps the authored surface (which carries it) as well as the blocks. The bake's blue holds a stone's cover (0..1) where no crack
+    // line is drawn (engine-bake.wgsl crackCode), read at the nearest cell: a blend of codes would mark a stone's edge on every crack.
+    let code=bakedFieldsNearest(p.xy).b;
+    return mix(solid,min(solid,d),select(0.0,smoothstep(0.05,0.3,code),code>0.0&&code<=1.0));
 }
 // The range pass determines the candidate dispatch entirely on the GPU.
 @compute @workgroup_size(1)
