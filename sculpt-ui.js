@@ -243,7 +243,7 @@ export function mountColumnPanel(read,change,commit,reset){
  $('column-open').onclick=()=>{panel.hidden=false;$('column-open').setAttribute('aria-expanded','true');$('column-done').focus();};
  const closeColumn=()=>{panel.hidden=true;$('column-open').setAttribute('aria-expanded','false');};
  $('column-done').onclick=()=>{closeColumn();$('column-open').focus();};
- document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden){closeColumn();e.stopImmediatePropagation();$('column-open').focus();}},true);
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.defaultPrevented&&!panel.hidden&&!document.querySelector('dialog:modal')){closeColumn();e.stopImmediatePropagation();$('column-open').focus();}},true);
  new MutationObserver(()=>{if($('pane-world').hidden||$('wpane-rock-types').hidden)closeColumn();}).observe($('pane-world'),{attributes:true,subtree:true,attributeFilter:['hidden']});
  const syncLock=()=>{$('column-fields').disabled=$('world-editor').disabled;if($('inspector-sidebar').hidden)closeColumn();};
  new MutationObserver(syncLock).observe($('world-editor'),{attributes:true,attributeFilter:['disabled']});
