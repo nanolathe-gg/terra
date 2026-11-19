@@ -1,5 +1,5 @@
 import {requestAdapter} from './sculpt-webgpu.js';
-import {savedWorld,worldOverrideCount,resetWorldOverrides,copySavedWorld,savedWorldId,sameSavedWorld,worldKeys} from './sculpt-save.js';
+import {savedWorld,worldOverrideCount,resetWorldOverrides,copySavedWorld,worldKeys,applyEngineTables} from './sculpt-save.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mapGeometry,mountMapCanvas,validMapSize} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,worldHome,mountColumnPanel} from './sculpt-ui.js';
@@ -2432,7 +2432,8 @@ async function goToWorld(base,extra,fork=true) {
   for (const [key,value] of Object.entries(extra||{})) if (value!=='' && value!==null && value!==undefined) next[key]=value; else delete next[key];
   let target=tabMapId;
   if (fork && SAVING && ready && tabMapId && mapStore) {
-    try { const copy=workingCopy(),copyId=newMapId(); await mapStore.put(copyId,copy,mapMeta(copyId,copy)); target=copyId; next.forkedFrom=activeWorld().name; }
+    // A column the artist never edited is this world's: the copy takes the other world's own (loadSketch carries an edited one).
+    try { const copy=workingCopy(),copyId=newMapId(); if(!columnOverride)delete copy.column; await mapStore.put(copyId,copy,mapMeta(copyId,copy)); target=copyId; next.forkedFrom=activeWorld().name; }
     catch (err) { error('A copy of your map for the other world could not be kept in this browser ('+err.message+'). The map stays in '+activeWorld().name+'.'); return; }
   }
   clearTimeout(autosaveTimer);
@@ -2445,14 +2446,14 @@ function showWorldError(){if(embeddedWorldError)status(`The map’s world settin
 const knownWorldKnobs=(knobs,base)=>{const known=worldKeys(base);return Object.fromEntries(Object.entries(knobs||{}).filter(([key])=>known.has(key)));};
 // Reset and history share one persistence boundary: intermediate material/surface restores never become saved defaults.
 function configureStoredWorld(world,beach=world.knobs?.beachFrom){
-  for(const key of ['defaults','engineDefaults','layers','material','materials','beachTable','featureSet']){
+  for(const key of ['defaults','engineDefaults','layers','material','water','placement','materials','beachTable','featureSet']){
     if(baseWorldConfig[key]===undefined)delete config[key];else config[key]=structuredClone(baseWorldConfig[key]);
   }
   const knobs=knownWorldKnobs(world.knobs,baseWorldConfig);config.defaults={...config.defaults,...knobs};
   refreshWorldTools(world);
   for(const key of Object.keys(config.engineDefaults||{}))if(knobs[key]!==undefined)config.engineDefaults[key]=knobs[key];
   if(world.featureSet)config.featureSet=structuredClone(world.featureSet);
-  const settings=new Map(beach?[['beachFrom',beach]]:[]);borrowBeach(config,settings);renderer.layers=new Set(config.layers);
+  const settings=new Map(beach?[['beachFrom',beach]]:[]);borrowBeach(config,settings);applyEngineTables(config,world.engine);renderer.layers=new Set(config.layers);
 }
 function resetWorld(){
   worldInputQueue.flush();const reset={...resetWorldOverrides(activeWorld()),name:baseWorldConfig.biome};
@@ -2886,7 +2887,12 @@ function applyWorldInputs(batch) {
     activeWorld().knobs[key]=String(value);worldStoreDirty=true;
     worldPanelDirty ||= key==='strata';worldCheckpoint ||= !input.restore;worldNodesChanged ||= !input.restore&&Boolean(next.checkpoint);
   }
-  if(reload){commitWorldInputs();clearTimeout(autosaveTimer);Promise.resolve(saveWorking()).finally(()=>location.reload());return;}   // the map keeps the row's value
+  if(reload){
+    // The map keeps the row's value; a page that saves no map (a scratch page) keeps it in its address instead, as a session setting.
+    commitWorldInputs();clearTimeout(autosaveTimer);const saving=saveWorking();
+    if(saving===false){const url=new URL(location.href);for(const input of batch)if(input.type==='knob'&&!(input.slot>0))url.searchParams.set(input.key,String(input.value));window.history.replaceState(null,'',url);}
+    Promise.resolve(saving).finally(()=>location.reload());return;
+  }
   const local=presets?syncRocks({defer:true}):null,onlyPresets=batch.every(input=>input.slot>0);
   // setColors writes the complete block too, including the knobs just stored.
   // Otherwise the batch has exactly one applyKnobs call, regardless of input count.
@@ -3148,6 +3154,7 @@ async function boot() {
     if (worlds[worldId]?.name) $('world-title').textContent=worlds[worldId].name;
     addDefaults(experiment,config.defaults);
     borrowBeach(config,experiment);   // a beach another world lends (World, Ground): before the renderer and the panel read the world's layers
+    applyEngineTables(config,worlds[worldId]?.engine);   // the map's own copy of the world's tables (sculpt-save.js ENGINE_TABLES)
     // A world whose saved tools or rock types cannot be read opens with its base's own (the store keeps them until this world is next saved).
     try{refreshWorldKit();}catch(err){const w=activeWorld();delete w.tools;delete w.rocks;refreshWorldKit();error(`${w.name||config.biome}’s saved tools and rock types could not be read (${err.message}). It opens with ${config.biome}’s own.`);}
     brushWorldDefinitions=structuredClone(worldToolList);buildShapeOptions();{const kit=instantiateWorldKit(config,activeWorld(),{builtIn:builtInWorld()});mapMaterials=kit.materials;mapRocks=kit.rocks;if(kit.reason)status(kit.reason);}syncMaterialChoices();syncRockAdd();syncRockChoices();buildToolbar();

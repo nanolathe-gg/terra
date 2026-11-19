@@ -7,13 +7,28 @@ import {worldHexColors,isTone} from './sculpt-scene.js';
 import {normalizeSet} from './sculpt-feature-set.js';
 import {copySurface} from './sculpt-material-model.js';
 
+// The tables of a world's data the renderer reads as they are (not rows): its material constants, water colors and placement thresholds.
+// The map keeps them with its world settings, so retuning a built-in world's table never changes a saved map either. Only a key the
+// world's data still has, holding a value of the same kind, is read back (a removed constant is dropped, AGENTS.md rule 7).
+export const ENGINE_TABLES=['material','water','placement'];
+const plain=v => v&&typeof v==='object'&&!Array.isArray(v);
+const sameKind=(a,b) => typeof a===typeof b&&Array.isArray(a)===Array.isArray(b)&&(a===null)===(b===null);
+export const engineTables=config => Object.fromEntries(ENGINE_TABLES.filter(k => plain(config[k])).map(k => [k,structuredClone(config[k])]));
+export function copyEngineTables(value,config) {
+  if (!plain(value)) return null;
+  const out={};
+  for (const k of ENGINE_TABLES) if (plain(value[k])&&plain(config[k])) out[k]=Object.fromEntries(Object.entries(value[k]).filter(([key,v]) => Object.hasOwn(config[k],key)&&sameKind(v,config[k][key])&&JSON.stringify(v).length<=4096).map(([key,v]) => [key,structuredClone(v)]));
+  return out;
+}
+// A map's engine tables over the served ones: keys the data gained since the map was saved keep the data's value.
+export function applyEngineTables(config,engine) { for (const [k,table] of Object.entries(engine||{})) if (plain(config[k])&&plain(table)) config[k]={...config[k],...structuredClone(table)}; return config; }
 export const worldKeys=config => new Set([...Object.keys(config.defaults||{}),...Object.keys(config.engineDefaults||{}),...KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)),'beachFrom','sandEdge','fill','relief','palette','sun']);
 export function savedWorld(config,settings,world) {
   const knobs={};
   for(const key of worldKeys(config)){const value=settings.get(key)??world.knobs?.[key]??config.defaults?.[key]??config.engineDefaults?.[key];if(value!==undefined&&value!==null)knobs[key]=String(value);}
   // The map saves its world whole (owner, 2026-11-19), its surface layers included, so retuning the built-in world never changes it.
   const surface=world.surface??config.surface;
-  return {...storedWorldKit(config,world),materials:worldKept(withWorldMaterials(world.materials,config)),name:world.name||config.biome,base:config.biomeId,colors:worldHexColors(config,settings,world.colors||{}),knobs,...(surface?{surface:copySurface(surface)}:{})};
+  return {...storedWorldKit(config,world),materials:worldKept(withWorldMaterials(world.materials,config)),name:world.name||config.biome,base:config.biomeId,colors:worldHexColors(config,settings,world.colors||{}),knobs,...(surface?{surface:copySurface(surface)}:{}),engine:engineTables(config)};
 }
 // A number written as text or a number: "abc", "NaN", "1e999" and "" are not.
 const finiteText=v => String(v).trim()!=='' && Number.isFinite(Number(v));
@@ -39,7 +54,8 @@ export function copySavedWorld(value,config) {
     colors[key]=key==='shallowTone'&&v?[...v]:v;
   }
   const surface=value.surface===undefined?null:copySurface(value.surface);
-  const result={...storedWorldKit(config,value),materials:worldKept(withWorldMaterials(value.materials,config)),name:value.name.slice(0,120),base:value.base,colors,knobs,...(value.featureSet?{featureSet:normalizeSet(value.featureSet,config)}:{}),...(surface?{surface}:{})};
+  const engine=copyEngineTables(value.engine,config);
+  const result={...storedWorldKit(config,value),materials:worldKept(withWorldMaterials(value.materials,config)),name:value.name.slice(0,120),base:value.base,colors,knobs,...(value.featureSet?{featureSet:normalizeSet(value.featureSet,config)}:{}),...(surface?{surface}:{}),...(engine?{engine}:{})};
   if(value.tools!==undefined||value.rocks!==undefined)instantiateWorldKit({...config,surface:surface??config.surface,worldMaterials:keptWorldMaterials(result.materials,config)},result);
   return result;
 }
