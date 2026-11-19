@@ -38,6 +38,10 @@ rock), water depth and tone, and how much of a built-in surface shows.
   trial per value, nothing edited), or `--query 'a=1&b=2'` with a trial.
 - **Keep:** write the value into `materials/<world>.json` →
   `world.knobDefaults`, then run a trial without `--query` to confirm it.
+- **Data-only settings:** some engine numbers have no panel row (the bands'
+  upper slope `bandFade`, `bandJag`, `terraceCalm`, ...). Section 1 of the
+  reference lists them; set them the same way. Round 2 proposed "exposing"
+  `bandFade` without probing it.
 - **Watch for:**
   - A `--query` reaches World controls only. Stroke options (Steps,
     Gullies, a shape's rock) are refused with a message.
@@ -66,6 +70,10 @@ problem.
   broken hills, green-5's stepped ridge). Add a recipe for the look one map
   needs, append its key to `world.rock.presets` (never insert: that moves
   every later slot), and give that window's strokes its slot (section 6).
+  Do not retune a rock type the world's tools or other windows draw for one
+  map's sake: round 2 tuned `greenstone` for green-5 and changed the Knob,
+  Cup knoll and Rock fin tools with it. The validator warns when a shared
+  rock type changed since the base.
 - **Watch for:** recipe keys are lowercase. A recipe's knobs override the
   world's rock keys only for that rock.
 
@@ -194,8 +202,12 @@ helps one window and hurts another.
   - **Ground relief:** the scene's `query` keys `undulation`,
     `undulationScale`, `undulationCover` and `undulationArt`: the map's
     rolling ground, which the game's heights keep. Our plains are flatter
-    than retail's on several Green windows. The validator refuses any other
-    key in a scene's query: World controls are the world's.
+    than retail's on several Green windows. `undulationArt` sets how much
+    of that relief the art shows: lower it when the heights should roll but
+    the picture shows lumps retail does not (round 2's green-5 at
+    `undulation` 14 drew crumpled hummocks on its plain; `undulationArt`
+    0.3 kept the heights and smoothed the picture). The validator refuses
+    any other key in a scene's query: World controls are the world's.
 - **Try:** edit the scene, then `sh repro/match.sh <world> --window
   <world>-<n> --note "..."`, which renders only that window (about 20 s). A
   map setting can be probed first: `--probe undulation=3,6,10 --window

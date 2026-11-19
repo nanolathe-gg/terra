@@ -4,18 +4,19 @@
 
 `repro/scenes/green-<n>.json`; retail data in `$R/repro-r7/green-<n>/`.
 
-| Window | Retail map | What it tests | Base (trial-000) |
-| --- | --- | --- | --- |
-| green-1 | pc games' evad river delta | broken hills (rock type `evad`) by the sea | shape .22, look .10 |
-| green-2 | great divide | long gentle grass slopes, a ridge | shape .16, look .20 |
-| green-3 | the barrier reef | islands and reef shallows | shape .08, look .09 |
-| green-4 | the pass | a rocky massif with grass in its folds | shape .63, look .23 |
-| green-5 | plains and passes | grassy hills (library `hill` strokes) | shape .18, look .70 |
-| green-6 | wretched ridges | two ridges | shape .24, look .10 |
-| green-7 | two continents | open water and coast: **held out** | (run `--holdout`) |
+| Window | Retail map | What it tests | Before round 1 | Main after round 2's port |
+| --- | --- | --- | --- | --- |
+| green-1 | pc games' evad river delta | broken hills (rock type `evad`) by the sea | shape .22, look .10 | shape .22, look .09 |
+| green-2 | great divide | long gentle grass slopes, a ridge | shape .16, look .20 | shape .16, look .20 |
+| green-3 | the barrier reef | islands and reef shallows | shape .08, look .09 | shape .08, look .10 |
+| green-4 | the pass | a rocky massif with grass in its folds | shape .63, look .23 | shape .63, look .23 |
+| green-5 | plains and passes | a terraced ridge on a rolling plain (`hill` strokes with Steps, rock `ridgestone`) | shape .18, look .70 | shape .12, look .35 |
+| green-6 | wretched ridges | two ridges | shape .24, look .10 | shape .24, look .10 |
+| green-7 | two continents | open water and coast: **held out** | shape .19, look .12 | shape .19, look .12 |
 
-Mean of the tuning windows at the base: shape .25, look .24 (measured,
-trial-000 on main 2f1bbeaf).
+Means of the tuning windows: shape .25, look .24 before round 1; shape .24,
+look .18 on main after round 2's port (measured 2026-11-18, one render of
+all seven windows).
 
 ### Which rock each window's strokes use
 
@@ -26,7 +27,8 @@ A rock type changes only the windows whose strokes use its slot (PLAYBOOK.md,
 | --- | --- | --- |
 | green-1 | 2 | `evad` |
 | green-3 | 2 | `evad` |
-| green-2, green-4, green-5, green-6, green-7 | none set (0) | the world's own rock (the rock keys in `knobDefaults`) |
+| green-5 | 5 | `ridgestone` (Terraced greenstone, round 2) |
+| green-2, green-4, green-6, green-7 | none set (0) | the world's own rock (the rock keys in `knobDefaults`) |
 
 Re-check with `grep -o '"rockPreset": [-0-9]*' repro/scenes/green-<n>.json`
 after any shape-lane edit.
@@ -74,60 +76,53 @@ These notes are by eye, from the base crops in
 - No rock coasts on Green. Shores are a natural sand-grass edge.
 - Hills must stay grassy. Rock on a hill is cracks and patches, not a cap.
 
-## Start here (round 2)
+## Start here (round 3)
 
-Round 1 (branch `match-green-2`, 42 trials, report in
-`$R/match/terraform-wt-match-green-2/green/REPORT.md`) kept two changes that
-did not land on main, and wrote six proposals. On review, three proposals
-held and three came from the harness, which is now fixed:
+Round 2 (branch `match-green-3`, 81 of 300 trials, report in
+`$R/match/terraform-wt-match-green-3/green/REPORT.md`) was reviewed and
+partly ported to main on 2026-11-18:
 
-- **`undulation` is a map setting.** Every Green scene sets `undulation=3`
-  in its query, so the world's value never reached a window, and round 1's
-  `--query undulation` probes were silently ignored. `--query` now wins, and
-  the map lane lets one window change its own. Measured on green-5 alone:
-  `undulation` 6 and 10 took its level share from 57% to 52% and 48%
-  (retail 43%) and its look from .70 to .68 and .66. Green-1's plain is the
-  opposite: busier than retail (level edges ours .0072, retail .0017, the
-  dimples of `undulation=3` at 48 px), so it may want less.
-- **The "bluer wet shore" was a measuring artifact** (water pixels in
-  retail's shore mask: 12.8% on green-3). Without them the two shores match
-  within 2 units of each channel. Ignore round 1's proposal 6.3 color half.
-- **Round 1's `stepSoftPx` 5 keep** moved green-3's water edges only from
-  .0102 to .0099 (old masks) and "cleared" by dropping under a floor that has
-  since been lowered. Most of the water-edge drop came with the `evad` keep
-  before it (.0166 to .0102). Under the new masks the two keeps together
-  take green-3's water edges from .0083 to .0023 (retail .0030; trial-034
-  re-split). Re-judge `stepSoftPx` alone, by eye on green-3's water crop.
+- **Ported:** the `evad` recipe as cracks and patches in grass, then
+  weathered faces (green-1 look .10 to .09; green-3's busy faces calmer, and
+  the pale waterline rim mostly gone). Green-5's map: five `hill` strokes
+  with Steps (`terraces` 8, `ledge` 30, `terraceJitter` 80, `breakup` 60) on
+  a new rock type `ridgestone` (slot 5, round 2's greenstone tuning), and
+  its query `undulation=14&undulationArt=0.3`.
+- **Changed in the port:** round 2 tuned the shared `greenstone`, which the
+  Knob, Cup knoll and Rock fin tools draw; the port moved that tuning into
+  `ridgestone` and left `greenstone` as it was. Round 2 kept `undulation`
+  14 at full art (look .31), which drew crumpled hummocks on green-5's plain
+  that retail's plain does not have; the port keeps the height relief and
+  shows 0.3 of it in the art (look .35, shape .12 either way; at 0.6 the
+  look is .33). The owner judges that look in the editor.
+- **Not ported:** green-6's `greenridge` rock (look .10 to .09). At 1x
+  retail's ridges are dark rock with blocky vertical buttresses and a clean
+  foot; `greenridge` drew fine horizontal strata, lighter, with a brown
+  debris halo at the foot that retail does not have.
 
-Leads, strongest first:
+Round 2's proposals:
 
-1. **Re-apply the `evad` recipe** from round 1's commit e64ec6dd (the
-   pilot's trial-004): `faceRock` .35, `faceGrass` .8, `crackMajor` 1. Its
-   rock reads as cracks and patches in grass on green-1 and green-3, as
-   retail's does (by eye, twice). Then tune it.
-2. **Green-5 as a stepped ridge** (the map lane). Measured 2026-11-18 on
-   green-5 alone: its five `hill` strokes with `terraces` 8, `ledge` 30,
-   `terraceJitter` 80, `breakup` 60 took its look from .70 to .56 with
-   `rockPreset` 4 (escarpment) and .59 with 3 (greenstone); by eye the
-   greenstone's gray strata read closer. Retail's ridge is a broad gray rock
-   belt with ragged dark grass ledges around it; ours gets the gray belt
-   but not yet the ledges in the grass. Try a rock
-   type of its own for that ridge (stronger `banding`, `faceLayers`), and
-   the map's `undulation`.
-3. **`bandLevel`** (new, 0 to 1). Measured on all windows at 1: green-3 .09
-   to .08, green-5 .70 to .68, green-2 .20 to .31 (its slopes already carry
-   too many lines, and more reach them). Try it with a lower `banding` or
-   `bandFade`, and look at green-2's and green-3's level crops.
-4. **Green-4's rock mosaic** was never tried with a rock type: its strokes
-   use the world's own rock. Give them one (map lane) before calling it an
-   engine gap.
-5. **Green's ground material and slope material** were never edited in
-   round 1. The plains read brighter and more contrasty than retail's soft
-   olive on green-1 (by eye).
+1. **Contour hatch on near-level ground (6.1): real.** `bandLevel` shares
+   the bands' strength with the slopes, so more lines on the plain triple
+   them on green-2's slopes (trial-060). It needs its own strength for gentle
+   ground: an engine change, not yet built.
+2. **Thin dark lines on terraced faces (6.2): untested.** It asked to
+   "expose" `bandFade`, which the world's data can already set (now listed
+   in section 1 of the reference, with the other data-only settings). Probe
+   `bandFade` and `terraceCalm` first.
+3. **Shallow-water texture (6.3), a noise-warped surface fact for the
+   rock/grass mosaic (6.4), a contour-following material node (6.5), a
+   shore texture stage (6.6):** each cites trials; none was checked against
+   the code yet.
 
-Still open as engine questions (round 1's proposals that held): retail's
-ragged grass ledges beyond a ridge's rock (6.5, partly reachable with Steps
-above), and bands on near-level ground (6.1, now `bandLevel`).
+Leads for round 3:
+
+- green-6 still wants dark, blocky, vertically jointed ridges with no
+  debris apron: a rock type of its own along those lines.
+- green-4's mosaic of rock and grass: round 2's `greenfold` tries (trials
+  024 and 075) are the starting point.
+- green-2's and green-5's level-ground lines: wait for proposal 1, or try
+  `bandFade` and a rock type with its own `banding` on the gentle strokes.
 
 ## Pilot notes (2026-11-18)
 
