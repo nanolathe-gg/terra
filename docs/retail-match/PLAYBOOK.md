@@ -227,9 +227,24 @@ helps one window and hurts another.
 
 ## Symptom to lever
 
-Finding keys are `<class>:<metric>`. The classes are `water`, `shore`,
-`level`, `slope` and `steep`. The metrics are `share`, `luma`, `color`,
-`spread`, `band2`, `band8`, `band32`, `edges` and `lines`.
+Finding keys are `<class>:<metric>`. The classes are:
+
+- `deep`: water 32 or more height units below the sea;
+- `shelf`: shallower water, the light shelf along a coast or reef;
+- `shore`: dry land within 40 px of water;
+- `flat`: dry land under slope .03 (plains, level tops);
+- `gentle`: slope .03 to .08 (the grades a plain rises on);
+- `slope`: .08 to .5;
+- `steep`: .5 and over.
+
+The metrics are `share`, `luma`, `color`, `spread`, `band2`, `band8`,
+`band32`, `edges` and `lines`.
+
+Water and level ground are split so a change cannot score on the wrong
+part. A change aimed at the shelf must move `shelf`; if it moves `deep`
+instead, it painted the open water (round 3's flecked water did this). Lines
+aimed at a hatched grade must move `gentle`; if they move `flat`, they cross
+a plain retail leaves clean.
 
 **These rows are starting guesses from how the engine is built, not
 measurements.** The pilot already found two that did not hold on Green:
@@ -244,11 +259,12 @@ moved, class by class, beside retail's value.
 | Finding | First levers | Then |
 | --- | --- | --- |
 | `*:share` | shape lane (strokes), if `layout.png` shows the fixture is off | a proposal (presets, engine) |
-| `level:color`, `level:luma` | ground material: its Gradient stops, palette | `groundPatch`, `lushness`, `ambient` |
-| `level:band2` (fine grain) | ground material: fine Noise `detail`, dither `amount` | `reliefAmount`, `plainRelief` |
-| `level:band8`, `level:band32` | ground material: broad Noise `size`, `layers` | `groundPatch`, `groundPatchSize`, `undulation`, `reliefPatchy` |
-| `level:edges`, `level:lines` too few | `bandLevel` (lines on near-level ground, its own strength; check by eye that retail has them there, not on a slope beside it), `banding`; the map's `undulation` (section 6) | ground material: Scatter pits or a Cracks noise; `plainRelief`, `lumpRelief` |
-| `level:edges` too many (regular dimples) | the map's `undulation`, `undulationScale` (section 6) | ground material's broad Noise |
+| `flat:color`, `flat:luma` | ground material: its Gradient stops, palette | `groundPatch`, `lushness`, `ambient` |
+| `flat:band2` (fine grain) | ground material: fine Noise `detail`, dither `amount` | `reliefAmount`, `plainRelief` |
+| `flat:band8`, `flat:band32` | ground material: broad Noise `size`, `layers` | `groundPatch`, `groundPatchSize`, `undulation`, `reliefPatchy` |
+| `gentle:lines`, `gentle:edges` too few (a hatched grade) | `banding`, `bandLevel` (check `flat` did not gain lines retail lacks) | ground material: Scatter pits or a Cracks noise |
+| `flat:edges`, `flat:lines` too few | ground material: Scatter specks (round 3's 0.7 px dots did not show; try a radius of 1 px or more), Cracks noise; `plainRelief`, `lumpRelief` | `bandLevel`, only where retail's plain carries lines by eye |
+| `flat:edges` too many (regular dimples) | the map's `undulationArt` (art only, the heights keep rolling), `undulation`, `undulationScale` (section 6) | ground material's broad Noise |
 | `slope:color`, `slope:luma` | slope material; `hillLight` | `slopeTexture`, `faceFill`, `creaseShade` |
 | `slope:lines` too few | `banding`, `bandSoftness` (contour hatch), `slopeMarks`, `wrinkles` | the map lane: the window's strokes with Steps and a rock type of their own (section 6) |
 | One window's slopes or rock unlike the others' | the map lane: a rock type for that map, its strokes' Steps, `cracks`, `gullies` | a ground of its own |
@@ -259,8 +275,10 @@ moved, class by class, beside retail's value.
 | `steep:lines` too few (retail's dark cracks) | rock type: `crackSeverity`, `crackMajor`, `crackNetwork`, `crackDark`; `faceScratch`, `faceCrease` | `layerCrease`, `creaseShade` |
 | `steep:band8` too low | rock type: `faceBed`, `faceLedge`, `faceLamina`, `faceTone` | rock material pattern |
 | `shore:color`, `shore:luma` | beach (a `beach` role material, `beachWidth`), `lowReach`, `lowGrain`, `shoreEdge` | `wetSwath`, `wetGround`, `crispShore`, a surface layer on `toWater` |
-| `water:color`, `water:luma` | water material; `shallowDepth`, `deepDepth`, `bedTint`, `bedBright` | colors (`shallowTone`) |
-| `water:edges` too many | `bedRelief`, `bedFlat`, `waterSoft`, `shoalRag` | water material's fine Noise |
+| `deep:color`, `deep:luma` | water material; `deepDepth` | colors |
+| `shelf:color`, `shelf:luma` | `shallowDepth`, `bedTint`, `bedBright`, `shallowTone` | water material |
+| `shelf:edges` too few (retail's specks and streaks on the shelf) | `bedRelief`, `shoalRag`; the shallow-water surface layer | the water material, but check `deep` did not move with it |
+| `deep:edges` or `shelf:edges` too many | `bedRelief`, `bedFlat`, `waterSoft`, `shoalRag` | water material's fine Noise |
 | Everything a touch dark or flat | `ambient`, `lightCap`, `sunHeight` | `shadeDepth`, `flatOcclusion` |
 
 ## Strategy that has worked

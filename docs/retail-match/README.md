@@ -101,8 +101,9 @@ Change nothing else:
    `<out>/trial-000/classes/classes.md`. Open the crops of the largest
    findings (`<out>/trial-000/classes/crops/<window>/<class>.png`, retail
    left, ours right, at 2x) and each window's `scenes/<window>/pair.png`.
-   There is one crop per class that retail has enough of: `water`,
-   `shore`, `level`, `slope` and `steep`. Each trial's printout ends a
+   There is one crop per class that retail has enough of: `deep` and
+   `shelf` water, `shore`, `flat` and `gentle` ground, `slope` and `steep`
+   (PLAYBOOK.md, "Symptom to lever", says where each starts). Each trial's printout ends a
    window with a `look:` line naming the crops of its largest findings.
    For each window, write down what differs most. Shape comes first: does
    our ground rise where retail's does? Then where things show: rock, sand,
