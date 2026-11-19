@@ -141,7 +141,11 @@ func (e *Exporter) Get(name string) ([]byte, error) {
 		e.files = files
 		e.digest = digest
 	}
-	return e.files[name], nil
+	data, ok := e.files[name]
+	if !ok {
+		return nil, fmt.Errorf("unknown exporter file %q", name)
+	}
+	return data, nil
 }
 func (s *Site) Build(out, mapsURL string) (string, error) {
 	files, err := s.Generated(mapsURL)
