@@ -1915,9 +1915,11 @@ $('reset-strokes').onclick=() => {
 function persistLater() {
   if (!SAVING) { $('save-state').textContent='Comparison sketch · use Map › Save as link or Download file to keep it.'; return; }
   if (!mapStore) { $('save-state').textContent=mapsNote||'Saving in this browser is unavailable. Use Save to keep this map as a file.'; return; }
-  clearTimeout(autosaveTimer); autosaveTimer=setTimeout(() => {
+  clearTimeout(autosaveTimer); autosaveTimer=setTimeout(async () => {
     if (stroke || moving || loading) { persistLater(); return; }
-    keepSaved=false; if (saveWorking()) $('save-state').textContent='Your map is saved in this browser (Maps lists every map you keep here).';
+    keepSaved=false;
+    // Await the write: its promise is always truthy, and 'saved' must not show before IndexedDB answers.
+    if (await saveWorking()) $('save-state').textContent='Your map is saved in this browser (Maps lists every map you keep here).';
   },450);
 }
 let keepSaved=false;   // set while this tab leaves for another map: leaving the page must not write the old one again
