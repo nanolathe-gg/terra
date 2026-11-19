@@ -1,8 +1,32 @@
 # Map, world and local settings: a proposal
 
-Status: proposal only, nothing built. Written 2026-11-19 against main
-b769206e. Code references are to that commit. **[code]** means I read it in
-the source, **[inferred]** means I traced it but did not run it in a browser.
+Status: **decided** (owner, 2026-11-19), being built on branch
+`proposal/map-scope`. Written 2026-11-19 against main b769206e. Code
+references are to that commit. **[code]** means I read it in the source,
+**[inferred]** means I traced it but did not run it in a browser.
+
+## Owner's decisions (2026-11-19)
+
+These override the options and recommendations in sections 2 to 8.
+
+1. **Storage: A, a full snapshot.** "This is safest. Each file can be its own
+   world and won't change." Retuning a built-in world never changes an
+   existing map or file.
+2. **No "changed" marks on world values.** "This just makes things confusing
+   without much added value." Strokes keep their existing `edited` lists,
+   which let a world switch keep what was changed by hand on a shape.
+3. **Start a map lists only the built-in worlds.** Any other look is started
+   from a map file or a map link ("start a new map from here"). Anything kept
+   only in this browser can be cleared with the browser's cache, so it is not
+   offered as a world.
+4. **Changing the base world keeps the fork**: the copy gets the new world and
+   the original stays in Maps.
+5. **Stored worlds are converted once** into empty maps, then the store goes.
+6. **The pane keeps the name World.**
+7. **Apply look keeps the seven cards**: Ground, Water, Rock types, Surface
+   layers, Light & weather, Tools, Features.
+
+"Go ahead and capture these decisions, then implement everything."
 
 ## 1. What is wrong today
 
