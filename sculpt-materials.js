@@ -731,6 +731,14 @@ export function strokeMaterial(node, list) {
   const slot = node?.params?.groundPreset;
   return Number.isInteger(slot) && (slot === 0 || list.some(m => m.slot === slot && !m.worldWater)) ? slot : -1;
 }
+// A stroke's material as copied shapes remember it (sculpt.js copyShapes): its key and name, not its slot, which a deleted material frees for
+// the next one added. materialSlotFor finds it again at paste time: the material with its key, else its name; the ground beneath (-1) when the
+// map no longer has it, or `ref` is null.
+export const materialRef = (list, slot) => { const m = list.find(o => o.slot === slot); return m ? {key: m.key ?? null, name: m.name} : null; };
+export function materialSlotFor(list, ref) {
+  const usable = list.filter(m => !m.worldWater), m = ref && ((ref.key && usable.find(o => o.key === ref.key)) || usable.find(o => o.name === ref.name));
+  return m ? m.slot : -1;
+}
 export const keepStrokeMaterials = (nodes, list) => nodes.map(n => n.params && n.params.groundPreset !== undefined && n.params.groundPreset !== strokeMaterial(n, list) ? {...n, params: {...n.params, groundPreset: strokeMaterial(n, list)}} : n);
 // The materials the renderer caches: the world's surfaces, every rock type's and the strokes'. The set changes only with a material, a rock
 // type or a painted stroke, never with a stroke's shape settings, so the cache is not rebuilt inside a draw (the digest guard).

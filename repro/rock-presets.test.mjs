@@ -3,9 +3,25 @@ import test from 'node:test';
 import {pathsWithin} from '../sculpt-paths.js';
 import assert from 'node:assert/strict';
 import {ROCK_PRESETS,SMOOTH_SOIL,STARTING_RECIPES,worldRocks,worldRockName,copyRocks,addRock,duplicateRock,renameRock,setRock,deleteRock,strokeRock,keepStrokeRocks,
-  rocksInUse,rocksBeneath,rockRecipeText,parseRockRecipe,rockRecipeFor,recipeRock,worldRock,checkColors,setRockColors,ROCK_COLORS,rockByKey,recipeMaterial,ROCK_MATERIALS,giveRockMaterials,dropRockMaterials} from '../sculpt-rock-presets.js';
+  rocksInUse,rocksBeneath,rockRecipeText,parseRockRecipe,rockRecipeFor,recipeRock,worldRock,checkColors,setRockColors,ROCK_COLORS,rockByKey,recipeMaterial,ROCK_MATERIALS,giveRockMaterials,dropRockMaterials,rockRef,rockSlotFor} from '../sculpt-rock-presets.js';
 
 const stroke = (rockPreset, extra = {}) => ({kind: 'landform', points: [{x: 0, y: 0}], params: {rockPreset}, ...extra});
+
+test('a copied stroke finds its rock type by identity, not by its old slot (CODE.md #3)', () => {
+  let rocks = addRock(worldRocks({}), 'granite').rocks; const granite = rocks.find(r => r.name === 'Rounded granite').slot;
+  const ref = rockRef(rocks, granite);
+  assert.equal(rockSlotFor(rocks, ref), granite, 'the same rock type, the same slot');
+  assert.equal(rockSlotFor(renameRock(rocks, granite, 'Pink granite'), ref), granite, 'a renamed rock type keeps its key');
+  rocks = deleteRock(rocks, [], granite).rocks;
+  const sandstone = addRock(rocks, 'sandstone'); rocks = sandstone.rocks;
+  assert.equal(sandstone.slot, granite, 'the new rock type takes the freed slot');
+  assert.equal(rockSlotFor(rocks, ref), -1, 'the copy goes to Rock beneath, not to the rock type now in its slot');
+  const back = addRock(rocks, 'granite');
+  assert.equal(rockSlotFor(back.rocks, ref), back.slot, 'the rock type added again is found in its new slot');
+  const copy = duplicateRock(rocks, 1, null), copyRef = rockRef(copy.rocks, copy.slot);
+  assert.equal(copyRef.key, null); assert.equal(rockSlotFor(copy.rocks, copyRef), copy.slot, 'a rock type without a key is found by its name');
+  assert.equal(rockRef(rocks, 14), null); assert.equal(rockSlotFor(rocks, null), -1, 'a choice that named no rock type is Rock beneath');
+});
 
 test('every world ships its own rock and Smooth soil; a world may name more', () => {
   assert.deepEqual(worldRocks({}).map(r => [r.slot, r.name]), [[1, 'Smooth soil']]);

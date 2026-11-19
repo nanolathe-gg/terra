@@ -40,6 +40,7 @@
 .rock-swatch{flex:none;width:12px;height:12px;border-radius:3px;border:1px solid #0007}#rock-current-swatch{width:26px;height:26px;border-radius:5px}
 .rock-chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3px}
 .rock-chip{display:flex;align-items:center;gap:6px;min-width:0;padding:3px 6px;font-size:10.5px;text-align:left;white-space:nowrap;overflow:hidden}
+.rock-chip-name{min-width:0;overflow:hidden;text-overflow:ellipsis}   /* a long name ends in an ellipsis; the chip's title holds it whole */
 .rock-chip[aria-checked=true]{background:#354d40;border-color:#82b597;color:#e4f6e6}
 #rock-manage{position:static}#rock-manage>summary{font-size:10.5px;padding:3px 8px}#rock-manage .popover{top:40px;left:10px;right:10px;width:auto;padding:10px 12px;display:grid;gap:7px}
 #rock-manage .row{display:flex;gap:5px;margin:0}#rock-manage .row>*{flex:1;min-width:0}#rock-add{font-size:11px;width:100%}.rock-picker .control-requirement:empty{display:none}
@@ -114,7 +115,7 @@
 .tool-name{font-size:9px;line-height:1.15;color:#b9c8c4;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tool-groups button[aria-pressed=true],.rail-button.has-current,.rail-foot button[aria-expanded=true],.rail-foot button[aria-pressed=true]{background:#354d40;border-color:#82b597}
 .tool-groups button[aria-pressed=true] .tool-name,.rail-button.has-current .tool-name{color:#e4f6e6}
-.rail-button{position:relative}.rail-button:after{content:'';position:absolute;right:4px;bottom:4px;border:3px solid transparent;border-right-color:#8fa39b;border-bottom-color:#8fa39b}
+.rail-button{position:relative}.rail-button:after{content:'';position:absolute;right:4px;top:4px;border:3px solid transparent;border-right-color:#8fa39b;border-top-color:#8fa39b}   /* top right: clear of the label below */
 .rail-button[aria-expanded=true]{background:#2e3a40;border-color:#5a7465}
 .tool-groups .tool-flyout{display:none}#land-flyout{--flyout-top:100px}#water-flyout{--flyout-top:150px}#brushes-flyout{--flyout-top:200px}
 .tool-groups .rail-button[aria-expanded=true]+.tool-flyout{display:grid;position:absolute;left:52px;top:0;z-index:8;width:188px;max-height:calc(100vh - var(--flyout-top) - 46px);overflow-y:auto;scrollbar-width:thin;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;padding:8px;background:var(--panel);border:1px solid #5a7465;border-radius:8px;box-shadow:0 12px 40px #000a}
@@ -211,6 +212,8 @@
 .map-navigator .panel-heading{display:none}
 #minimap-host{height:118px;width:118px;border-color:#3d5148}#minimap-host canvas{width:116px;height:116px;max-width:100%;object-fit:contain}
 .workspace:has(#passability-legend:not([hidden])) .map-navigator{display:none}
+/* The docked Materials map is a third of the width: the navigator would cover a quarter of it, so only the zoom buttons stay. */
+.app.material-docked .map-navigator{display:none}
 .map-zoom{position:absolute;right:16px;bottom:16px;z-index:3;display:flex;align-items:center;gap:3px;padding:4px;border:1px solid #71857766;border-radius:8px;background:#141c21ee;box-shadow:0 3px 18px #0006}
 .map-zoom button,.map-zoom select{padding:3px 7px;font-size:11px}
 
@@ -327,8 +330,8 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 #material-graph{display:block;width:100%;height:100%;touch-action:none;outline-offset:-3px}
 .material-graph-tools{position:absolute;top:10px;left:12px;display:flex;gap:6px}.material-graph-tools button{padding:6px 10px;background:#202c30ee;white-space:nowrap}#graph-node-select{max-width:170px;font-size:11px;background:#202c30ee}
 #graph-help{position:absolute;left:12px;bottom:8px;margin:0;color:#7f9398;pointer-events:none;max-width:calc(100% - 24px)}
-.node-menu{position:absolute;z-index:8;width:230px;padding:8px;border:1px solid #587265;border-radius:8px;background:var(--panel);box-shadow:0 10px 30px #0009}.node-menu input{width:100%;margin-bottom:6px}
-#node-list{display:flex;flex-direction:column;max-height:300px;overflow:auto}#node-list button{text-align:left;border:0;background:none;padding:5px 8px;border-radius:4px;font-size:12px}#node-list button:hover,#node-list button:focus{background:#344c42;outline:0}
+.node-menu{position:absolute;z-index:8;width:230px;max-height:calc(100% - 16px);display:flex;flex-direction:column;padding:8px;border:1px solid #587265;border-radius:8px;background:var(--panel);box-shadow:0 10px 30px #0009}.node-menu input{width:100%;margin-bottom:6px}
+#node-list{display:flex;flex-direction:column;max-height:300px;min-height:0;overflow:auto}   /* the menu fits the graph area: on a short window the list scrolls */#node-list button{text-align:left;border:0;background:none;padding:5px 8px;border-radius:4px;font-size:12px}#node-list button:hover,#node-list button:focus{background:#344c42;outline:0}
 .material-side{grid-column:3;grid-row:1/3;display:flex;flex-direction:column;min-height:0;overflow:auto;border-left:1px solid var(--line);background:var(--panel);padding:10px 14px 16px}
 .material-preview{grid-column:2;grid-row:2;display:grid;grid-template-rows:auto minmax(0,1fr) auto;min-width:0;min-height:0;padding:10px 14px;border-top:1px solid var(--line);border-left:1px solid var(--line)}.material-view{display:flex;gap:4px;margin-bottom:8px}.material-view .spacer{flex:1}.material-view button{padding:5px 9px;font-size:11px;white-space:nowrap}.material-view [aria-pressed=true],.material-tabs [aria-selected=true]{background:#344c42;border-color:#78ae8d}
 /* The picture has its own size container. A whole number of 32 px tiles fits between the existing view controls and note;
@@ -387,10 +390,10 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .surface-head span.surface-name{cursor:pointer}
 .surface-head input.surface-name{min-width:6em}
 .surface-head button{flex:none;padding:1px 6px}
-.surface-head .surface-toggle{border:0;background:none;width:1.4em;padding:0}
+.surface-head .surface-toggle{border:0;background:none;width:1.4em;padding:0;font-size:17px;line-height:1;color:var(--muted)}.surface-head .surface-toggle[aria-expanded=true]{transform:rotate(90deg)}   /* the card sections' chevron */
 .surface-layer.unshown>.surface-head .surface-name,.surface-layer.unshown>.surface-head .material-chip{opacity:.45}
 .surface-head button[aria-pressed="true"].surface-solo{background:var(--accent,#c43b3b);color:#11261b;opacity:1}
-.surface-head .surface-eye,.surface-head .surface-solo{border:0;background:none;min-width:3.2em;padding:1px 4px;font-size:10.5px;opacity:.8}
+.surface-head .surface-eye,.surface-head .surface-solo{border:1px solid var(--line);border-radius:4px;background:none;min-width:3.2em;padding:1px 4px;font-size:10.5px;opacity:.8}   /* bordered: buttons, not captions */
 .surface-head .surface-eye:disabled{opacity:.3}
 .surface-order{flex-wrap:wrap}
 .surface-order>span{flex:1}
@@ -457,7 +460,9 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .map-view-note{position:absolute;z-index:6;top:10px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:5px 6px 5px 12px;border:1px solid #6f6136;border-radius:8px;background:#2d281bf0;color:#f1d58c;font-size:12px;font-weight:600;white-space:nowrap;box-shadow:0 6px 24px #0008}.map-view-note .small{color:#d6c9a3;font-weight:400}.map-view-note[hidden]{display:none}
 /* Pick's settings rows (the World rows' sliders, compact) and the surface layers at the pixel with why the others are not there. */
 .pick-rows{display:grid;gap:3px}.pick-rows .control{margin:0}
-.pick-more>summary{cursor:pointer;color:var(--muted);font-size:10.5px;display:flex;align-items:center;gap:6px}.pick-more[open]>summary{margin-bottom:4px}.pick-more>summary .scope-tag{margin-left:auto}
+.pick-more>summary{cursor:pointer;color:var(--muted);font-size:10.5px;display:flex;align-items:center;gap:6px;list-style:none}.pick-more[open]>summary{margin-bottom:4px}
+/* A flex summary loses the browser's marker: the same chevron as the card sections (.feature-group>summary). */
+.pick-more>summary:before{content:'›';flex:none;width:7px;font-size:14px;line-height:10px;text-align:center}.pick-more[open]>summary:before{transform:rotate(90deg)}.pick-more>summary .scope-tag{margin-left:auto}
 .pick-layer-list{margin:0;padding-left:16px;display:grid;gap:3px;font-size:10.5px;color:var(--muted)}.pick-layer-list li>button.link{margin-right:5px;font-size:inherit;padding:0}
 .pick-layer-list .pick-move{font-size:inherit}.pick-moved{margin:6px 0 0;color:var(--text)}
 /* The card's profile is compact (its silhouette, still editable); Full size opens it at the workspace's size. */

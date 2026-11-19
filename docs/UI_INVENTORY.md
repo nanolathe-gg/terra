@@ -17,7 +17,7 @@ editor state.
 | --- | --- |
 | Top bar | Map menu (its button shows the map's name and size; New, Open, Save and Share link above the map's own settings), Undo/Redo; Build/World (the World tab names the world); Materials; Find; View menu (Art/Clay/Passability, tile grid, weathered detail, panel toggles, Focus, then the editor settings: drawing, memory budgets, TA palette); Export. Long map and world names truncate visually; the map's full name stays in the hover title. |
 | Tool rail | Select, Land, Water, Brushes, Features, Starts, Shapes, Expand. Land/Water/Brushes flyouts show tool names and existing rendered examples; Expand keeps the full palette visible. |
-| Build side panel | Tool or selected-shape card with Profile, Size & height, Rock & cover, Outline & variation, Details and Advanced groups; features use their existing Place/Erase/Fill modes and kind tabs. Starts has its own rail entry into the same feature state. |
+| Build side panel | Tool or selected-shape card with Profile, Size & height (Size & strength or Size & edge on a brush), Rock & cover, Outline & variation, Details and Advanced groups; features use their existing Place/Erase/Fill modes and kind tabs. Starts has its own rail entry into the same feature state. |
 | Shape profile | Cross-section and height-along-path canvases beside the selected-point and bulk numeric editors in Full size. Live terrain preview uses the same renderer. |
 | World side panel | World, Colors, Ground, Vegetation, Rock types, Cliffs & stones, Sand, Water & shores, Rain & erosion, Light & shine, Palette. Larger sections have tabs. Search spans authored labels and subgroup names, including hover-only parenthetical explanations, without matching every row solely through an ancestor section name. All includes fine controls. |
 | Unavailable World rows | Eligible disabled rows fold by their requirement reason within each subgroup. Keyboard-operable Show/Hide buttons retain their reason, count and row associations. Search reveals matching disabled rows with reasons. Changing a parent setting re-evaluates availability immediately. |
@@ -873,11 +873,11 @@ default on Green; the others appear when their parent is on.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Minimap: drag to pan, or use arrow keys | `` | canvas |  | not saved | default view |  | Canvas › Navigator |
 | curve-form | `curve-form` | choice; The shape's own / Plateau / Hill / Mountain / Terraced / Mesa / Cliff / Shore / Shelf / Ra…; Green: lfPlateau |  | shape (map file) | default view |  | Build › Profile strip › Cross-section |
-| Drag points to shape the section. Click the line to add a point. Shift-click a point to remove it. Drag the diamond to lean. | `section-preview` | canvas | Drag points to shape the section. Click the line to add a point. Shift-click a point to remove it. Drag the diamond to lean. | shape (map file) | default view |  | Build › Profile strip › Cross-section |
+| Drag points to shape the section. Double-click to add a point; double-click or Shift-click a point to remove it. Drag the diamond to lean. | `section-preview` | canvas | Drag points to shape the section. Double-click to add a point; double-click or Shift-click a point to remove it. Drag the diamond to lean. | shape (map file) | default view |  | Build › Profile strip › Cross-section |
 | Sides linked | `curve-link` | button | Both sides share one curve | shape (map file) | default view |  | Build › Profile strip › Cross-section |
 | Mirror | `curve-mirror` | button | Flip the section left to right | shape (map file) | default view |  | Build › Profile strip › Cross-section |
 | Reset | `curve-reset` | button |  | shape (map file) | default view |  | Build › Profile strip › Cross-section |
-| Click or drag away from points to move the section marker. Drag points to change height. Double-click to add a point. Shift-click to remove it. | `along-preview` | canvas | Click or drag away from points to move the section marker. Drag points to change height. Double-click to add a point. Shift-click to remove it. | shape (map file) | default view |  | Build › Profile strip › Height along the path |
+| Click or drag away from points to move the section marker. Drag points to change height. Double-click to add a point; double-click or Shift-click a point to remove it. | `along-preview` | canvas | Click or drag away from points to move the section marker. Drag points to change height. Double-click to add a point; double-click or Shift-click a point to remove it. | shape (map file) | default view |  | Build › Profile strip › Height along the path |
 | Reset | `along-reset` | button |  | shape (map file) | default view |  | Build › Profile strip › Height along the path |
 
 ## On and around the map
@@ -935,7 +935,7 @@ button, and the weathering progress text.
 | Shift + click (Select) | Add a shape to the selection or remove it; dragging any selected shape moves them together, and Delete removes them all | new |
 | Shift + drag (Select) | Change height when one shape is selected; Shift also snaps rotate and scale | unchanged |
 | Slider: drag, click, double-click or Enter to type, arrows, Page Up/Down, Home/End, Shift for fine | Every slider row | unchanged |
-| Curve canvases: drag points, click line to add, Shift-click to remove, drag the diamond to lean, double-click to add (along) | Cross-section and Length vs. height | unchanged |
+| Curve canvases: drag points, double-click to add, double-click or Shift-click to remove, drag the diamond to lean | Cross-section and Length vs. height | unchanged |
 
 ## Address parameters
 

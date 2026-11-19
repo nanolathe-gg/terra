@@ -5,9 +5,9 @@ import {configureMap,mapGeometry,mountMapCanvas,validMapSize} from './sculpt-map
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,worldHome,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-column.js';
-import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,layerCopyMissing,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,roleName,worldKey,LIBRARY} from './sculpt-materials.js';
+import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,mergeWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,layerCopyMissing,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,roleName,worldKey,LIBRARY,materialRef,materialSlotFor} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
-import {ROCK_PRESETS,ROCK_HEADLINES,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials,dropRockMaterials} from './sculpt-rock-presets.js';
+import {ROCK_PRESETS,ROCK_HEADLINES,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials,dropRockMaterials,rockRef,rockSlotFor} from './sculpt-rock-presets.js';
 import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf,waterTone} from './sculpt-knobs.js';
 import {shapeControlAvailable,WORLD_CHOICES,worldControlRequirement,WORLD_PRIMARY_CONTROLS} from './sculpt-control-schema.js';
 import {sectionPreview,FACING_CHOICES,LANDFORM_FORMS,defaultForm,strokeKnots,thinKnots,knotCurve,leanRatio,leanSetup,landformReach,landformSides,landformBackSide,alongKnots,landformElevation,landformGround,landformDigs,landformSteps} from './sculpt-shape-presets.js';
@@ -73,7 +73,7 @@ const HELP = {
 let mapUpdate=() => {},mapFeatures=null,mapMetadata=null,mapRevision=0;
 const mapData=() => ({...mapFeatures?.serialize(),...mapMetadata?.serialize()});
 function restoreMapData(data={}) { mapFeatures?.load(data||{}); mapMetadata?.load(data||{}); mapRevision++; }
-function mapChanged() { mapRevision++; checkpoint(true); schedule(false); }
+function mapChanged(act) { mapRevision++; checkpoint(true,act); schedule(false); }
 let config, renderer, grid, size, spacing, services;
 // A world's configuration file, by the same relative path on a static host and on the Go server: config/<world>.json.
 const configUrl=world=>`config/${encodeURIComponent(world)}.json`;
@@ -312,6 +312,7 @@ function updateControls() {
   // The side panel's Selection block is the Select tool with no shape selected: its hint, or the selected features' values. A selected
   // shape's own actions are the bar on the map (#selection-hud) and the head of its card.
   $('selection-panel').hidden=featureActive||picking||tool!=='move'||(hasSelection&&!featureSelection);
+  $('pick-panel').hidden=!picking||Boolean(selectedNode?.params);   // Pick with no shape's card to show: what Pick does, so the panel is not blank
   $('feature-selection').hidden=!featureSelection;$('shape-selection-actions').hidden=!selectionActive;
   $('selection-empty').hidden=hasSelection||featureSelection;
   $('path-actions').hidden=$('path-row').hidden=!pathEditing||!hasSelection;
@@ -363,6 +364,7 @@ function updateControls() {
   const fixed=['erase','landform'].includes(kind);
   $('amount-control').hidden=fixed;
   $('amount-label').textContent=kind==='smooth' || isCover(kind)?'Strength':kind==='fissure'?'Depth':'Rise';
+  $('card-size-name').textContent=kind==='smooth' || isCover(kind)?'Size & strength':kind==='erase'?'Size & edge':'Size & height';   // the section's rows: a brush sets no height
   const [lo,hi]=amountRange(kind); $('amount').min=String(lo); $('amount').max=String(hi);
   $('amount').value=String(clamp(Number($('amount').value),lo,hi));
   const amountNow=Number($('amount').value);
@@ -532,6 +534,8 @@ function syncCurveNumbers(c) {
   $('curve-point-x').disabled=i===0||i===ks.length-1;$('curve-point-x').min=ks[i-1]?.[0]+.01||0;$('curve-point-x').max=ks[i+1]?.[0]-.01||1;
   $('curve-point-y').min=curvePoint.side==='along'||!c.land?0:-1;$('curve-point-y').max=curvePoint.side==='along'?ALONG_HI:1.5;
   $('curve-point-delete').disabled=i===0||i===ks.length-1||ks.length<=2;
+  $('curve-point-delete').title=$('curve-point-delete').disabled?'The end points stay: select a point between them':'Delete the selected point';
+  $('curve-point-x').title=$('curve-point-x').disabled?'An end point stays at its edge: only its height moves':'';
 }
 function commitNumberKnots(ks) {
   const c=curveContext();if(curvePoint.side==='along')setCurve(roundKnots(ks),'along');
@@ -636,13 +640,9 @@ function curveEditorEvents() {
     if (Math.hypot(L.xc-p.px,L.yv(0)-p.py)<9) { drag={lean:true}; cv.setPointerCapture(e.pointerId); return; }
     const h=hit(c,L,p);
     if (h && e.shiftKey) { if (remove(c,{...h,edit:h.edit||'front'}) && selected>=0) { checkpoint(); queueWeather(); } return; }
-    if(h){curvePoint={side:h.edit||'front',i:h.i};syncCurveNumbers(c);}
-    if (h) drag={side:h.side,edit:h.edit||'front',i:h.i};
-    else {
-      const side=p.px<L.xc?'back':'front',edit=side==='back'&&!sidesLinked(c)&&c.land?'back':'front',x=clamp(distShare(L,side,p.px),.01,.99);
-      const list=(edit==='back'?backKnots(c):frontKnots(c)).map(k => [...k]); let j=list.findIndex(k => k[0]>x); if (j<0) j=list.length-1;
-      list.splice(j,0,[x,vOf(c,L,p.py)]); curvePoint={side:edit,i:j};drag={side,edit,i:j}; edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c));
-    }
+    if (!h) return;   // a press on empty canvas changes nothing: a double-click adds a knot, as on the along curve
+    curvePoint={side:h.edit||'front',i:h.i};syncCurveNumbers(c);
+    drag={side:h.side,edit:h.edit||'front',i:h.i};
     cv.setPointerCapture(e.pointerId);
   });
   cv.addEventListener('pointermove',e => {
@@ -654,10 +654,19 @@ function curveEditorEvents() {
     k[1]=vOf(c,L,p.py); drag.edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c));
   });
   cv.addEventListener('pointerup',finish); cv.addEventListener('pointercancel',finish);
-  cv.addEventListener('dblclick',e => { const c=curveContext(),h=hit(c,sectionLayout(c),at(e)); if (h && remove(c,{...h,edit:h.edit||'front'}) && selected>=0) { checkpoint(); queueWeather(); } });
+  // Double-click: on a knot removes it, on empty canvas adds one at the pointer (both curve editors work the same way).
+  cv.addEventListener('dblclick',e => {
+    const p=at(e),c=curveContext(),L=sectionLayout(c),h=hit(c,L,p);
+    if (h) { if (remove(c,{...h,edit:h.edit||'front'}) && selected>=0) { checkpoint(); queueWeather(); } return; }
+    if (Math.hypot(L.xc-p.px,L.yv(0)-p.py)<9) return;   // the lean diamond
+    const side=p.px<L.xc?'back':'front',edit=side==='back'&&!sidesLinked(c)&&c.land?'back':'front',x=clamp(distShare(L,side,p.px),.01,.99);
+    const list=(edit==='back'?backKnots(c):frontKnots(c)).map(k => [...k]); let j=list.findIndex(k => k[0]>x); if (j<0) j=list.length-1;
+    list.splice(j,0,[x,vOf(c,L,p.py)]); curvePoint={side:edit,i:j}; edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c));
+    if (selected>=0) { checkpoint(); queueWeather(); }
+  });
 }
 // Drag a knot to edit height. Click or drag elsewhere to inspect the section
-// along the path; double-click adds a knot and Shift-click removes one.
+// along the path; double-click adds a knot, and double-click or Shift-click removes one.
 function alongEditorEvents() {
   const cv=$('along-preview'); let pointer=null,drag=-1,moved=false;
   const at=e => { const r=cv.getBoundingClientRect(); return {px:(e.clientX-r.left)*cv.width/r.width,py:(e.clientY-r.top)*cv.height/r.height}; };
@@ -1597,12 +1606,15 @@ function moveSelectedShapes(dx,dy) {
 let shapeClipboard=null;
 function copyShapes() {
   const group=selectedShapes(); if (!group.length || stroke || moving || loading || !ready) return false;
-  shapeClipboard={nodes:cloneNodes(group.map(i => nodes[i])),pastes:0};
+  // A copy's rock type and material are remembered by identity, not slot: a slot freed by a delete (or an undo) may hold another by paste time.
+  const refs=group.map(i => { const p=nodes[i].params??{},rock=Math.round(p.rockPreset??-1),ground=p.groundPreset; return {rock:rock>0?rockRef(mapRocks,rock):undefined,ground:Number.isInteger(ground)&&ground>0?materialRef(mapMaterials,ground):undefined}; });
+  shapeClipboard={nodes:cloneNodes(group.map(i => nodes[i])),refs,pastes:0};
   status(group.length>1?`Copied ${group.length} shapes.`:`Copied ${shapeName(group[0])}.`); return true;
 }
 function pasteShapes(verb='Pasted') {
   if (!shapeClipboard || stroke || moving || loading || !ready) return false;
   const copies=cloneNodes(shapeClipboard.nodes),step=32*(shapeClipboard.pastes+1);
+  copies.forEach((n,k) => { const ref=shapeClipboard.refs[k]; if (ref.rock!==undefined) n.params.rockPreset=rockSlotFor(mapRocks,ref.rock); if (ref.ground!==undefined) n.params.groundPreset=materialSlotFor(mapMaterials,ref.ground); });
   const m=fitToMap(copies.flatMap(n => n.points),[1,0,0,1,step,step]);
   if (!m) { status('The copied shapes do not fit on this map.'); return true; }
   shapeClipboard.pastes++; cancelWeather();
@@ -1698,6 +1710,13 @@ function renderLayers() {
   $('node-up').disabled||=selected>=nodes.length-1;$('node-down').disabled||=selected<=0;
   $('node-seed').disabled||=nodes[selected]?.seed===undefined;
   $('node-hide').textContent=nodes[selected]?.hidden?'Show':'Hide';
+  // A disabled list action says why (rule 9); a load, stroke or drag under way passes in a moment and needs no reason.
+  const busy=loading||Boolean(stroke||moving),why=(id,reason) => { const b=$(id); b.dataset.title??=b.title; b.title=b.disabled&&!busy?reason:b.dataset.title; };
+  for (const id of ['node-delete','node-hide']) why(id,'Select a shape first');
+  why('node-seed',selected<0?'Select a shape first':'This shape has no seed to change');
+  why('node-up',selected<0?'Select a shape first':'This shape is already at the top');
+  why('node-down',selected<0?'Select a shape first':'This shape is already at the bottom');
+  why('shape-duplicate','Select a shape first');
 }
 function nodeAction(kind) {
   const i=selected; if (i<0 || stroke || moving || loading || !ready) return;
@@ -1716,7 +1735,8 @@ function flushEval() {
 }
 // What a history entry changed against the one before it, in the editor's words, for Undo and Redo: "the change to Plateau 1", "deleting
 // Hill 2", "adding Ramp 3", "renaming the map", joined with "and".
-function changeName(prev,next) {
+// `act`: what a features or starts edit did ("placing a tree", sculpt-features.js changed), named in place of "the change to features".
+function changeName(prev,next,act='') {
   if (!prev) return '';
   const same=k => JSON.stringify(prev[k])===JSON.stringify(next[k]),acts=[],changes=[];
   const named=(list,i) => list[i]?`${shapeLabel(list[i])} ${i+1}`:'';
@@ -1733,8 +1753,9 @@ function changeName(prev,next) {
   if (data(['name'])) acts.push('renaming the map');
   if (data(['description'])) changes.push('the map’s description');
   if (data(['settings'])) changes.push('the map’s game settings');
-  if (data(['features','featureSet','fill'])) changes.push('features');
-  if (data(['starts'])) changes.push('start positions');
+  const features=data(['features','featureSet','fill']),starts=data(['starts']);
+  if (act && (features || starts)) acts.push(act);
+  else { if (features) changes.push('features'); if (starts) changes.push('start positions'); }
   if (!same('tools')) changes.push('this map’s tools');
   return [...acts,...(changes.length?[`the change to ${changes.join(' and ')}`]:[])].join(' and ');
 }
@@ -1742,9 +1763,9 @@ function syncHistoryNames() {
   const back=historyIndex>0?history[historyIndex].name:'',ahead=history[historyIndex+1]?.name??'';
   $('undo').title=`Undo${back?' '+back:''} · ⌘ / Ctrl Z`;$('redo').title=`Redo${ahead?' '+ahead:''} · ⌘ / Ctrl Shift Z`;
 }
-function checkpoint(mapOnly=false) {
+function checkpoint(mapOnly=false,act='') {
   flushEval(); keepWorldMaterials();
-  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); history.at(-1).name=changeName(history.at(-2),history.at(-1)); if (history.length>48) history.shift(); historyIndex=history.length-1;
+  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); history.at(-1).name=changeName(history.at(-2),history.at(-1),act); if (history.length>48) history.shift(); historyIndex=history.length-1;
   renderLayers(); updateControls(); persistLater(0); pickCard?.refresh();   // saved at once (persistLater); a pinned pixel reads again after every committed change
 }
 // A card change commits one undo step — never mid-gesture, where a checkpoint would capture a
@@ -2726,7 +2747,7 @@ function syncRockPanel() {
   $('rock-chips').replaceChildren(...[...list.options].map(option=>{
     const slot=Number(option.value),chip=document.createElement('button'),swatch=document.createElement('span'),name=slot===0?worldRockName(config):option.textContent;
     chip.type='button';chip.className='rock-chip';chip.setAttribute('role','radio');chip.setAttribute('aria-checked',String(slot===rockSelected));chip.dataset.slot=option.value;chip.tabIndex=slot===rockSelected?0:-1;chip.title=slot===0?`${name}: the world\u2019s rock type`:name;
-    swatch.className='rock-swatch';swatch.style.background=rockHex(slot);chip.append(swatch,name);
+    swatch.className='rock-swatch';swatch.style.background=rockHex(slot);const label=document.createElement('span');label.className='rock-chip-name';label.textContent=name;chip.append(swatch,label);
     chip.onkeydown=e=>{const keys=['ArrowRight','ArrowDown','ArrowLeft','ArrowUp','Home','End'];if(!keys.includes(e.key))return;e.preventDefault();const chips=[...$('rock-chips').children],i=chips.indexOf(chip),next=e.key==='Home'?0:e.key==='End'?chips.length-1:(i+(e.key==='ArrowRight'||e.key==='ArrowDown'?1:-1)+chips.length)%chips.length;chips[next].click();$('rock-chips').querySelector('[aria-checked=true]').focus();};
     chip.onclick=()=>{list.value=option.value;list.dispatchEvent(new Event('change'));};
     return chip;
