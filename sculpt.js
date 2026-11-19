@@ -636,13 +636,9 @@ function curveEditorEvents() {
     if (Math.hypot(L.xc-p.px,L.yv(0)-p.py)<9) { drag={lean:true}; cv.setPointerCapture(e.pointerId); return; }
     const h=hit(c,L,p);
     if (h && e.shiftKey) { if (remove(c,{...h,edit:h.edit||'front'}) && selected>=0) { checkpoint(); queueWeather(); } return; }
-    if(h){curvePoint={side:h.edit||'front',i:h.i};syncCurveNumbers(c);}
-    if (h) drag={side:h.side,edit:h.edit||'front',i:h.i};
-    else {
-      const side=p.px<L.xc?'back':'front',edit=side==='back'&&!sidesLinked(c)&&c.land?'back':'front',x=clamp(distShare(L,side,p.px),.01,.99);
-      const list=(edit==='back'?backKnots(c):frontKnots(c)).map(k => [...k]); let j=list.findIndex(k => k[0]>x); if (j<0) j=list.length-1;
-      list.splice(j,0,[x,vOf(c,L,p.py)]); curvePoint={side:edit,i:j};drag={side,edit,i:j}; edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c));
-    }
+    if (!h) return;   // a press on empty canvas changes nothing: a double-click adds a knot, as on the along curve
+    curvePoint={side:h.edit||'front',i:h.i};syncCurveNumbers(c);
+    drag={side:h.side,edit:h.edit||'front',i:h.i};
     cv.setPointerCapture(e.pointerId);
   });
   cv.addEventListener('pointermove',e => {
@@ -654,10 +650,19 @@ function curveEditorEvents() {
     k[1]=vOf(c,L,p.py); drag.edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c));
   });
   cv.addEventListener('pointerup',finish); cv.addEventListener('pointercancel',finish);
-  cv.addEventListener('dblclick',e => { const c=curveContext(),h=hit(c,sectionLayout(c),at(e)); if (h && remove(c,{...h,edit:h.edit||'front'}) && selected>=0) { checkpoint(); queueWeather(); } });
+  // Double-click: on a knot removes it, on empty canvas adds one at the pointer (both curve editors work the same way).
+  cv.addEventListener('dblclick',e => {
+    const p=at(e),c=curveContext(),L=sectionLayout(c),h=hit(c,L,p);
+    if (h) { if (remove(c,{...h,edit:h.edit||'front'}) && selected>=0) { checkpoint(); queueWeather(); } return; }
+    if (Math.hypot(L.xc-p.px,L.yv(0)-p.py)<9) return;   // the lean diamond
+    const side=p.px<L.xc?'back':'front',edit=side==='back'&&!sidesLinked(c)&&c.land?'back':'front',x=clamp(distShare(L,side,p.px),.01,.99);
+    const list=(edit==='back'?backKnots(c):frontKnots(c)).map(k => [...k]); let j=list.findIndex(k => k[0]>x); if (j<0) j=list.length-1;
+    list.splice(j,0,[x,vOf(c,L,p.py)]); curvePoint={side:edit,i:j}; edit==='back'?storeSection(c,frontKnots(c),list):storeSection(c,list,backKnots(c));
+    if (selected>=0) { checkpoint(); queueWeather(); }
+  });
 }
 // Drag a knot to edit height. Click or drag elsewhere to inspect the section
-// along the path; double-click adds a knot and Shift-click removes one.
+// along the path; double-click adds a knot, and double-click or Shift-click removes one.
 function alongEditorEvents() {
   const cv=$('along-preview'); let pointer=null,drag=-1,moved=false;
   const at=e => { const r=cv.getBoundingClientRect(); return {px:(e.clientX-r.left)*cv.width/r.width,py:(e.clientY-r.top)*cv.height/r.height}; };
