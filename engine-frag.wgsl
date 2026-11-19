@@ -1238,6 +1238,12 @@ fn rockGrain(slot: u32, pixel: vec2f) -> vec3f {
 }
 // A rock slot's colour as the draw lays it flat (rockFlat): its material's mean, so the material's Color is the rock's.
 fn slotRock(slot: u32) -> vec3f { return rockMaterialMean(slot); }
+// The mean of a rock slot's five bed colours (bedColor), the colour its beds' tints are measured from.
+fn bedMean(slot: u32) -> vec3f {
+    let m = rockMaterialMean(slot); var sum = vec3f(0.0);
+    for (var k = 1; k <= 5; k++) { sum += saturate(m + u.rock[slot & rockMask].rockColors[k].rgb); }
+    return sum * 0.2;
+}
 // B4: a rock's thickness along the sun's line through a point of its surface, height units. From just inside the surface, away from the sun
 // on a lit face (the rock behind what the sun lights) and toward it on a shaded face (the rock the sun's light crosses to get there), the
 // length of that line lying under the heights and 3 units over the plain over 24 steps of 1.5 (36 at most: thick). Over the plain: the ground
@@ -1821,10 +1827,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     var fineColor=mix(sourceColor,mix(sandWeathered()*finesTint,sourceColor*.9,strataMix),lying.z*.65);
     // The map's Debris material (worldDebris, Materials), where it has one: the debris is that material, its grain at the art pixel, in place of
     // the rock's for the fragments and of the weathered sand for the fines (lightened as sand is, and tinted by the source rock alike). The
-    // source's beds still colour it through Strata, as they colour the rock's. Only where debris lies (depositCover): no debris, no change.
+    // source's beds still colour it through Strata, as they colour the rock's: a bed tints the material by how its colour stands against the
+    // mean of its rock's beds (bedMean), so the material shows at any Strata and the beds still read through it. (Laying the bed's colour in
+    // its place hid the material wholly at Strata .5 or more with Bed contrast 1, Desert's defaults.) Only where debris lies (depositCover):
+    // no debris, no change.
     if(depositCover>0.0&&u.debrisGround>=0&&u.ground[u32(u.debrisGround) & groundMask].cacheLayer>=0){
         let art=materialPigment(grainPixel(pixel),u32(u.debrisGround));
-        let coarse=mix(art,bedColor,strataMix);
+        let coarse=art*mix(vec3f(1.0),clamp((bedColor+.01)/(bedMean(ds)+.01),vec3f(.25),vec3f(4.0)),strataMix);
         fineColor=mix(coarse,mix(mix(art,vec3f(1.0),u.sandLight*.55)*finesTint,coarse*.9,strataMix),lying.z*.65);
     }
     surfSrc[1]=fineColor;surfMask[1]=depositCover;
@@ -1907,6 +1916,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         flatBank = u.flatBank * step(u.sea, bh) * (1.0 - smoothstep(u.base - 0.5, u.base + 0.5, bh));
     }
     material *= 1.0 - nearWater * 0.17 * (1.0 - flatBank);
+    // Rock above the water stays wet from spray and swell, higher than soft ground: darkest at the waterline and fading to nothing over four
+    // times the world's wet band (fade: 1 at the water, 0 at the top), the fade squared so most of it is a faint darkening, with a frayed edge
+    // (wet tongues reach up and dry flecks reach down: value noise at 13 and 5 px and single art pixels), so the band ends in a scatter, not a line.
+    let wetFade = 1.0 - clamp((baseHeight(p) - u.sea - 1.0) / (4.0 * max(u.wetBand, 1.0)), 0.0, 1.0);
+    let wetFray = 0.55 * valueNoise(p / 13.0 + vec2f(3.1, 7.7)) + 0.3 * valueNoise(p / 5.0 + vec2f(8.3, 1.9)) + 0.35 * (shelfHash(floor(grainPixel(pixel)) + 63.0) - 0.5);
+    let shoreWetRock = exposed * (1.0 - flatBank) * frostDry(1.0, route) * clamp(wetFade + 0.4 * wetFray, 0.0, 1.0) * wetFade;
+    material *= 1.0 - 0.32 * shoreWetRock;
     // Painted wet or dark ground darkens as the shoreline band does, twice as strongly.
     material *= 1.0 - painted.z * 0.34;
     let crystalMask = crystalField(p);
@@ -2099,7 +2115,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let turned = 1.0 - clamp(shading, 0.0, 1.0);
     if (u.shineOn != 0 || u.paintOn != 0 || u.groundShine != 0) {
         let sunSeen = markSeen * (1.0 - flatBank) * closeVis * faceSun;
-        var damp=max(max(u.rock[rs & rockMask].faceWet*exposed*rockWet,painted.z*.85),wetFilm*.8);
+        var damp=max(max(max(u.rock[rs & rockMask].faceWet*exposed*rockWet,painted.z*.85),wetFilm*.8),shoreWetRock*.5);
         var shine = shineTerm(pixel, p, g, normal, material, exposed, slopeShare, crystalMask, sunSeen, landform, damp, mineralPatch, skin*(1.0-depositCover));
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }

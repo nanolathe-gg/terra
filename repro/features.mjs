@@ -32,7 +32,7 @@ try {
   // A map point (pixels, as placements are stored) to the screen, through the editor's own projection of the feature's anchor.
   const screenOf = (kind, x, z) => ev(`(()=>{const f=sculptCanvas.features,i=f.placements.findIndex(p=>p.kind==='${kind}'&&p.x===${x}&&p.z===${z}),a=f.viewPoint(i),v=sculptCanvas.view(),r=document.getElementById('overlay').getBoundingClientRect();return a&&{x:Math.round(r.left+(a.x-v.x)*v.scale),y:Math.round(r.top+(a.y-v.y)*v.scale)};})()`);
   const groundScreen = (mx, mz) => ev(`(()=>{const v=sculptCanvas.view(),r=document.getElementById('overlay').getBoundingClientRect();return {x:Math.round(r.left+(${mx}-v.x)*v.scale),y:Math.round(r.top+(${mz}-v.y)*v.scale)};})()`);
-  const scrubPoint=id=>ev(`(()=>{const s=document.querySelector('.scrub[data-source="${id}"]');s.closest('details')?.setAttribute('open','');s.scrollIntoView({block:'center'});const r=s.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+  const scrubPoint=id=>ev(`(()=>{const s=document.querySelector('.scrub[data-source="${id}"]');s.closest('details')?.setAttribute('open','');s.scrollIntoView({block:'center'}),window.scrollTo(0,0);const r=s.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
   const typeScrub=async(id,text)=>{
     const p=await scrubPoint(id);
     for(const clickCount of [1,2]){await mouse('mousePressed',p,{clickCount});await mouse('mouseReleased',p,{clickCount});}

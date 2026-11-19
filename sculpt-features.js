@@ -102,32 +102,49 @@ export async function mountMapFeatures(api) {
   }
   // ---- pixels: a worker draws sprites and paints deposits and vents ----
   // The worker answers every job (a job's own failure comes back as its error). An error on the worker itself (it failed to load, or it died) fails
-  // every job in flight and ends that worker: a job after it starts a new one (one that failed less than 2 s ago fails at once instead, so a
+  // every waiting job and ends that worker: a job after it starts a new one (one that failed less than 2 s ago fails at once instead, so a
   // generator that cannot load is not started again on every draw). Such a failure is marked `lost`, so the sprite and thumbnail caches
-  // drop the entry and ask again, where a job's own error is kept (it would fail the same way). A job given an abort signal is rejected, and
-  // forgotten, when it aborts; the worker's answer is then dropped.
-  let worker=null,jobId=0,lost=null;
-  const jobs=new Map();
+  // drop the entry and ask again, where a job's own error is kept (it would fail the same way). Jobs wait here, in order, and only
+  // IN_FLIGHT at a time are posted, so a job given an abort signal that aborts before its turn is never drawn (a light slider's stale
+  // sprites, say); one already posted is rejected and forgotten, and the worker's answer is then dropped.
+  const IN_FLIGHT=2;
+  let worker=null,jobId=0,lost=null,inFlight=0;
+  const jobs=new Map(),queue=[];
+  const lostError=() => Object.assign(new Error(lost.message),{lost:true});
+  function startWorker() {
+    const own=new Worker(new URL('./sculpt-feature-worker.js',import.meta.url),{type:'module'});
+    own.onmessage=({data}) => {
+      if (worker===own) inFlight--;
+      const job=jobs.get(data.id); jobs.delete(data.id);
+      if (job) { job.done(); if (data.error) job.reject(new Error(data.error)); else job.resolve(data); }
+      pump();
+    };
+    own.onerror=event => {
+      const message=event.message||'The feature generator could not start.';
+      own.terminate(); if (worker===own) { worker=null; inFlight=0; } lost={at:performance.now(),message};
+      queue.length=0;
+      for (const [id,job] of jobs) { jobs.delete(id); job.done(); job.reject(lostError()); }
+      status(message);
+    };
+    return own;
+  }
+  function pump() {
+    while (inFlight<IN_FLIGHT && queue.length) {
+      const id=queue.shift(),job=jobs.get(id); if (!job) continue;   // aborted while it waited
+      if (!worker && lost && performance.now()-lost.at<2000) { jobs.delete(id); job.done(); job.reject(lostError()); continue; }
+      worker??=startWorker(); inFlight++;
+      worker.postMessage({...job.message,id},job.transfer); job.message=job.transfer=null;
+    }
+  }
   function work(message,transfer=[],signal=null) {
     if (signal?.aborted) return Promise.reject(signal.reason);
-    if (!worker && lost && performance.now()-lost.at<2000) return Promise.reject(Object.assign(new Error(lost.message),{lost:true}));
-    if (!worker) {
-      const own=new Worker(new URL('./sculpt-feature-worker.js',import.meta.url),{type:'module'});
-      own.onmessage=({data}) => { const job=jobs.get(data.id); jobs.delete(data.id); if (!job) return; job.done(); if (data.error) job.reject(new Error(data.error)); else job.resolve(data); };
-      own.onerror=event => {
-        const message=event.message||'The feature generator could not start.';
-        own.terminate(); if (worker===own) worker=null; lost={at:performance.now(),message};
-        for (const [id,job] of jobs) if (job.worker===own) { jobs.delete(id); job.done(); job.reject(Object.assign(new Error(message),{lost:true})); }
-        status(message);
-      };
-      worker=own;
-    }
-    const id=++jobId,own=worker;
+    if (!worker && lost && performance.now()-lost.at<2000) return Promise.reject(lostError());
+    const id=++jobId;
     return new Promise((resolve,reject) => {
       const abort=() => { if (jobs.delete(id)) reject(signal.reason); };
       signal?.addEventListener('abort',abort,{once:true});
-      jobs.set(id,{resolve,reject,worker:own,done:() => signal?.removeEventListener('abort',abort)});
-      own.postMessage({...message,id},transfer);
+      jobs.set(id,{resolve,reject,message,transfer,done:() => signal?.removeEventListener('abort',abort)});
+      queue.push(id); pump();
     });
   }
   // The map's light for the generator: its sun in the sprites' view (TA's view looks down (0, south 1, up 2): x east, y the sun's
@@ -146,23 +163,34 @@ export async function mountMapFeatures(api) {
     const alpha=new Uint8Array(s.w*s.h); for (let i=0;i<alpha.length;i++) alpha[i]=s.rgba[i*4+3]?1:0;
     return {bitmap:await createImageBitmap(new ImageData(s.rgba,s.w,s.h)),w:s.w,h:s.h,ax:s.ax,ay:s.ay,alpha};
   }
+  // A variant's sprite for the view, by its key (recipe and light). `frames`: its palette frames, when the body-only drawing is all the
+  // export packs of it (rocks, scars, dead trees), so the export reuses them; the export draws the rest (burn frames, the burnt
+  // successor) itself. A new light prunes the old light's entries, and a pruned entry aborts its job: dragging the sun asks for one
+  // light's sprites, not one set per step.
   const sprites=new Map();
+  let spriteLight=null;
   const spriteKey=(v,sun) => { const at=lightKey(sun); if (v.keyLight!==at) { v.key=v.kind+'|'+v.seed+'|'+JSON.stringify(v.params)+'|'+at; v.keyLight=at; } return v.key; };
   function sprite(v) {
     const sun=light(); if (!sun || !v || GROUND_KINDS.includes(v.kind)) return null;
+    if (lightKey(sun)!==spriteLight) { spriteLight=lightKey(sun); prune(); }
     const k=spriteKey(v,sun);
     let e=sprites.get(k);
     if (!e) {
-      e={ready:false}; sprites.set(k,e);
-      work({type:'sprite',kind:v.kind,params:v.params,seed:v.seed,light:sun}).then(async r => {
-        Object.assign(e,{body:await bitmapOf(r.body),shadow:await bitmapOf(r.shadow),bodyBlend:r.bodyBlend,shadowBlend:r.shadowBlend,gameplay:r.gameplay,ready:true});
+      e={ready:false,job:new AbortController()}; sprites.set(k,e);
+      work({type:'sprite',kind:v.kind,params:v.params,seed:v.seed,light:sun},[],e.job.signal).then(async r => {
+        e.job=null;
+        Object.assign(e,{body:await bitmapOf(r.body),shadow:await bitmapOf(r.shadow),frames:r.frames,bodyBlend:r.bodyBlend,shadowBlend:r.shadowBlend,gameplay:r.gameplay,ready:true});
         if (sprites.get(k)!==e) return release(e);
         refreshVariants(); refreshSelection(); api.schedule();
-      },err => { if (err.lost) { if (sprites.get(k)===e) sprites.delete(k); } else e.error=err.message; status('A feature could not be drawn: '+err.message); });
+      },err => {
+        if (e.job?.signal.aborted) return;   // pruned: nobody waits for it
+        e.job=null;
+        if (err.lost) { if (sprites.get(k)===e) sprites.delete(k); } else e.error=err.message; status('A feature could not be drawn: '+err.message);
+      });
     }
     return e.ready?e:null;
   }
-  function release(e) { e.body?.bitmap.close?.(); e.shadow?.bitmap.close?.(); e.bitmap?.close?.(); }
+  function release(e) { e.job?.abort(); e.body?.bitmap.close?.(); e.shadow?.bitmap.close?.(); e.bitmap?.close?.(); }
   // Keep only the current set's pixels.
   function prune() {
     const sun=light(),keep=new Set();
@@ -184,11 +212,12 @@ export async function mountMapFeatures(api) {
   const corner=(x,z) => { const h=api.sample(x*CELL,z*CELL); return Number.isFinite(h)?Math.round(clamp(h,0,255)):-1; };
   // The lift waits for heights the fields hold now (api.known): until the anchor cell's corners are read (a map just opened, an edit not yet
   // copied back), a placement keeps the lift it last had, and one with none yet is not drawn (anchor answers null). No sprite jumps as the
-  // base height, then the shapes' heights, then the Time pass's arrive.
+  // base height, then the shapes' heights, then the Time pass's arrive. Heights that are only the coarse lattice's (api.known answers
+  // 'coarse': a paged map's page whose CPU copy was let go) place a placement with no lift yet, and never replace a lift it has.
   const lifts=new Map(),CORNERS=[[0,0],[1,0],[0,1],[1,1]];
   function anchor(p) {
-    const [fw,fz]=footprint(p),k=key(p);
-    if (!api.known || CORNERS.every(([i,j]) => api.known((p.x+i)*CELL,(p.z+j)*CELL))) lifts.set(k,(corner(p.x,p.z)+corner(p.x+1,p.z)+corner(p.x,p.z+1)+corner(p.x+1,p.z+1))>>3);
+    const [fw,fz]=footprint(p),k=key(p),known=api.known&&CORNERS.map(([i,j]) => api.known((p.x+i)*CELL,(p.z+j)*CELL));
+    if (!known || known.every(Boolean) && (!lifts.has(k) || !known.includes('coarse'))) lifts.set(k,(corner(p.x,p.z)+corner(p.x+1,p.z)+corner(p.x,p.z+1)+corner(p.x+1,p.z+1))>>3);
     const lift=lifts.get(k);
     return lift===undefined?null:{x:p.x*CELL+fw*8,y:p.z*CELL+fz*8-lift};
   }
@@ -424,7 +453,9 @@ export async function mountMapFeatures(api) {
     $('feature-reroll').title=$('feature-reroll').disabled?(list.length?'Each selected feature’s style has one variant: raise its Variants to re-roll it.':'Select a feature to re-roll it.'):'Swap for another variant of the same kind';
   }
   function selectionChanged() { refreshSelection(); doc.dispatchEvent(new Event('terraform-feature-mode')); api.schedule(); }
-  function changed(text) { serialized=null; status(text); prune(); refreshSelection(); update(); api.change(); doc.dispatchEvent(new Event('terraform-feature-mode')); }
+  // `act` names the edit as an undo step ("Undo placing a tree"): an -ing phrase, as sculpt.js names shape edits.
+  function changed(text,act) { serialized=null; status(text); prune(); refreshSelection(); update(); api.change(act); doc.dispatchEvent(new Event('terraform-feature-mode')); }
+  const count=n => n===1?'a feature':`${n} features`;
   function activate(next) {
     if (!guard()) return false;
     finishGesture(false);
@@ -450,7 +481,7 @@ export async function mountMapFeatures(api) {
     if(!changeSet(kind,{params}))update();
   };
   $('feature-count').onchange=event => { if (!changeSet(placeKind,{count:Number(event.target.value)})) update(); };
-  $('feature-new-set').onclick=() => { if (!guard()) return; const seed=hash32(activeRecipe().seed,Date.now()>>>0); changeSet(placeKind,{seed},`New variants of ${activeRecipe().name}; its placed features take the new looks.`); };
+  $('feature-new-set').onclick=() => { if (!guard()) return; const seed=hash32(activeRecipe().seed,Date.now()>>>0); changeSet(placeKind,{seed},`New variants of ${activeRecipe().name}; its placed features take the new looks.`,`making new variants of ${activeRecipe().name}`); };
   for (const input of settingInputs) {
     const [kind,name,end]=input.dataset.setting.split('.');
     input.addEventListener('input',() => showNumericValue(input));
@@ -474,7 +505,7 @@ export async function mountMapFeatures(api) {
   // ---- edits ----
   // Edit only the active recipe. Validate the whole placement set before committing:
   // a larger footprint must never silently overlap or delete an authored feature.
-  function commitSet(next, text) {
+  function commitSet(next, text, act) {
     const previous=set, oldPlacements=placements, oldFootprints=placements.map(footprint);
     set=normalizeSet(next,config);
     const moved=placements.map((p,i) => {
@@ -490,13 +521,13 @@ export async function mountMapFeatures(api) {
     }
     placements=moved; selection=new Set(oldPlacements.flatMap((p,i) => selection.has(p)?[moved[i]]:[]));
     if(!activeList().some(v => v.index===placeVariant))placeVariant=-1;
-    changed(text); return true;
+    changed(text,act); return true;
   }
-  function changeSet(kind,edit,text) {
+  function changeSet(kind,edit,text,act) {
     if (!guard() || !set[kind]) return false;
     const current=activeRecipe(kind), next={...set,[kind]:{...set[kind],recipes:set[kind].recipes.map(r => r.id===current.id?{...r,...edit}:r)}};
     if(JSON.stringify(normalizeSet(next,config))===JSON.stringify(set))return false;
-    return commitSet(next,text || `Updated ${current.name}; its placed features take the new look.`);
+    return commitSet(next,text || `Updated ${current.name}; its placed features take the new look.`,act || `changing ${current.name}`);
   }
   function addRecipe(kind, preset, duplicate=false) {
     if(!guard() || !set[kind] || set[kind].recipes.length>=MAX_RECIPES)return false;
@@ -504,14 +535,14 @@ export async function mountMapFeatures(api) {
     if(id>1000000)return false;
     const recipe=duplicate?{...structuredClone(activeRecipe(kind)),id,name:activeRecipe(kind).name+' copy'}:makeRecipe(kind,preset.data,id,preset.name);
     const next={...set,[kind]:{nextId:id+1,recipes:[...group.recipes,recipe]}};
-    if(!commitSet(next,`Added ${recipe.name}.`))return false;
+    if(!commitSet(next,`Added ${recipe.name}.`,`adding ${recipe.name}`))return false;
     activeRecipes[kind]=id; placeVariant=-1; update(); return true;
   }
   function removeRecipe() {
     if(!guard())return false;
     const entry=activeRecipe(),group=set[placeKind];
     if(group.recipes.length<=1 || placements.some(p => p.kind===placeKind && recipeId(p.v)===entry.id))return false;
-    return commitSet({...set,[placeKind]:{...group,recipes:group.recipes.filter(r => r.id!==entry.id)}},`Removed ${entry.name}.`);
+    return commitSet({...set,[placeKind]:{...group,recipes:group.recipes.filter(r => r.id!==entry.id)}},`Removed ${entry.name}.`,`removing ${entry.name}`);
   }
   function addFeature(kind,x,z,options={}) {
     if (!guard()) return false;
@@ -526,17 +557,17 @@ export async function mountMapFeatures(api) {
     if (options.generated && (!gentleFootprint(p,terrainMask()) || nearMargin(p,fill.margin) || placements.some(q => overlaps(p,q,fill.gap)))) { status('Fill needs gentle dry ground, a free footprint and the selected margins.'); return false; }
     const kept=new Set(list2.map(key)); for (const k of generated) if (!kept.has(k)) generated.delete(k);
     placements=[...list2,p]; rolls++; if (options.generated) generated.add(key(p));
-    changed(`Placed ${LABELS[kind].toLowerCase()} ${v%MAX_VARIANTS+1} of ${list.length}${removed?`; cleared ${removed} fill features inside its margin`:''}.`); return true;
+    changed(`Placed ${LABELS[kind].toLowerCase()} ${v%MAX_VARIANTS+1} of ${list.length}${removed?`; cleared ${removed} fill features inside its margin`:''}.`,`placing a ${LABELS[kind].toLowerCase()}`); return true;
   }
   function removeFeature(index,notify=true) {
     if (!guard() || !Number.isInteger(index) || index<0 || index>=placements.length) return false;
     const [p]=placements.splice(index,1); generated.delete(key(p)); selection.delete(p);
-    if (notify) changed(`Removed ${LABELS[p.kind].toLowerCase()}.`); else api.schedule(); return true;
+    if (notify) changed(`Removed ${LABELS[p.kind].toLowerCase()}.`,`removing a ${LABELS[p.kind].toLowerCase()}`); else api.schedule(); return true;
   }
   function removeSelected() {
     if (!guard() || !selection.size) return false;
     const n=selection.size; placements=placements.filter(p => { const drop=selection.has(p); if (drop) generated.delete(key(p)); return !drop; }); selection=new Set();
-    changed(`Deleted ${n} ${n===1?'feature':'features'}.`); return true;
+    changed(`Deleted ${n} ${n===1?'feature':'features'}.`,`deleting ${count(n)}`); return true;
   }
   // Re-roll: another variant of the same kind and footprint (any other footprint that still fits when it has none).
   function rerollSelected() {
@@ -550,14 +581,14 @@ export async function mountMapFeatures(api) {
       p.v=pickVariant(pool,hash32(hash32(p.x,p.z),++rolls)/4294967296); swapped++;
     }
     if (!swapped) { status('Each selected feature is the only variant of its kind and size.'); return false; }
-    changed(`Re-rolled ${swapped} ${swapped===1?'feature':'features'}.`); return true;
+    changed(`Re-rolled ${swapped} ${swapped===1?'feature':'features'}.`,`re-rolling ${count(swapped)}`); return true;
   }
   function setSelectedMetal(value) {
     if (!guard()) return false;
     const metal=Math.round(clamp(value,0,255)),list=[...selection].filter(deposit).filter(p => p.metal!==metal);
     if (!list.length) { refreshSelection(); return false; }
     for (const p of list) p.metal=metal;
-    changed(`Set ${list.length===1?'the deposit’s':list.length+' deposits’'} metal to ${metal}.`); return true;
+    changed(`Set ${list.length===1?'the deposit’s':list.length+' deposits’'} metal to ${metal}.`,`setting metal to ${metal}`); return true;
   }
   // Moves the selection by whole cells; every moved footprint must stay in the play area and clear of the features left in place.
   function movable(dx,dz) {
@@ -570,7 +601,7 @@ export async function mountMapFeatures(api) {
     // Old keys go first, so a feature moving onto a cell another one leaves keeps its own fill mark and painted stamp.
     const carried=[...selection].map(p => { const before=key(p),entry={p,fill:generated.delete(before),stamp:stamps.get(before)}; stamps.delete(before); return entry; });
     for (const {p,fill:wasFill,stamp} of carried) { p.x+=dx; p.z+=dz; if (wasFill) generated.add(key(p)); if (stamp) { stamp.exactStale=true; stamps.set(key(p),stamp); } }
-    changed(`Moved ${selection.size} ${selection.size===1?'feature':'features'} ${Math.abs(dx)+Math.abs(dz)===1?'one cell':'by '+dx+', '+dz+' cells'}.`); return true;
+    changed(`Moved ${selection.size} ${selection.size===1?'feature':'features'} ${Math.abs(dx)+Math.abs(dz)===1?'one cell':'by '+dx+', '+dz+' cells'}.`,`moving ${count(selection.size)}`); return true;
   }
   function addStart(x,z) {
     if (!guard()) return false;
@@ -579,7 +610,7 @@ export async function mountMapFeatures(api) {
     if (starts.length>=MAX_STARTS) { status(`A map can have at most ${MAX_STARTS} starts. Move or remove an existing start.`); return false; }
     if (starts.some(s => s.x===p.x && s.z===p.z)) { status('Another start is already at that position.'); return false; }
     starts.push(p); selectedStart=starts.length-1; const trimmed=trimGenerated(); placements=trimmed.kept;
-    changed(`Added start ${selectedStart+1}${trimmed.removed?`; cleared ${trimmed.removed} fill features inside its margin`:''}.`); return true;
+    changed(`Added start ${selectedStart+1}${trimmed.removed?`; cleared ${trimmed.removed} fill features inside its margin`:''}.`,`adding start ${selectedStart+1}`); return true;
   }
   function moveStart(index,x,z) {
     if (!guard() || !Number.isInteger(index) || index<0 || index>=starts.length) return false;
@@ -588,12 +619,12 @@ export async function mountMapFeatures(api) {
     if (starts.some((s,i) => i!==index && s.x===p.x && s.z===p.z)) { status('Another start is already at that position.'); return false; }
     if (starts[index].x===p.x && starts[index].z===p.z) { update(); return true; }
     starts[index]=p; selectedStart=index; const trimmed=trimGenerated(); placements=trimmed.kept;
-    changed(`Moved start ${index+1}${trimmed.removed?`; cleared ${trimmed.removed} fill features inside its margin`:''}.`); return true;
+    changed(`Moved start ${index+1}${trimmed.removed?`; cleared ${trimmed.removed} fill features inside its margin`:''}.`,`moving start ${index+1}`); return true;
   }
   function removeStart(index) {
     if (!guard() || !Number.isInteger(index) || index<0 || index>=starts.length) return false;
     if (starts.length<=1) { status('Keep at least one start position.'); return false; }
-    starts.splice(index,1); selectedStart=Math.min(index,starts.length-1); changed('Removed the selected start.'); return true;
+    starts.splice(index,1); selectedStart=Math.min(index,starts.length-1); changed('Removed the selected start.',`removing start ${index+1}`); return true;
   }
   function setFill(value) {
     if (!guard()) return false;
@@ -602,7 +633,7 @@ export async function mountMapFeatures(api) {
     fill=fillOptions(value,fill);
     const trimmed=trimGenerated(); placements=trimmed.kept;
     if (!trimmed.removed && JSON.stringify(fill)===before) { update(); return true; }   // nothing changed: no undo step
-    changed(trimmed.removed?`Updated fill; cleared ${trimmed.removed} generated features inside the margin.`:'Updated fill controls.'); return true;
+    changed(trimmed.removed?`Updated fill; cleared ${trimmed.removed} generated features inside the margin.`:'Updated fill controls.','changing the fill settings'); return true;
   }
 
   function terrainMask(bounds={x0:0,z0:0,x1:cols,z1:rows}) {
@@ -669,7 +700,7 @@ export async function mountMapFeatures(api) {
       if (!free) continue;
       placements.push(placed); generated.add(key(placed)); put(placed); added++;
     }
-    if (added) changed(`Filled ${added} ${PLURALS[settings.kind]}.`); else status('No features fit this region with the current density, terrain, spacing and margins.');
+    if (added) changed(`Filled ${added} ${PLURALS[settings.kind]}.`,`filling ${added} ${PLURALS[settings.kind]}`); else status('No features fit this region with the current density, terrain, spacing and margins.');
     return {added};
   }
 
@@ -748,7 +779,7 @@ export async function mountMapFeatures(api) {
     const g=gesture; gesture=null;
     if (!g) return;
     if (canvas.hasPointerCapture?.(g.id)) canvas.releasePointerCapture(g.id);
-    if (g.type==='erase' && g.changed) changed('Erased feature footprints.');
+    if (g.type==='erase' && g.changed) changed('Erased feature footprints.','erasing features');
     if (commit && enabled()) {
       if (g.type==='fill') fillRegion(fill.kind,{type:fill.region,points:g.points,radius:fill.radius});
       else if (g.type==='start' && g.target) moveStart(g.index,g.target.x,g.target.z);
@@ -908,6 +939,11 @@ export async function mountMapFeatures(api) {
     const def=(n,keys) => defs.push({name:n,keys:[...keys,['filename',b]].map(([k,v]) => [k,String(v)])});
     const seq=(n,frames) => { sequences.push({name:n,frames}); return n; };
     const full=(kind,params,seed) => work({type:'full',kind,params,seed,light:sun},[],signal);
+    // A variant's frames: the view's sprite at this light when it holds them all, else a drawing of its own.
+    const framesOf=v => {
+      const e=sprites.get(spriteKey(v,sun));
+      return e?.ready && e.frames?{body:e.frames.body,shadow:e.frames.shadow,burn:null,burnt:null,bodyBlend:e.bodyBlend,gameplay:e.gameplay}:full(v.kind,v.params,v.seed);
+    };
     const successors={},successorSeed=set.scar?.recipes.reduce((a,b) => a.id<b.id?a:b)?.seed??4783;
     const smudge=async () => successors.smudge??=(async () => { const f=await full('scar',{type:'smudge'},hash32(successorSeed,0x5d06e));
       def(`${P}Smudge`,[['description','Scorch Mark'],['footprintx',1],['footprintz',1],['height',0],['seqname',seq(`${b}sm`,[frameOf(f.body)])],['animtrans',1],['reclaimable',0],['blocking',0],['featuredead',`${P}Smudge`]]); return `${P}Smudge`; })();
@@ -919,7 +955,7 @@ export async function mountMapFeatures(api) {
       const n=nameOf(p),v=variantOf(p),i=p.v+1;
       if (p.kind==='deposit') { def(n,[['description','Metal'],['footprintx',3],['footprintz',3],['height',4],['seqname',transparent()],['metal',p.metal],['damage',32009],['indestructible',1],['reclaimable',0],['blocking',0],['shadtrans',1]]); continue; }
       if (p.kind==='vent') { def(n,[['description','Thermal Vent'],['footprintx',1],['footprintz',1],['height',0],['seqname',transparent()],['animating',1],['geothermal',1],['indestructible',1],['blocking',0]]); continue; }
-      const f=await full(p.kind,v.params,v.seed),g=f.gameplay,[fw,fz]=v.footprint;
+      const f=await framesOf(v),g=f.gameplay,[fw,fz]=v.footprint;
       if (p.kind==='tree') {
         const dead=await smudge(),burn=f.burn?.map(s => frameOf(s,2));   // 96 frames of 2 ticks: the 192-tick burn (spec section 4); a dead tree (species dead) neither burns nor leaves a burnt successor
         if (!f.burn) def(n,[['description','Dead Tree'],['footprintx',fw],['footprintz',fz],['height',40],['seqname',seq(`${b}t${i}`,[frameOf(f.body)])],['seqnameshad',seq(`${b}t${i}s`,[frameOf(f.shadow)])],['energy',g.energy],['featuredead',dead],['featurereclamate',dead],['animtrans',0],['shadtrans',1],['flamable',0],['reclaimable',1],['blocking',1]]);

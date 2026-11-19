@@ -37,6 +37,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   config.onDeviceLost=info=>restartForMemory('a lost GPU device',()=>terrainBudget.lost('a lost GPU device',{memory:/out of memory|\boom\b/i.test(info?.message??'')}));
   config.onMemoryPressure=()=>restartForMemory('a GPU allocation failure');
   const output=document.createElement('canvas'),renderer=await TerrainRenderer.createChunked(output,config);
+  renderer.drawWhileCompiling=true;   // the view keeps a material's last picture while its new pipeline compiles (sculpt-material-cache.js)
   const g=canvas.getContext('2d'),ink=overlay.getContext('2d'),cache=new Map();
   const previewFields=createPreviewFields(renderer.device,api.previewScene);
   const previewLattice=createPreviewLattice(renderer.device,api.previewScene,()=>metrics());
@@ -777,7 +778,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
         // Generated deposits and vents sit where the export puts them and take their colors from the export art under them
         // (sculpt-features.js): one anchor read or one 128 px patch per idle frame, after the view's own images and only once the
         // weather the export reads is in.
-        if(!suspended&&!rerun&&!readWaiting&&token===serial&&viewToken===viewEpoch&&!previewing&&!navigating()&&!holding&&quiet>=1000&&(!api.canExport||api.canExport())&&await features?.fitGround?.(state()))rerun=true;
+        // Not while a material compiles: the fit reads export art, which waits for the compile, and the frame would wait with it (the compile's
+        // end redraws, which marks the fits stale again: sculpt.js renderer.onmaterials).
+        if(!suspended&&!rerun&&!readWaiting&&token===serial&&viewToken===viewEpoch&&!previewing&&!navigating()&&!holding&&quiet>=1000&&(!api.canExport||api.canExport())&&!renderer.materialsCompiling()&&await features?.fitGround?.(state()))rerun=true;
       }
       if(!rerun&&!interacting()&&!foregroundPending()&&(!api.canExport||api.canExport()))api.renderProgress?.(null);
       const m=metrics();$('timing').textContent=`Render ${Math.round(performance.now()-renderStart)} ms · ${(m.gpuBytes/MB).toFixed(0)} MiB`;$('timing').title='Wall time for the latest viewport render, including any chunk bakes. '+bakes+' bakes · '+evictions+' cache evictions';
@@ -1087,9 +1090,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     const seq=serial,e=await(held?bake:heldBake)(rect,true),tile=new OffscreenCanvas(rect.width,rect.height),c=tile.getContext('2d');c.drawImage(e.bitmap,0,0);e.bitmap.close?.();
     return changedSince(seq,e.input)?null:{data:c.getImageData(0,0,rect.width,rect.height).data,input:e.input};
   }
-  features=await mountMapFeatures({config,canvas:overlay,exportCorners,bakeArt,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,known,change:()=>{api.mapChanged();schedule();},schedule,enabled:()=>api.ready()&&!busy,
+  features=await mountMapFeatures({config,canvas:overlay,exportCorners,bakeArt,screenPoint:screen,pick:(x,z)=>pickWorld({x,z}),sample:visibleSample,known,change:act=>{api.mapChanged(act);schedule();},schedule,enabled:()=>api.ready()&&!busy,
     light:()=>renderer.worldSun,lightColors:()=>({sun:renderer.colorOverrides?.sun||null,sky:renderer.colorOverrides?.sky||null,ambient:renderer.variant?.has('ambient')?Number(renderer.variant.get('ambient')):.42}),groundColor:()=>renderer.means?.ground,deselectShapes:()=>{if(api.selection()>=0)api.select?.(-1);}});api.registerFeatures?.(features);
-  metadata=mountMapExport({config,canvas,stream:{sampleHeights,exportChunks,bakeArt:rect=>bakeArt(rect,false)},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??serial,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
+  metadata=mountMapExport({config,canvas,materialsCompiling:()=>renderer.materialsCompiling(),stream:{sampleHeights,exportChunks,bakeArt:rect=>bakeArt(rect,false)},ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!gesture&&!features.busy,revision:()=>api.revision?.()??serial,mapData:api.mapData,features:()=>features,change:()=>{api.mapChanged();},onUpdate:fn=>api.onUpdate?.(fn),busy:setBusy,restore:schedule});api.registerMetadata?.(metadata);
   passability=mountPassability({config,sampleHeightTiles,revision:()=>api.revision?.()??serial,ready:()=>api.ready()&&(!api.canExport||api.canExport())&&!interacting()&&!busy&&!features.busy,mapData:api.mapData,schedule,checkMemory:bytes=>api.checkMemory?.(bytes)});
   // H12: the least the terrain budget must hold besides the fields: the canvases, the bake lattice reserve and one 32 px chunk with the materials.
   // H13: what the paged fields must leave free: the canvas, one canonical chunk's whole working set (every mask layer the world has) and its copy.

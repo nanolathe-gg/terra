@@ -17,6 +17,8 @@ function standIn() {
     createTexture: ({size}) => ({size, createView: view, destroy() {}}),
     createShaderModule: () => ({}),
     createComputePipeline: () => ({getBindGroupLayout: () => ({})}),
+    createComputePipelineAsync: async () => ({getBindGroupLayout: () => ({})}),
+    pushErrorScope() {}, popErrorScope: async () => null,
     createBindGroup: () => ({}),
     createCommandEncoder: () => ({beginComputePass: () => pass, copyTextureToTexture() {}, copyTextureToBuffer() {}, finish: () => ({})}),
     queue: {submit() {}, writeBuffer(buffer, offset, data) { writes.push({label: buffer.label, end: offset + data.byteLength, size: buffer.size}); }},
@@ -28,7 +30,7 @@ function standIn() {
   return {renderer, writes};
 }
 
-test('a full map whose materials draw Worn and Deposit uploads its graphs within the graph buffer', () => {
+test('a full map whose materials draw Worn and Deposit uploads its graphs within the graph buffer', async () => {
   const {renderer, writes} = standIn(), cache = new MaterialCache(renderer, '/*MATERIAL_TAPS*/ /*MATERIAL_MAIN*/', '');
   // Every slot a map may fill, each material drawing both states: 23 graphs, 69 cache layers at a small repeat.
   const materials = new Map();
@@ -38,8 +40,44 @@ test('a full map whose materials draw Worn and Deposit uploads its graphs within
     materials.set(slot, m);
   }
   assert.deepEqual(materialStates(materials.get(1)), MATERIAL_STATES, 'the fixture draws both states');
-  cache.sync(8, materials);
+  cache.sync(8, materials); await cache.compiled(); cache.sync(8, materials);
   const graphs = writes.filter(w => w.label === 'material graphs');
   assert.ok(graphs.length, 'the graphs were uploaded');
   for (const w of graphs) assert.ok(w.end <= w.size, `material graphs upload of ${w.end} bytes into ${w.size}`);
+});
+
+// A pipeline compiles asynchronously: until it is ready the layer is not generated (it keeps what it holds), the cache says it is compiling,
+// and the renderer is told when the compile starts and ends; the next sync generates the layer.
+test('a layer is generated once its pipeline has compiled, and keeps its picture meanwhile', async () => {
+  const {renderer} = standIn(), cache = new MaterialCache(renderer, '/*MATERIAL_TAPS*/ /*MATERIAL_MAIN*/', ''), told = [];
+  let release; const gate = new Promise(r => { release = r; });
+  renderer.device.createComputePipelineAsync = async () => { await gate; return {getBindGroupLayout: () => ({})}; };
+  renderer.onmaterials = done => told.push(done);
+  const materials = new Map([[1, copyMaterial(LIBRARY['green-ground'])]]);
+  cache.sync(8, materials);
+  assert.equal(cache.compiling(), true); assert.equal(cache.compiling(true), true, 'a new layer holds no picture yet');
+  assert.equal(cache.generations, 0, 'nothing is generated before its pipeline is ready');
+  release(); await cache.compiled(); await new Promise(r => setTimeout(r, 0));
+  assert.equal(cache.compiling(), false);
+  cache.sync(8, materials);
+  assert.equal(cache.generations, 1, 'the next sync generates it');
+  assert.deepEqual(told, [false, true], 'the renderer heard the compile start and end');
+});
+
+// A pipeline that fails to compile is not marked generated: the layer keeps its picture, the error names the material, and the compile is
+// tried again at the next change of the materials, not at every sync.
+test('a failed material compile names the material and is tried again at the next change', async () => {
+  const {renderer} = standIn(), cache = new MaterialCache(renderer, '/*MATERIAL_TAPS*/ /*MATERIAL_MAIN*/', ''), said = [];
+  let compiles = 0;
+  renderer.device.createComputePipelineAsync = async () => { compiles++; throw new Error('no such backend feature'); };
+  renderer.onerror = message => said.push(message);
+  const material = {...copyMaterial(LIBRARY['green-ground']), name: 'Mossy test'}, materials = new Map([[1, material]]);
+  cache.sync(8, materials); await cache.compiled(); await new Promise(r => setTimeout(r, 0));
+  assert.equal(cache.compiling(), false, 'a failure ends the wait');
+  cache.sync(8, materials); await new Promise(r => setTimeout(r, 0));
+  assert.equal(cache.generations, 0, 'nothing is marked generated');
+  assert.equal(compiles, 1, 'the same materials do not compile it again');
+  assert.equal(said.length, 1); assert.match(said[0], /Mossy test/);
+  cache.sync(8, new Map(materials)); await cache.compiled();
+  assert.equal(compiles, 2, 'the next change tries again');
 });

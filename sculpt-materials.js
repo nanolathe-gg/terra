@@ -9,7 +9,7 @@ import snippets from './materials/snippets.json' with {type:'json'};
 export const MATERIAL_SLOTS = 24;                  // slot 0 is "the world's ground" on a stroke; materials take slots 1 to 23 (the GPU's ground table holds 32)
 export const MATERIAL_REPEAT = 512;
 export const MATERIAL_CACHE_BYTES = 128 * 1024 * 1024;
-export const MAX_NODES = 40, MAX_STOPS = 8, MAX_PALETTE = 32, MAX_CONTROLS = 12, MAX_FRAMES = 12, MAX_TAPPED = 4, MAX_STAGES = 4;
+export const MAX_NODES = 40, MAX_STOPS = 8, MAX_PALETTE = 32, MAX_CONTROLS = 12, MAX_FRAMES = 12, MAX_TAPPED = 4, MAX_STAGES = 4, MAX_COST = 200;
 export const THUMB = 64, THUMB_STRIDE = 2;
 
 // The palette slots the game's map art draws with: not Windows' static system colours (0-9, 246-254); 255, white,
@@ -188,7 +188,25 @@ export function copyNodes(value) {
   if (nodes.some(n => tapDepth(n) > 2) || nodes.filter(n => ['light', 'cavity'].includes(n.type) && n.enabled && n.in.in).length > MAX_TAPPED)
     throw Error(`A material can use ${MAX_TAPPED} Light or Cavity nodes, at most two in a chain.`);
   if (nodes.filter(n => Object.hasOwn(STAGED, n.type)).length > MAX_STAGES) throw Error(`A material can use ${MAX_STAGES} Blur or Slope blur nodes in all.`);
+  const cost = materialCost(nodes);
+  if (cost > MAX_COST) throw Error(`This material is too costly to draw: each pixel would evaluate ${cost} nodes, and the most is ${MAX_COST}. Feed the Light and Cavity nodes a shorter chain of nodes, or chain fewer of them.`);
   return nodes;
+}
+// The node evaluations a pixel of a material's repeat costs, in all its passes: each node its pass reaches once, and a Light or Cavity node
+// its input's whole chain again at four neighbors (taps two deep, sixteen times). A staged Blur or Slope blur ends the chain of its staged
+// inputs, which its own stage pass evaluates instead. A legal graph could cost over a thousand (a 39-node graph, a 273 ms pass at 512 px on an
+// Apple M3 Pro, and seconds on a slower GPU); MAX_COST bounds it, and no library material costs over 42.
+export function materialCost(nodes) {
+  const byId = new Map(nodes.map(n => [n.id, n])), memo = new Map();
+  const staged = n => Object.hasOwn(STAGED, n.type) && n.enabled && STAGED[n.type].every(key => n.in[key]);
+  const tapped = n => ['light', 'cavity'].includes(n.type) && n.enabled && n.in.in;
+  const closure = roots => {
+    const seen = new Set(), visit = id => { const n = byId.get(id); if (!n || seen.has(id)) return; seen.add(id); for (const [key, from] of Object.entries(n.in)) if (from && !(staged(n) && STAGED[n.type].includes(key))) visit(from); };
+    roots.forEach(visit); return seen;
+  };
+  const cost = ids => { let c = 0; for (const id of ids) { c++; const n = byId.get(id); if (tapped(n)) { if (!memo.has(id)) memo.set(id, 4 * cost(closure([n.in.in]))); c += memo.get(id); } } return c; };
+  const out = nodes.find(n => n.type === 'output');
+  return (out ? cost(closure([out.id])) : 0) + nodes.filter(staged).reduce((c, n) => c + cost(closure(STAGED[n.type].map(key => n.in[key]))), 0);
 }
 const freeId = (nodes, stem) => { const taken = new Set(nodes.map(n => n.id)); if (!taken.has(stem)) return stem; for (let i = 2; ; i++) if (!taken.has(`${stem}-${i}`)) return `${stem}-${i}`; };
 // A new node of a type, placed by the caller. Its seed differs from its siblings', so two new Noise nodes are not the same pattern.
@@ -730,6 +748,14 @@ export function assignMaterial(list, slot, role) {
 export function strokeMaterial(node, list) {
   const slot = node?.params?.groundPreset;
   return Number.isInteger(slot) && (slot === 0 || list.some(m => m.slot === slot && !m.worldWater)) ? slot : -1;
+}
+// A stroke's material as copied shapes remember it (sculpt.js copyShapes): its key and name, not its slot, which a deleted material frees for
+// the next one added. materialSlotFor finds it again at paste time: the material with its key, else its name; the ground beneath (-1) when the
+// map no longer has it, or `ref` is null.
+export const materialRef = (list, slot) => { const m = list.find(o => o.slot === slot); return m ? {key: m.key ?? null, name: m.name} : null; };
+export function materialSlotFor(list, ref) {
+  const usable = list.filter(m => !m.worldWater), m = ref && ((ref.key && usable.find(o => o.key === ref.key)) || usable.find(o => o.name === ref.name));
+  return m ? m.slot : -1;
 }
 export const keepStrokeMaterials = (nodes, list) => nodes.map(n => n.params && n.params.groundPreset !== undefined && n.params.groundPreset !== strokeMaterial(n, list) ? {...n, params: {...n.params, groundPreset: strokeMaterial(n, list)}} : n);
 // The materials the renderer caches: the world's surfaces, every rock type's and the strokes'. The set changes only with a material, a rock

@@ -704,7 +704,10 @@ export class TerrainRenderer {
     this.syncWorld({clay,light,detail,materialWeathering,transitionDetail,exact});
     // Before the checksum: an edited material graph regenerates its cache layers here, which moves the world version (worldResource) the
     // checksum holds. Taken first, a check-only draw would match the old picture and the next drawn tile would carry the old version.
+    // A layer whose pipeline still compiles keeps its last picture. Only the map's own view draws from that (drawWhileCompiling); an export
+    // (exact), any other renderer, and a layer with no picture yet wait for the compile (materialsReady).
     this.syncMaterialCache();
+    if (this.groundCache.compiling(this.drawWhileCompiling && !exact)) { await this.materialsReady(); current(); }
     this.i('uMaterialReady', this.materialReady);
     this.i('uTransitionBody', Boolean(this.transitionBody&&this.materialReady&&materialWeathering>0));
     // digest {reuse, check}: the checksum of everything the rest of the draw reads (inputDigest). A caller that still holds the picture of the same
@@ -1397,6 +1400,10 @@ export class TerrainRenderer {
   // Encodes the bake into the given encoder, or submits it on its own.
   // The material cache generates what changed in the materials (the bake's and a cached tile's color rerun's).
   syncMaterialCache() { this.groundCache.sync(MATERIAL_REPEAT, this.grounds); }
+  // Whether a material in use is still compiling, so a layer keeps an older picture (the export waits and says so).
+  materialsCompiling() { return this.groundCache.compiling(); }
+  // Resolves once every material in use has its pipelines (or failed to compile) and its layers are generated.
+  async materialsReady() { for (;;) { this.syncMaterialCache(); if (!this.groundCache.compiling()) return; await this.groundCache.compiled(); } }
   bakeFields(encoder = null, timer = null) {
     this.syncMaterialCache();
     this.syncWorld();

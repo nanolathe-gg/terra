@@ -52,10 +52,10 @@ WebAssembly on its next request. Changes to the server's Go code require a
 restart (rerun `go run`).
 
 Shared knob defaults and ground cover live in `materials/defaults.json`.
-Each world's `world.knobDefaults`, `world.engineDefaults` and `world.variants`
-in `materials/<world>.json` hold its authored presets. `site.json` declares
-the worlds, recipe ordering and shipped source files. The Go tool in
-`internal/site/` assembles all nine worlds from this data. All terrain and
+Each world's `world.knobDefaults`, `world.engineDefaults` and `world.rock` (its
+own rock types) in `materials/<world>.json` hold its authored defaults.
+`site.json` declares the worlds, recipe ordering and shipped source files. The Go tool in
+`internal/site/` assembles every world from this data. All terrain and
 features are generated in the browser; `.ufo` export uses the Go exporter
 compiled to WebAssembly. The Go packages are pinned in `go.mod`.
 
@@ -79,8 +79,9 @@ plane's mismatch count, maximum difference and first mismatch; any mismatch
 or editor error exits nonzero. The selected CDP port must be free. Weather
 and projected GPU art retain the separate image/replay guards in `repro/all.sh`.
 
-The original 1024px study remains available. Draw a map with the existing
-terrain brushes, then use the feature tools. Water brush depths and material
+The editor always works on a map: an address without a size reopens the tab's
+map, or a new 4×4 one. Draw a map with the existing terrain brushes, then use
+the feature tools. Water brush depths and material
 height thresholds are relative to sea. Choose a positive sea level for deep
 water: TNT heights are unsigned bytes.
 
@@ -98,8 +99,9 @@ a separate overlay; they never become terrain pixels.
 Starts are numbered 1–10 and exported in pixel coordinates. The OTA settings
 panel edits name, description, wind, tidal, solar, gravity, surface metal,
 Moho metal and lava world. Climate starts at the world's retail medians.
-Map objects and settings join the terrain in Save sketch / Load sketch and
-Undo / Redo; feature/settings undo does not rerun terrain refinement.
+Map objects and settings join the terrain in the map's save (Maps, Save as link,
+Download file, Open a map file) and Undo / Redo; feature/settings undo does not
+rerun terrain refinement.
 
 **Export .ufo** warns when corner heights need clamping to 0–255. Art uses
 the full-detail displayed field, clamped to the TNT byte range. Only TNT
@@ -162,8 +164,7 @@ default WebGPU limits. Mask storage counts its actual layer count: currently 25 
 layers. Flow occupies planes 20–24; 14–19 and 25+ remain unused. Every selected
 GPU budget uses the same canonical bake size chosen at the 128 MiB floor; lower
 budgets evict and re-bake more images. Changing chunk geometry can move isolated
-palette decisions because the GPU rounds interpolation differently. The remaining
-Ice frost decision is documented with raw field and float probes in NOTES.md.
+palette decisions because the GPU rounds interpolation differently.
 
 Maps with at most 1168 samples on their working side keep the existing global
 weather solver. Larger maps use fixed 256-cell weather cores, 64-cell blend

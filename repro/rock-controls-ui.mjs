@@ -18,7 +18,7 @@ try{
   const send=(method,params={})=>new Promise(r=>{const n=++id;pending.set(n,r);ws.send(JSON.stringify({id:n,method,params}));});
   const ev=async expression=>{const r=await send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(r.result?.exceptionDetails)throw Error(JSON.stringify(r.result.exceptionDetails));return r.result.result.value;};
   const ready=async()=>{for(let i=0;i<480;i++){if(await ev('!!window.sculptCanvas&&!document.getElementById("map-export").disabled')){await ev('sculptCanvas.idle()');return;}await sleep(150);}throw Error('Editor did not become ready: '+errors.join('\n'));};
-  const point=selector=>ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+  const point=selector=>ev(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'nearest'}),window.scrollTo(0,0);const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
   const mouse=(type,p,extra={})=>send('Input.dispatchMouseEvent',{type,...p,button:type==='mouseMoved'?'none':'left',buttons:type==='mousePressed'?1:0,clickCount:type==='mouseMoved'?0:1,...extra});
   const click=async selector=>{const p=await point(selector);await mouse('mousePressed',p);await mouse('mouseReleased',p);};
   const doubleClick=async selector=>{const p=await point(selector);for(const clickCount of [1,2]){await mouse('mousePressed',p,{clickCount});await mouse('mouseReleased',p,{clickCount});}};
@@ -31,7 +31,7 @@ try{
   const set=async(id,value)=>{await ev(`(()=>{const e=document.getElementById(${JSON.stringify(id)});e.value=${JSON.stringify(String(value))};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`);await ready();};
   const snapshot=()=>ev(`(()=>{const s=sculptDebug.sketch();return {rock:s.rock,column:s.column||null};})()`);
   const capture=()=>ev(`(async()=>{const b=await sculptCanvas.debugBake({x:256,y:256,width:512,height:512}),c=document.createElement('canvas');c.width=c.height=512;c.getContext('2d').drawImage(b,0,0);return c.toDataURL();})()`);
-  await click('#tab-world');await ev(`document.getElementById('rock-preset').scrollIntoView({block:'center'});true`);
+  await click('#tab-world');await ev(`document.getElementById('rock-preset').scrollIntoView({block:'center'}),window.scrollTo(0,0);true`);
   assert.equal(await ev(`(()=>{const e=document.getElementById('rock-preset'),r=e.getBoundingClientRect();return r.width>100&&r.height>10&&e.checkVisibility();})()`),true);
   const original=await snapshot();
   await set('rock-preset','sandstone');const sand=await snapshot(),sandArt=await capture();
@@ -69,7 +69,7 @@ try{
   await set('knob-runoff',0);assert.equal(await ev('document.getElementById("knob-runoffCut").disabled'),true);
   await set('knob-debrisAmount',0);assert.equal(await ev('document.getElementById("knob-debrisReach").disabled'),true);
   report.weatheringDependencies='runoff and debris children explain inactive parents';
-  await set('rock-preset','sandstone');await click('#tab-world');await ev(`(()=>{const e=document.querySelector('[data-group="Rock & cliffs"]');e.open=true;document.getElementById('rock-preset').scrollIntoView({block:'center'});sculptCanvas.zoom(1);document.getElementById('viewport').scrollTo(0,200);return true;})()`);await ready();await sleep(300);
+  await set('rock-preset','sandstone');await click('#tab-world');await ev(`(()=>{const e=document.querySelector('[data-group="Rock & cliffs"]');e.open=true;document.getElementById('rock-preset').scrollIntoView({block:'center'}),window.scrollTo(0,0);sculptCanvas.zoom(1);document.getElementById('viewport').scrollTo(0,200);return true;})()`);await ready();await sleep(300);
   const shot=await send('Page.captureScreenshot',{format:'png'});writeFileSync(join(out,'editor.png'),Buffer.from(shot.result.data,'base64'));
   await set('rock-preset','gneiss');
   await ev(`sculptDebug.scene([['mountain',[[340,560],[610,460]],{card:{diameter:500,elevation:280,roughness:20,softness:20,styleVegetation:0}}]],{ground:true}); true`);await ready();

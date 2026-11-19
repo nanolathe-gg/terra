@@ -359,7 +359,7 @@ export function mountSurfacePanel(host) {
     const peers = layers.map((l, j) => j).filter(j => stageOf(layers[j]) === stage && placedAll[j].section === placed.section);
     const material = layer.material != null ? host.material(layer) : null, isOpen = open.has(key);
     const head = el('div', {className: 'surface-head'});
-    const toggle = el('button', {type: 'button', id: uid('toggle'), className: 'surface-toggle', textContent: isOpen ? '▾' : '▸', title: isOpen ? 'Close this layer' : 'Open this layer’s settings', ariaExpanded: String(isOpen)});
+    const toggle = el('button', {type: 'button', id: uid('toggle'), className: 'surface-toggle', textContent: '›', title: isOpen ? 'Close this layer' : 'Open this layer’s settings', ariaLabel: isOpen ? 'Close this layer' : 'Open this layer’s settings', ariaExpanded: String(isOpen)});
     toggle.onclick = () => { if (open.has(key)) open.delete(key); else open.add(key); build(); list.querySelector(`[data-key="${CSS.escape(key)}"] .surface-toggle`)?.focus(); };
     const chip = el('span', {className: 'material-chip', title: material?.name ?? (layer.material != null ? 'The map lacks this layer’s material' : 'Its own color')});
     if (material) chip.style.background = material.color; else if (layer.material == null) chip.classList.add('own');
@@ -388,7 +388,7 @@ export function mountSurfacePanel(host) {
       const b = el('button', {type: 'button', id: uid(d > 0 ? 'raise' : 'lower'), textContent: text, title, ariaLabel: title, disabled: !next}); b.onclick = () => put(structuredClone(next), true); return b;
     };
     const eye = el('button', {type: 'button', id: uid('eye'), className: 'surface-eye', textContent: hidden.has(key) ? 'Show' : 'Hide',
-      title: hidden.has(key) ? 'Show this layer again' : 'Hide this layer while you design (not saved; an export draws it)', disabled: Boolean(solo)});
+      title: solo ? 'A layer is shown alone: turn Solo off to hide layers' : hidden.has(key) ? 'Show this layer again' : 'Hide this layer while you design (not saved; an export draws it)', disabled: Boolean(solo)});
     eye.onclick = () => { if (hidden.has(key)) hidden.delete(key); else hidden.add(key); build(); sendView(); list.querySelector(`[data-key="${CSS.escape(key)}"] .surface-eye`)?.focus(); };
     const alone = el('button', {type: 'button', id: uid('solo'), className: 'surface-solo', textContent: 'Solo', ariaPressed: String(solo === key),
       title: solo === key ? 'Show every layer again' : 'Show this layer alone over the ground while you design (not saved; an export draws every layer)'});

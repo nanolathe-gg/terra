@@ -127,11 +127,11 @@ func readCatalog(fs vfs.FSOps) (catalog, error) {
 				continue
 			}
 			if m.Planet == "" {
-				world.DisabledReason = fmt.Sprintf("scene map %s has no OTA planet", m.OTA)
+				world.DisabledReason = fmt.Sprintf("its example map %s names no planet, so the game has none to use", m.OTA)
 				break
 			}
 			if world.Planet != "" && !strings.EqualFold(world.Planet, m.Planet) {
-				world.DisabledReason = fmt.Sprintf("scene maps disagree on OTA planet (%s and %s)", world.Planet, m.Planet)
+				world.DisabledReason = fmt.Sprintf("its example maps name different planets (%s and %s)", world.Planet, m.Planet)
 				break
 			}
 			if world.Planet == "" {
@@ -139,7 +139,7 @@ func readCatalog(fs vfs.FSOps) (catalog, error) {
 			}
 		}
 		if world.DisabledReason == "" && world.Planet == "" {
-			world.DisabledReason = "none of this world's repro scene maps are installed; their OTAs must establish its planet"
+			world.DisabledReason = "none of its example maps is installed, so its planet is unknown"
 		}
 		if world.DisabledReason == "" {
 			var climates []climate
@@ -164,7 +164,7 @@ func readCatalog(fs vfs.FSOps) (catalog, error) {
 		}
 		result.Worlds[example.ID] = world
 	}
-	result.Worlds["zhon"] = worldInfo{Sources: []string{}, DisabledReason: "Zhon has no retail planet or feature set; the owner must choose one before export"}
+	result.Worlds["zhon"] = worldInfo{Sources: []string{}, DisabledReason: "no game map uses Zhon yet, so it has no planet or climate for the game to use. Its maps still save and open in the editor."}
 	return result, nil
 }
 

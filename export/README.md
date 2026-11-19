@@ -179,7 +179,11 @@ export.
 The worker passes `--catalog-file` with the page's world defaults
 (`config/catalog.json`, committed in `materials/<world>.json`), the palette
 (`materials/palette.json`) and no installed map names, and, when features are
-placed, `--features-root` with the map's feature pack from the page. It reads no game content. The result's
+placed, `--features-root` with the map's feature pack from the page. It reads no game content.
+The committed `defaultSeaLevel` (a new map's sea) may differ from the retail
+median when the median leaves the world's water tools no room below the sea:
+Desert's median is 0, and it commits 64 so Deep water's bed (55 below the sea)
+stays above height 0. The result's
 `peakRSSBytes` is the size of the module's linear memory, which never shrinks,
 so it is the peak (the worker reads it; Go's own `MemStats.Sys` counts
 reserved address space and reads more than twice as high).

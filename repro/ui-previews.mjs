@@ -60,7 +60,7 @@ try{
   }
   }
   // The same authored landform, camera and seed in every world's default material. No scene/map source is loaded.
-  const worlds=['green','red','archipelago','moon','zhon','desert','lava','crystal','ice'];
+  const worlds=['green','red','archipelago','moon','zhon','desert','lava','crystal','ice','lush'];
   manifest.worlds={frame:HELP_FRAME,fixture:{kind:'hill',path:HELP_PATH,card:HELP_CARD,seed:2701,crop:{x:180,y:140,width:850,height:620}},images:{}};
   for(const world of worlds){
     await send('Page.navigate',{url:`${server}/?biome=${world}&mapX=4&mapY=4&scratch=world-previews&gpuMB=512&heapMB=1536`});await ready();

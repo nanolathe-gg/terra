@@ -251,6 +251,10 @@ export const landformSigned = q => { const k = strokeKnots('landform', q); retur
 export const landformMakesWater = q => Math.round(q.combine || 0) >= 1 || (Math.round(q.heightReference || 0) === 1 && q.elevation <= 0);
 // P27: any Surf above 0 works the shore (in the heights too), by degrees: a thin broken wet strip at a little, a wide beach and a high berm at a lot.
 export const landformBeach = q => (q.surf || 0) > 0 && landformMakesWater(q);
+// How far a landform's shore fingers reach past its coast, px: half the radius, and up to about three times that for the few Lobe variety
+// grows (engine-shape.wgsl's coast pass). The coast pass's box, the node's bounds and its regional read apron all start from it (with three
+// cells more), so a moved shape's finger tips stay inside the rectangle that is evaluated again.
+export const fingerReach = (q, radius = q.radius || 40) => .5 * radius * (1 + 1.95 * clamp(q.fingerVary || 0, 0, 1));
 export const landformShore = q => q.fingers > 0 || Math.round(q.shoreLayers) >= 1 || q.shorePlates > 0 || landformBeach(q);
 export function landformSteps(q) {
   const reference=Math.round(clamp(q.stepReference||0,0,2)),shore=reference>0;
