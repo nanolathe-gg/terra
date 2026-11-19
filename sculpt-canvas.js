@@ -804,6 +804,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // H7b: during a gesture a change is answered at once, not at the next animation frame (a pointer move is already one event a frame): the bake of
   // the change's chunks starts as soon as the one in flight ends, and nothing waits for a frame between them.
   let pendingFrame=null,readWaiting=0;   // readWaiting: pixel reads waiting for the renderer (holdForRead)
+  const MICRO_CHAIN_MAX=8,chainBreak=new MessageChannel();let microChain=0;chainBreak.port1.onmessage=()=>{microChain=0;};
   function setSuspended(on) {
     if(suspended===on)return;suspended=on;
     if(on){cancelBake();viewEpoch++;clearTimeout(ladderTimer);ladderTimer=null;if(pendingFrame!==null)cancelAnimationFrame(pendingFrame);pendingFrame=null;pending=false;rerun=false;}
@@ -815,11 +816,15 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     // Once it ends, start the latest interactive refresh immediately as well.
     // Not while a pixel read waits: a frame steps aside for it (readWaiting), and the read waits for an animation frame to take the
     // renderer. Frames chained by microtasks never let one through, so a read during a World slider drag (Pick's card) hung the page.
-    const immediate=levels&&interacting()&&!drawing&&!readWaiting;
+    // Nor more than a few frames in a row without the page getting a task in between: a frame that asks to run again without awaiting
+    // anything that resolves on a task (drawing at Fit with a tool that brings a new rock type did) would otherwise chain microtasks
+    // forever, and nothing else (input, timers, a pipeline compile) would ever run. Past the cap the next frame waits for an
+    // animation frame; the message posted with the first frame of a chain resets the count as soon as any task runs.
+    const immediate=levels&&interacting()&&!drawing&&!readWaiting&&microChain<MICRO_CHAIN_MAX;
     if(pending&&(!immediate||pendingFrame===null))return;
     if(pendingFrame!==null){cancelAnimationFrame(pendingFrame);pendingFrame=null;}
     pending=true;
-    if(immediate)queueMicrotask(frame);
+    if(immediate){if(microChain++===0)chainBreak.port2.postMessage(0);queueMicrotask(frame);}
     else pendingFrame=requestAnimationFrame(()=>{pendingFrame=null;frame();});
   }
   function resize() {
