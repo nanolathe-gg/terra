@@ -74,7 +74,7 @@ async function editWorld(world, port) {
     const moved = async () => ev(`(() => { const n = sculptDebug.nodes().at(-1), far = sculptDebug.corner(10, 10).authored; return Math.max(...n.points.map(p => Math.abs(sculptDebug.corner(p.x, p.y).authored - far))); })()`);
     const grid = () => ev(`(() => { const o = []; for (let y = 100; y < 1000; y += 30) for (let x = 100; x < 1000; x += 30) o.push(sculptDebug.corner(x, y).authored); return o; })()`);
     // the editor canvas, scrolled into view, its box in page pixels
-    const box = async () => ev(`(() => { const c = document.getElementById('section-preview'), d = c.closest('details'); if (d) d.open = true; c.scrollIntoView({block: 'center'}); const r = c.getBoundingClientRect(); return {x: r.left, y: r.top, w: r.width, h: r.height, cw: c.width, ch: c.height}; })()`);
+    const box = async () => ev(`(() => { const c = document.getElementById('section-preview'), d = c.closest('details'); if (d) d.open = true; c.scrollIntoView({block: 'center'}),window.scrollTo(0,0); const r = c.getBoundingClientRect(); return {x: r.left, y: r.top, w: r.width, h: r.height, cw: c.width, ch: c.height}; })()`);
     // a front knot's page position, read from the page's own section layout (the canvas is drawn at the pixels it is shown in, both sides across)
     const knotXY = async (b, x, v) => { const q = await ev(`sculptDebug.sectionPoint('front', ${x}, ${v})`); return [q.x, q.y]; };
     const dbl = async pt => { for (const n of [1, 2]) { await send('Input.dispatchMouseEvent', {type: 'mousePressed', x: pt.x, y: pt.y, button: 'left', buttons: 1, clickCount: n}); await send('Input.dispatchMouseEvent', {type: 'mouseReleased', x: pt.x, y: pt.y, button: 'left', buttons: 0, clickCount: n}); } await sleep(300); };
@@ -212,7 +212,7 @@ async function editWorld(world, port) {
       const top0 = Math.max(...await crestHeights()); await setValue('lf-elevation', targetElevation, 'input'); await sleep(300); await ev('sculptCanvas.idle()'); await sleep(500);
       const top1 = Math.max(...await crestHeights());
       check('the elevation sets the crest', (await nodes())[L0].params.elevation===targetElevation && Math.abs(top1-targetElevation)<6 && Math.abs(top1-top0)>20, {top0,top1,plain,targetElevation,params:(await nodes())[L0].params.elevation});
-      await ev(`document.getElementById('along-preview').scrollIntoView({block: 'center'}); true`); await sleep(300);
+      await ev(`document.getElementById('along-preview').scrollIntoView({block: 'center'}),window.scrollTo(0,0); true`); await sleep(300);
       const ap = await ev('sculptDebug.alongPoint(.5, 1)'), apLow = await ev('sculptDebug.alongPoint(.5, .3)');
       await mouse('mouseMoved', ap.x, ap.y); await mouse('mousePressed', ap.x, ap.y); await mouse('mouseReleased', ap.x, ap.y); await sleep(200);
       check('a click on the along curve picks a place', Math.abs((await ev('sculptDebug.place()')) - .5) < .04 && (await ev('JSON.stringify(sculptRegion.sectionMark())')) !== 'null');
