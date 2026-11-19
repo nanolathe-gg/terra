@@ -58,7 +58,7 @@
 /* Passability stays in the existing editor and uses the export's height grid. */
 #passability-tools:not([hidden]){position:absolute;top:10px;left:12px;right:12px;z-index:4;border:1px solid #71857766;border-radius:6px;display:flex;align-items:center;gap:14px;padding:7px 12px;border-bottom:1px solid #42534b;background:#202e29;font-size:11px;flex-wrap:wrap}
 #passability-tools label{display:flex;align-items:center;gap:8px;color:#e2eadd;font-weight:600}#passability-family{font-size:11px;padding:4px 7px;max-width:145px}#passability-state{color:#b2c2b7}.passability-air{margin-left:auto;color:#c0cbe0;font-size:10px}
-#passability-legend{position:absolute;bottom:12px;left:12px;right:12px;max-width:690px;z-index:3;padding:11px 13px;border:1px solid #71857766;border-radius:7px;background:#16231eee;box-shadow:0 3px 18px #0005;pointer-events:none;font-size:11px;color:#e2eadd}
+#passability-legend{position:absolute;bottom:12px;left:12px;right:228px;max-width:690px;z-index:3;padding:11px 13px;border:1px solid #71857766;border-radius:7px;background:#16231eee;box-shadow:0 3px 18px #0005;pointer-events:none;font-size:11px;color:#e2eadd}
 .passability-key:not([hidden]){display:flex;gap:12px;flex-wrap:wrap;margin-bottom:7px}.passability-key span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}.passability-key span:before{content:'';width:10px;height:10px;border-radius:2px;background:var(--access)}.passability-key .access-mixed:before{background:repeating-linear-gradient(135deg,#293b3566 0 2px,transparent 2px 5px),var(--access)}
 #passability-legend p{margin:4px 0;line-height:1.5}#passability-reference{color:#a6bbab;font-size:10px}#passability-access{font-weight:600;color:#d3e2d5}#passability-readout{color:#e5d4ae;min-height:16px}#passability-legend small{font-size:10px;color:#a6bbab}
 
@@ -86,7 +86,7 @@
 #find-input{width:100%;height:28px;padding:4px 4px 4px 26px;font-size:11px;color:inherit;background:#141c20;border:1px solid var(--line);border-radius:5px}
 #find-input::placeholder{color:var(--muted)}#find-input:not(:focus)::-webkit-search-cancel-button{display:none}
 @container (max-width:64px){#find-input:not(:focus){padding:4px 0 4px 26px}#find-input:not(:focus)::placeholder{color:transparent}}
-#find-input:focus{position:absolute;right:0;top:0;width:max(100%,min(420px,calc(100vw - 24px)));z-index:30;border-color:#597a69}
+#find-input:focus{position:absolute;right:0;top:0;width:max(100%,min(420px,calc(100vw - 24px)));z-index:30;border-color:#597a69}.find:focus-within .find-icon{left:auto;right:calc(max(100%,min(420px,calc(100vw - 24px))) - 21px)}
 .find-results{position:absolute;top:34px;right:0;width:min(440px,calc(100vw - 24px));max-height:min(70vh,560px);overflow:auto;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 12px 40px #0008;z-index:30}
 .find-group+.find-group{margin-top:4px;padding-top:4px;border-top:1px solid var(--line)}
 .find-group-name{padding:4px 8px 2px;font-size:10px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
@@ -246,7 +246,7 @@
 .surface-settings .view-switch button:first-child{border-radius:5px 0 0 5px}.surface-settings .view-switch button:last-child{border-radius:0 5px 5px 0}.surface-settings .view-switch button+button{margin-left:-1px}.surface-settings .view-switch button[aria-pressed=true]{position:relative;z-index:1}
 .surface-settings .view-toggle{margin:10px 0 0}.surface-settings .view-image{display:block;width:100%;margin-top:12px}.surface-settings>h3{margin:16px 0 6px}
 .view-panels{display:flex;gap:4px}.view-panels button{flex:1;padding:5px 6px;font-size:11px;white-space:nowrap}
-.view-panels button[aria-expanded=true]{background:#344c42;border-color:#78ae8d;color:#d9ffe5}
+.view-panels button[aria-expanded=true],#tab-map[aria-expanded=true],#open-graphics[aria-expanded=true],#open-export:not(.primary)[aria-expanded=true]{background:#344c42;border-color:#78ae8d;color:#d9ffe5}
 .surface-settings .editor-preferences{margin:16px 0 14px}.surface-settings>h2{padding-top:12px;margin-bottom:8px;border-top:1px solid var(--line)}
 .surface-export{top:60px;left:50%;transform:translateX(-50%);width:min(520px,calc(100vw - 40px))}
 /* The Shapes list ends above the navigator, which stays in reach under it. */
@@ -302,7 +302,7 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 /* The material's name opens the library drawer: the map's materials, then the library by world, each a tile with its swatch. */
 .material-choose{display:flex;align-items:baseline;min-width:0;max-width:min(320px,36cqw);padding:6px 10px;white-space:nowrap;text-align:left;flex:0 1 auto}
 .material-choose::after{content:"▾";color:var(--muted);flex:none;margin-left:6px}.material-choose[aria-expanded=true]{background:#344c42;border-color:#78ae8d}
-#material-choose-name,.material-choose-role{overflow:hidden;text-overflow:ellipsis;min-width:0}#material-choose-name{flex:0 1 auto}.material-choose-role{flex:0 100 auto;color:var(--muted);font-size:11px;margin-left:5px}.material-choose-role:empty{display:none}
+#material-choose-name,.material-choose-role{overflow:hidden;text-overflow:ellipsis;min-width:0}#material-choose-name{flex:none;max-width:100%}.material-choose-role{flex:0 100 auto;color:var(--muted);font-size:11px;margin-left:5px}.material-choose-role:empty{display:none}
 #material-new{flex:none;white-space:nowrap}
 #material-editor-fields{position:relative}
 .material-library{position:absolute;z-index:9;top:0;left:0;bottom:0;width:min(520px,100%);box-sizing:border-box;display:flex;flex-direction:column;gap:8px;padding:10px 12px;background:var(--panel);border-right:1px solid #587265;box-shadow:10px 0 30px #0008}
@@ -465,3 +465,6 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 /* World › Surface shows its own note while open and in sight: the map's label steps aside rather than say it twice. The docked material
    editor covers the panel and Focus hides it: the label stays then. */
 .app:not(.material-docked):not(.inspector-collapsed):has(#pane-world:not([hidden]) #wpane-surface:not([hidden]) #surface-view:not([hidden])) #map-view-note{display:none}
+
+/* Focus rings drawn inside frames that clip their overflow; the sliders take the same ring as the other controls. */
+.mode-switch button:focus-visible,.curve-actions button:focus-visible,.feature-group>summary:focus-visible{outline-offset:-2px}.scrub:focus-visible{outline:2px solid #92d5ea;outline-offset:-1px}
