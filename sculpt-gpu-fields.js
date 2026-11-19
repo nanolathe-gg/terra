@@ -696,8 +696,12 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     const add = (entry, region, extra = {}) => passes.push({entry, region, u: {...base, rx0: region.x0, ry0: region.y0, rx1: region.x1, ry1: region.y1, ...extra}});
     if (!readOnly) {
     // Phase 1: prepare every node (its segment and mask-write lists).
+    // A page evaluation packs only the nodes that can write its buffer: every pass of a stamp stays inside its region, and of a coast node
+    // inside its coast box (the footprint grown by its reach), so a node whose box misses the page writes nothing there and adds nothing to
+    // the rectangles the earlier nodes cover (plan below). Ground and height images are kept as they are.
+    const meetsTarget = p => !target || p.skip || p.op === 'ground' || p.op === 'heights' || !p.region || Boolean(intersect(whole, p.coast ? p.coast.box : p.region));
     const prepared = [];
-    for (const n of list) { const p0 = (prepare || prepareNode)(n, geom, ctx); if (p0.multi) prepared.push(...p0.multi); else prepared.push(p0); }
+    for (const n of list) { const p0 = (prepare || prepareNode)(n, geom, ctx); for (const p of p0.multi || [p0]) if (meetsTarget(p)) prepared.push(p); }
     if (target) { const need = shapeScratchBytes(target.pw * target.ph, prepared); if (!pageScratch || pageScratch.size < need) { pageScratch?.destroy(); pageScratch = buf(need, ST, 'page scratch'); } }
     else scratch(shapeScratchBytes(cells, prepared)/4);
     for (const p of prepared) {
