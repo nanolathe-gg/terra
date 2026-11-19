@@ -1907,6 +1907,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         flatBank = u.flatBank * step(u.sea, bh) * (1.0 - smoothstep(u.base - 0.5, u.base + 0.5, bh));
     }
     material *= 1.0 - nearWater * 0.17 * (1.0 - flatBank);
+    // Rock above the water stays wet from spray and swell, higher than soft ground: darkest at the waterline and fading to nothing over four
+    // times the world's wet band (fade: 1 at the water, 0 at the top), the fade squared so most of it is a faint darkening, with a frayed edge
+    // (wet tongues reach up and dry flecks reach down: value noise at 13 and 5 px and single art pixels), so the band ends in a scatter, not a line.
+    let wetFade = 1.0 - clamp((baseHeight(p) - u.sea - 1.0) / (4.0 * max(u.wetBand, 1.0)), 0.0, 1.0);
+    let wetFray = 0.55 * valueNoise(p / 13.0 + vec2f(3.1, 7.7)) + 0.3 * valueNoise(p / 5.0 + vec2f(8.3, 1.9)) + 0.35 * (shelfHash(floor(grainPixel(pixel)) + 63.0) - 0.5);
+    let shoreWetRock = exposed * (1.0 - flatBank) * frostDry(1.0, route) * clamp(wetFade + 0.4 * wetFray, 0.0, 1.0) * wetFade;
+    material *= 1.0 - 0.32 * shoreWetRock;
     // Painted wet or dark ground darkens as the shoreline band does, twice as strongly.
     material *= 1.0 - painted.z * 0.34;
     let crystalMask = crystalField(p);
@@ -2099,7 +2106,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     let turned = 1.0 - clamp(shading, 0.0, 1.0);
     if (u.shineOn != 0 || u.paintOn != 0 || u.groundShine != 0) {
         let sunSeen = markSeen * (1.0 - flatBank) * closeVis * faceSun;
-        var damp=max(max(u.rock[rs & rockMask].faceWet*exposed*rockWet,painted.z*.85),wetFilm*.8);
+        var damp=max(max(max(u.rock[rs & rockMask].faceWet*exposed*rockWet,painted.z*.85),wetFilm*.8),shoreWetRock*.5);
         var shine = shineTerm(pixel, p, g, normal, material, exposed, slopeShare, crystalMask, sunSeen, landform, damp, mineralPatch, skin*(1.0-depositCover));
         // E9: the glints belong to the painted face; the small rock patches of ordinary hills keep this share of them.
         if (u.shineOutside < 1.0) { shine = vec4f(shine.xyz * mix(u.shineOutside, 1.0, smoothstep(0.4, 0.9, painted.x)), shine.w); }
