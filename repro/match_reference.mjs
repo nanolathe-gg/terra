@@ -1,16 +1,19 @@
 // Retail match harness: everything a matching agent may set, read from the code that defines it, so the list never goes stale.
-//   node repro/match_reference.mjs <world> [--out FILE]
+//   node repro/match_reference.mjs <world> [--out FILE] [--configs DIR]
 // Writes markdown (to stdout, or FILE): the World controls with their ranges, the default and the world's own value; the color keys; the
 // material node types with their kinds, inputs, parameters and help; the surface facts, built-ins and layer fields; the rock type settings
 // and the world's rock types; the stroke (shape card) fields with their help; and the world's inventory (its material roles, tools, shape
-// presets and surface stack). repro/match.sh writes it into its output folder on the first run (docs/retail-match/README.md).
-import {readFileSync, writeFileSync} from 'node:fs';
+// presets and surface stack); and the map lane: the rock and material slots a scene's strokes choose by number, and what each window's
+// scene sets now. repro/match.sh writes it into its output folder on the first run (docs/retail-match/README.md).
+import {readdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {materialUse, worldSlots} from './match_world.mjs';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const outAt = args.indexOf('--out'), outFile = outAt >= 0 ? args.splice(outAt, 2)[1] : '';
+const cfgAt = args.indexOf('--configs'), configs = cfgAt >= 0 ? args.splice(cfgAt, 2)[1] : '';
 const world = args[0];
 if (!world) { console.error('usage: node repro/match_reference.mjs <world> [--out FILE]'); process.exit(2); }
 const json = f => JSON.parse(readFileSync(join(repo, f), 'utf8'));
@@ -88,8 +91,9 @@ L.push('## 4. Rock types', '', `A world's rock types are \`world.rock.recipes\` 
 L.push('Surface settings a rock type carries: ' + rock.ROCK_SURFACE_KEYS.map(k => `\`${k}\``).join(', ') + '.', '');
 L.push('Starting rock types any world may copy: ' + Object.entries(rock.STARTING_RECIPES).map(([k, v]) => `\`${k}\` (${v.label})`).join(', ') + '.', '');
 
-L.push('## 5. Stroke and shape card fields', '', 'A scene\'s strokes (`repro/scenes/<world>-<n>.json`) and a tool preset (`world.shapes.<tool>`) take these. The shape lane may',
-  'change them; the look lane leaves strokes alone. `kinds` lists the stroke kinds a field applies to.', '');
+L.push('## 5. Stroke and shape card fields', '', 'A scene\'s strokes (`repro/scenes/<world>-<n>.json`, each `[kind, points, {card: {...}}]`) and a tool preset',
+  '(`world.shapes.<tool>`) take these. The map lane may change a window\'s strokes (README.md, "The map lane"). `kinds` lists the stroke',
+  'kinds a field applies to.', '');
 head(['key', 'label', 'kinds', 'min', 'max', 'step', 'default', 'help']);
 for (const f of scene.SHAPE_FIELDS) { const [key, , label, kinds, min, max, step, dflt, help] = f; row([`\`${key}\``, label, (kinds ?? []).join(' '), min, max, step, dflt, help]); }
 L.push('', `Landform keys: ${scene.LANDFORM_KEYS.map(k => `\`${k}\``).join(', ')}. Section keys: ${scene.SECTION_KEYS.map(k => `\`${k}\``).join(', ')}.`, '');
@@ -105,6 +109,34 @@ L.push('', '### Tools (`world.tools`) and shape presets (`world.shapes`)', '');
 for (const t of w.tools ?? []) L.push(`- \`${t.id}\` ${t.label}${t.rock ? `, rock \`${t.rock}\`` : ''}${t.material ? `, material \`${t.material}\`` : ''}${w.shapes?.[t.id] && Object.keys(w.shapes[t.id]).length ? `: \`${JSON.stringify(w.shapes[t.id])}\`` : ''}`);
 L.push('', '### Surface stack', '', w.surface ? 'The world\'s own (`world.surface`):' : 'The shared default (`materials/defaults.json` → `surface`; `@role` is this world\'s material for that role):', '');
 for (const l of w.surface ?? defaults.surface ?? []) L.push(`- \`${JSON.stringify(l)}\``);
+L.push('');
+
+// The map lane: what a window's scene may choose, by slot number, and what each scene sets now.
+const {rocks, materials} = await worldSlots(world, configs);
+const UNDULATION = ['undulation', 'undulationScale', 'undulationCover', 'undulationArt'];
+L.push('## 7. The map lane: slots and windows', '', 'A window\'s scene is one retail map. Its strokes choose a rock type (`rockPreset`) and a ground material (`groundPreset`)',
+  'by slot number, and its `query` may set the map\'s own ground relief (' + UNDULATION.map(k => `\`${k}\``).join(', ') + ').',
+  'The slots below are this checkout\'s, built the way the editor builds them; they move when the world\'s rock or material lists change,',
+  'so read them again after such an edit (match.sh rewrites this file every trial).', '');
+L.push('### Rock slots (`rockPreset`)', ''); head(['slot', 'rock type', 'key', 'material slot']);
+row([-1, 'rock beneath (keeps what is there)', '', '']); row([0, 'the world\'s own rock (World controls marked "rock")', '', '']);
+for (const r of rocks) row([r.slot, r.name, r.key ? `\`${r.key}\`` : '', r.material ?? '']);
+L.push('', 'Append a new rock type at the end of `world.rock.presets`: an earlier slot number would move and every stroke that names it would change.', '');
+L.push('### Material slots (`groundPreset`)', ''); head(['slot', 'name', 'textures.json key', 'what it is']);
+row([-1, 'ground beneath (keeps what is there)', '', '']);
+for (const m of materials) row([m.worldGround ? `${m.slot} (choose as 0)` : m.slot, m.name, m.source ? `\`${m.source}\`` : '', materialUse(m)]);
+L.push('', 'To give a map another ground, add its material to `world.materials.extra` (a list of textures.json keys); it takes the next free slot.',
+  'A `landform` or `paint` stroke lays it with `groundPreset`; a paint stroke with a large `radius` covers a plain.', '');
+L.push('### What each window\'s scene sets now', '', 'A scene stroke takes its tool\'s shape preset (`world.shapes`) but not the tool\'s `rock`: an unset `rockPreset` is -1, rock beneath, which',
+  'on open ground is the world\'s own rock. Set `rockPreset` in a stroke\'s `card` to choose a rock type.', '');
+for (const f of readdirSync(join(repo, 'repro', 'scenes')).filter(f => new RegExp(`^${world}-[0-9]\\.json$`).test(f)).sort()) {
+  const sc = json(`repro/scenes/${f}`), strokes = sc.strokes ?? [];
+  L.push(`- **${f.replace('.json', '')}** (${sc.source?.map ?? 'unknown map'}): query \`${sc.query || ''}\`; ${strokes.length} strokes` +
+    (sc.rocks ? '; its own rock list' : '') + (sc.materials ? '; its own material list' : ''));
+  const kinds = new Map();
+  for (const [kind, , opt] of strokes) { const c = opt?.card ?? {}; const k = `${kind}, rock ${c.rockPreset ?? 'unset (-1)'}, ground ${c.groundPreset ?? (kind === 'paint' ? 'unset (0)' : 'unset (-1)')}`; kinds.set(k, (kinds.get(k) ?? 0) + 1); }
+  for (const [k, n] of kinds) L.push(`  - ${n} x ${k}`);
+}
 L.push('');
 
 const text = L.join('\n') + '\n';

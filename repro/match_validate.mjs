@@ -1,5 +1,5 @@
 // Retail match harness: check a world's files before a trial renders, with messages that say what to fix.
-//   node repro/match_validate.mjs <world> [--query 'key=v&key=v']
+//   node repro/match_validate.mjs <world> [--query 'key=v&key=v'] [--configs DIR] [--base-commit SHA]
 // Reads this checkout's materials/<world>.json, materials/textures.json and materials/defaults.json, and checks what a matching agent edits:
 //  - JSON that parses (with the line of the error);
 //  - world.knobDefaults: each key a World control, a rock setting or a known engine default, and inside its range;
@@ -7,14 +7,18 @@
 //    (sculpt-materials.js copyMaterial, the same check the material editor runs) or a `like` copy of one;
 //  - world.surface: a list the editor accepts (sculpt-material-model.js copySurface), with known facts, stages and materials;
 //  - world.rock: recipes whose knobs are rock settings, presets that name a recipe;
-//  - with --query, each key a setting the page reads, inside its range.
+//  - with --query, each key a setting the page reads, inside its range (and which scenes' own value it overrides);
+//  - the world's scenes (repro/scenes/<world>-<n>.json, the map lane): a query that sets only the map's ground relief (or keys the scene
+//    had at the base commit), strokes whose rockPreset and groundPreset name slots the map has (repro/match_world.mjs), known card keys.
 // Exit 1 on an error, 0 with warnings. repro/match.sh runs it before every trial.
+import {execFileSync} from 'node:child_process';
 import {readdirSync, readFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
-const argv = process.argv.slice(2), qAt = argv.indexOf('--query'), query = qAt >= 0 ? argv.splice(qAt, 2)[1] ?? '' : '';
+const argv = process.argv.slice(2), take = flag => { const at = argv.indexOf(flag); return at >= 0 ? argv.splice(at, 2)[1] ?? '' : ''; };
+const query = take('--query'), configs = take('--configs'), baseCommit = take('--base-commit');
 const world = argv[0];
 if (!world) { console.error('usage: node repro/match_validate.mjs <world> [--query \'key=v&key=v\']'); process.exit(2); }
 const errors = [], warnings = [];
@@ -94,6 +98,44 @@ for (const [k, v] of new URLSearchParams(query)) {
   if (!Number.isFinite(x)) errors.push(`--query ${k}=${v}: not a number.`);
   else if (r && (x < r[0] || x > r[1])) errors.push(`--query ${k}=${v} is outside its range ${r[0]} to ${r[1]}.`);
 }
+
+// The map lane: each window's scene.
+const UNDULATION = new Set(['undulation', 'undulationScale', 'undulationCover', 'undulationArt']);   // the map's ground node (sculpt-knobs.js UNDULATION)
+const [{SHAPE_FIELDS, LANDFORM_KEYS, SECTION_KEYS}, {worldSlots}] = await Promise.all([import('../sculpt-scene.js'), import('./match_world.mjs')]);
+const {config, rocks, materials} = await worldSlots(world, configs);
+const {toolDefaults, DRAWN_KINDS} = await import('../sculpt-scene.js');
+const cardKeys = new Set([...SHAPE_FIELDS.map(f => f[0]), ...LANDFORM_KEYS, ...SECTION_KEYS, 'curve', 'along', 'seed', 'preset']);
+const defaultsOf = kind => { try { return toolDefaults(config, kind); } catch { return {}; } };
+for (const kind of [...(DRAWN_KINDS ?? []), ...(config.tools ?? []).map(t => t.id)]) Object.keys(defaultsOf(kind)).forEach(k => cardKeys.add(k));
+const rockSlots = new Set([-1, 0, ...rocks.map(r => r.slot)]);
+const pinned = new Map();   // a query key -> the scenes that set it
+const scenes = readdirSync(join(repo, 'repro', 'scenes')).filter(f => new RegExp(`^${world}-[0-9]\\.json$`).test(f)).sort();
+for (const f of scenes) {
+  const sc = load(`repro/scenes/${f}`), at = `repro/scenes/${f}`;
+  let before = '';
+  if (baseCommit) try { before = JSON.parse(execFileSync('git', ['-C', repo, 'show', `${baseCommit}:repro/scenes/${f}`], {encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']})).query ?? ''; } catch {}
+  const had = new Set(new URLSearchParams(before).keys());
+  for (const [k, v] of new URLSearchParams(sc.query ?? '')) {
+    if (!pinned.has(k)) pinned.set(k, []); pinned.get(k).push(`${f.replace('.json', '')} ${v}`);
+    if (!known.has(k)) { errors.push(`${at} query ${k}: not a setting the page reads.`); continue; }
+    if (!UNDULATION.has(k) && !had.has(k)) errors.push(`${at} query ${k}: a scene's query sets only the map's own ground relief (${[...UNDULATION].join(', ')}). ${k} is the world's: set it in world.knobDefaults, or give this map a rock type or ground of its own (README.md, "The map lane").`);
+    const r = ranges.get(k), x = Number(v);
+    if (r && Number.isFinite(x) && (x < r[0] || x > r[1])) errors.push(`${at} query ${k}=${v} is outside its range ${r[0]} to ${r[1]}.`);
+  }
+  (sc.strokes ?? []).forEach(([kind, , opt], i) => {
+    const c = opt?.card ?? {}, where = `${at} stroke ${i} (${kind})`;
+    for (const k of Object.keys(c)) if (!cardKeys.has(k)) warnings.push(`${where}: card key ${k} is not a stroke field (typo?). See section 5 of the reference.`);
+    if (c.rockPreset !== undefined && !rockSlots.has(c.rockPreset)) errors.push(`${where}: rockPreset ${c.rockPreset} is not a rock slot of this map (${[...rockSlots].join(', ')}; section 7 of the reference).`);
+    if (c.groundPreset !== undefined && c.groundPreset !== -1 && c.groundPreset !== 0) {
+      const m = materials.find(m => m.slot === c.groundPreset);
+      if (!m || m.worldWater) errors.push(`${where}: groundPreset ${c.groundPreset} is not a ground material slot (section 7 of the reference).`);
+      else if (m.worldGround) errors.push(`${where}: groundPreset ${c.groundPreset} is the world's ground; choose it as 0.`);
+    }
+  });
+}
+for (const k of Object.keys(w.knobDefaults ?? {})) if ((pinned.get(k)?.length ?? 0) === scenes.length && scenes.length)
+  warnings.push(`world.knobDefaults.${k}: every window's scene sets its own ${k} (its query), so this world default reaches none of them. It is a map setting: change it per window in the scene's query (the map lane).`);
+for (const [k] of new URLSearchParams(query)) if (pinned.has(k)) console.log(`note: --query ${k} overrides the scenes' own value (${pinned.get(k).join(', ')}) in every window it renders.`);
 
 for (const m of warnings) console.log(`warning: ${m}`);
 for (const m of errors) console.log(`error: ${m}`);

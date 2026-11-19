@@ -1,12 +1,19 @@
 """Retail match harness: the trial log. repro/match.sh calls `record` after each trial; agents and reviewers call `show`.
 
   match_log.py record <trial-dir> --ledger FILE --kind trial|probe|holdout --note TEXT [--query Q] [--commit SHA] [--diff FILE]
+                      [--base DIR] [--repo DIR --world NAME]
   match_log.py show --ledger FILE [--last N]
 
 `record` reads <trial-dir>/stats/stats.json (retail_gap.py's shape and look per window) and <trial-dir>/classes/classes.json
 (match_classes.py's findings), appends one JSON line to the ledger and prints the trial against the base (the first trial of the
 same kind: trial-000 for trials and probes, holdout-000 for the held-out window) and against the previous trial: scores per window,
 the findings that cleared and the ones that appeared since the base, and the largest findings left. Lower scores are closer to retail.
+A trial may render some of the windows (match.sh --window): its means and comparisons cover those windows only.
+
+A finding counts as cleared only when its gap is clearly inside the threshold (size CLEAR or less, in threshold units) or fell by a
+third; one that slipped just under the threshold is listed apart, as not a clear. With --repo and --world, each trial records which
+levers it moved (the world file's sections, each material in textures.json, each window's scene, the query), and `show` counts the
+trials per kind of lever, so a reviewer sees what was explored.
 """
 import argparse
 import hashlib
@@ -38,6 +45,59 @@ def fmt(x):
 
 def delta(a, b):
     return f'{a - b:+.2f}' if all(isinstance(v, (int, float)) and math.isfinite(v) for v in (a, b)) else '   '
+
+
+CLEAR = .8   # a cleared finding's gap is at most this, in threshold units (1 is the threshold), or a third smaller than at the base
+
+# The kinds of lever, by the part of the world data a trial changed (`levers`).
+KINDS = [('world control', ('world.knobDefaults', 'world.engineDefaults', 'query')), ('rock type', ('world.rock',)),
+         ('surface layer', ('world.surface',)), ('material', ('world.materials', 'textures:')), ('shape preset', ('world.shapes', 'world.tools')),
+         ('map (scene)', ('scene:',)), ('other world data', ('',))]
+
+
+MAP_QUERY = ('query:undulation',)   # the map's own ground relief (undulation, undulationScale, ...): a scene's query keeps it
+
+
+def kind_of(lever):
+    if lever.startswith(MAP_QUERY):
+        return 'map (scene)'
+    return next(k for k, prefixes in KINDS if any(lever.startswith(p) for p in prefixes))
+
+
+def fingerprints(repo, world, query):
+    """A short hash of each part of the world data a trial can change: the world file's sections, each material in textures.json, each
+    of the world's scenes, and each query key."""
+    h = lambda v: hashlib.sha1(json.dumps(v, sort_keys=True).encode()).hexdigest()[:10]
+    out = {}
+    root = Path(repo)
+    try:
+        data = json.loads((root / 'materials' / f'{world}.json').read_text())
+        for k, v in data.items():
+            if k == 'world':
+                out.update({f'world.{wk}': h(wv) for wk, wv in v.items()})
+            else:
+                out[k] = h(v)
+        for k, v in json.loads((root / 'materials' / 'textures.json').read_text()).items():
+            out[f'textures:{k}'] = h(v)
+    except (OSError, ValueError):
+        pass
+    for f in sorted((root / 'repro' / 'scenes').glob(f'{world}-[0-9].json')):
+        out[f'scene:{f.stem}'] = h(f.read_text())
+    for part in (query or '').split('&'):
+        if '=' in part:
+            out[f"query:{part.split('=', 1)[0]}"] = part.split('=', 1)[1]
+    return out
+
+
+def levers_moved(now, before):
+    """The files' parts whose fingerprint differs from the previous trial's, and this trial's own query keys (a query is not kept, so
+    one the previous trial set and this one does not moves nothing)."""
+    files = {k for k in set(now) | set(before) if not k.startswith('query:') and now.get(k) != before.get(k)}
+    return sorted(files | {k for k in now if k.startswith('query:')})
+
+
+def finding_sizes(classes, window):
+    return {f'{c}:{m}': s for c, v in classes.get(window, {}).get('classes', {}).items() for m, s in v.get('sizes', {}).items()}
 
 
 LABELS = {'luma': 'luma', 'spread': 'spread', 'band2': 'grain 2px', 'band8': 'texture 8px', 'band32': 'patches 32px', 'edges': 'edges', 'lines': 'lines'}
@@ -82,13 +142,16 @@ def record(a):
         windows[name] = {'shape': w['shape'], 'look': w['look'], 'inside': w['inside'], 'total': w['total'],
                          'findings': [{'key': x['key'], 'size': x['size'], 'text': x['text']} for x in f]}
     diff = Path(a.diff).read_bytes() if a.diff and Path(a.diff).exists() else b''
+    prints = fingerprints(a.repo, a.world, a.query) if a.repo and a.world else {}
     e = {'trial': t.name, 'kind': a.kind, 'time': time.strftime('%Y-%m-%dT%H:%M:%S'), 'note': a.note, 'query': a.query,
          'commit': a.commit, 'diff_sha': hashlib.sha1(diff).hexdigest()[:12] if diff else '', 'diff_lines': diff.count(b'\n'),
-         'shape': mean(w['shape'] for w in windows.values()), 'look': mean(w['look'] for w in windows.values()), 'windows': windows}
+         'shape': mean(w['shape'] for w in windows.values()), 'look': mean(w['look'] for w in windows.values()), 'windows': windows,
+         'prints': prints}
     prior = entries(a.ledger)
     base_kind = 'holdout' if a.kind == 'holdout' else 'trial'
     base = next((p for p in prior if (p['kind'] == 'holdout') == (base_kind == 'holdout')), None)
     prev = next((p for p in reversed(prior) if (p['kind'] == 'holdout') == (base_kind == 'holdout')), None)
+    e["levers"] = levers_moved(prints, prev.get('prints', {})) if prev and prints and prev.get('prints') else []
     with open(a.ledger, 'a') as fh:
         fh.write(json.dumps(e) + '\n')
     print(f"\n{e['trial']} ({a.kind}) {a.note!r}{'  query ' + a.query if a.query else ''}")
@@ -98,12 +161,25 @@ def record(a):
         print('  NOTE: renders exactly as the base on every window: this change reaches none of these windows (check gates, which rock the strokes use, or a scene query that overrides it).')
     if prev and prev.get('diff_sha') == e['diff_sha'] and prev.get('query', '') == e['query']:
         print(f"  WARNING: nothing changed since {prev['trial']} (same file diff, same query). Did your edit save? `git diff` shows what a trial renders.")
-    line = f"  mean      shape {fmt(e['shape'])}  look {fmt(e['look'])}"
+    if e['levers']:
+        print(f"  moved since {prev['trial']}: " + ', '.join(e['levers']))
+    if any(k.startswith(MAP_QUERY) for k in e['levers']):
+        print("  (a map setting: to keep it, set it in that window's scene query, not in world.knobDefaults, which the scenes override)")
+    if base and len(windows) < len(base['windows']) and any(kind_of(k) != 'map (scene)' for k in e['levers']):
+        print(f"  WARNING: this moves world data every window uses, but rendered {len(windows)} of {len(base['windows'])} windows. Run it without --window before you keep it.")
+    over = lambda p, key: mean(p['windows'][n][key] for n in windows if n in p['windows'])   # the same windows only
+    line = f"  mean      shape {fmt(e['shape'])}  look {fmt(e['look'])}" + (f"  ({len(windows)} of {len(base['windows'])} windows)" if base and len(windows) < len(base['windows']) else '')
     if base:
-        line += f"   vs base {base['trial']}: shape {delta(e['shape'], base['shape'])} look {delta(e['look'], base['look'])}"
-    if prev and prev is not base:
-        line += f"   vs previous {prev['trial']}: shape {delta(e['shape'], prev['shape'])} look {delta(e['look'], prev['look'])}"
+        line += f"   vs base {base['trial']}: shape {delta(e['shape'], over(base, 'shape'))} look {delta(e['look'], over(base, 'look'))}"
+    if prev and prev is not base and any(n in prev['windows'] for n in windows):
+        line += f"   vs previous {prev['trial']}: shape {delta(e['shape'], over(prev, 'shape'))} look {delta(e['look'], over(prev, 'look'))}"
     print(line)
+    base_classes = None
+    if a.base:
+        try:
+            base_classes = json.loads((Path(a.base) / 'classes' / 'classes.json').read_text())
+        except (OSError, ValueError):
+            pass
     for name, w in windows.items():
         b = base['windows'].get(name) if base else None
         s = f"  {name:9s} shape {fmt(w['shape'])}  look {fmt(w['look'])}  in band {w['inside']}/{w['total']}"
@@ -114,7 +190,13 @@ def record(a):
             now = {f['key'] for f in w['findings']}
             then = {f['key'] for f in b['findings']}
             if then - now:
-                print(f"      cleared since base: {', '.join(sorted(then - now))}")
+                was, size = finding_sizes(base_classes or {}, name), finding_sizes(classes, name)
+                clear = sorted(k for k in then - now if size.get(k, 0) <= CLEAR or size.get(k, 0) <= was.get(k, 9) * 2 / 3)
+                slipped = sorted(k for k in then - now if k not in clear)
+                if clear:
+                    print(f"      cleared since base: {', '.join(clear)}")
+                if slipped:
+                    print(f"      just under the threshold (not a clear; gap {', '.join(f'{was.get(k, 0):.2f}->{size.get(k, 0):.2f}' for k in slipped)}): {', '.join(slipped)}")
             if now - then:
                 print(f"      new since base:     {', '.join(sorted(now - then))}")
         for f in w['findings'][:3]:
@@ -140,7 +222,13 @@ def show(a):
     for e in es[-a.last:] if a.last else es:
         per = ' '.join(f"{fmt(e['windows'][n]['look']) if n in e['windows'] else '-':>9s}" for n in names)
         print(f"{e['trial']:12s} {e['kind']:8s} {fmt(e['shape']):>5s} {fmt(e['look']):>5s}  {per}  {e['note']}{' [' + e['query'] + ']' if e['query'] else ''}")
-    print('(per-window columns are the look score; lower is closer to retail)')
+    print('(per-window columns are the look score, - where a trial did not render that window; lower is closer to retail)')
+    counts = {}
+    for e in es:
+        for k in {kind_of(lever) for lever in e.get('levers', [])}:
+            counts[k] = counts.get(k, 0) + 1
+    if counts:
+        print('trials per kind of lever (a trial counts once per kind it moved): ' + ', '.join(f'{k} {counts[k]}' for k, _ in KINDS if k in counts))
 
 
 def main():
@@ -155,6 +243,8 @@ def main():
     r.add_argument('--commit', default='')
     r.add_argument('--diff', default='')
     r.add_argument('--base', default='', help='the base trial folder, for per-class changes')
+    r.add_argument('--repo', default='', help='the checkout, to record which levers a trial moved')
+    r.add_argument('--world', default='')
     s = sub.add_parser('show')
     s.add_argument('--ledger', required=True)
     s.add_argument('--last', type=int, default=0)

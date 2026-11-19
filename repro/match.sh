@@ -2,6 +2,7 @@
 # Retail match harness: one trial of a world against its retail windows (docs/retail-match/README.md).
 #   repro/match.sh <world> --note "what you changed and why" [--query 'key=v&key=v']    one trial of this checkout's world files
 #   repro/match.sh <world> --probe key=v1,v2,v3 [--note TEXT]                           one trial per value of one World control
+#   repro/match.sh <world> --window green-5[,green-6] --note TEXT                        render only these tuning windows (a map's own change)
 #   repro/match.sh <world> --holdout --note TEXT                                         the held-out window (only at a checkpoint)
 #   repro/match.sh <world> --log                                                         the trial log so far
 #   repro/match.sh <world> --keep-trial trial-NNN                                       keep a trial's pictures (one you cite or keep)
@@ -20,13 +21,14 @@ R=${R:-/tmp/nanolathe-map-editor}
 py=${PYTHON:-/Users/daniel/src/terraform/.venv/bin/python}
 world=$1; [ $# -gt 0 ] && shift
 [ -n "$world" ] && [ "${world#-}" = "$world" ] || { sed -n '2,8p' "$0" >&2; exit 2; }
-note=; query=; probe=; holdout=0; showlog=0; keep=0; keeptrial=; out=
+note=; query=; probe=; holdout=0; showlog=0; keep=0; keeptrial=; out=; only=
 while [ $# -gt 0 ]; do
   case $1 in
     --note) note=$2; shift 2 ;;
     --query) query=$2; shift 2 ;;
     --probe) probe=$2; shift 2 ;;
     --holdout) holdout=1; shift ;;
+    --window) only=$2; shift 2 ;;
     --log) showlog=1; shift ;;
     --keep) keep=1; shift ;;
     --keep-trial) keeptrial=$2; shift 2 ;;
@@ -44,6 +46,17 @@ all=$(ls "$here"/scenes/"$world"-[0-9].json 2>/dev/null)
 [ -n "$all" ] || { echo "match.sh: no windows repro/scenes/$world-<n>.json" >&2; exit 2; }
 held=$(printf '%s\n' "$all" | tail -1)
 tuning=$(printf '%s\n' "$all" | grep -vxF "$held"); [ -n "$tuning" ] || tuning=$all   # a world with one window has nothing to hold out
+if [ -n "$only" ]; then   # --window: some of the tuning windows, for a change only those windows' scenes carry
+  [ $holdout = 0 ] || { echo "match.sh: --window and --holdout do not mix" >&2; exit 2; }
+  picked=
+  for w in $(printf '%s' "$only" | tr ',' ' '); do
+    f=$here/scenes/$w.json
+    printf '%s\n' "$tuning" | grep -qxF "$f" || { echo "match.sh: --window $w is not one of the tuning windows: $(printf '%s\n' "$tuning" | sed 's|.*/||; s|\.json$||' | tr '\n' ' ')" >&2; exit 2; }
+    picked="$picked${picked:+
+}$f"
+  done
+  tuning=$picked
+fi
 
 if [ -n "$keeptrial" ]; then
   [ -d "$out/$keeptrial" ] || { echo "match.sh: no trial $out/$keeptrial" >&2; exit 2; }
@@ -57,9 +70,14 @@ if [ -n "$probe" ]; then
   [ "$key" != "$probe" ] && [ -n "$values" ] || { echo "match.sh: --probe key=v1,v2,v3" >&2; exit 2; }
   queries=$(for v in $(printf '%s' "$values" | tr ',' ' '); do printf '%s\n' "$key=$v${query:+&$query}"; done)
 fi
-printf '%s\n' "$queries" | while read -r q; do node "$here/match_validate.mjs" "$world" ${q:+--query "$q"} > "$out/validate.log" 2>&1 || { cat "$out/validate.log" >&2; exit 1; }; done || { echo "match.sh: fix the errors above; nothing rendered" >&2; exit 1; }
-grep -h '^warning' "$out/validate.log" 2>/dev/null
-node "$here/match_reference.mjs" "$world" --out "$out/REFERENCE.md" || exit 1
+# The world's configs as the Go code builds them from this checkout (for the map's rock and material slots), made fresh each run.
+mkdir -p "$out/configs"
+node -e 'import(process.argv[1]).then(h => h.dumpConfigs(process.argv[2]))' "$here/headless.mjs" "$out/configs" || { echo "match.sh: could not build the world configs (go run ./cmd/terraform --dump-configs)" >&2; exit 1; }
+basecommit=$(cat "$out/base-commit" 2>/dev/null || git -C "$repo" rev-parse HEAD)
+: > "$out/validate.log"
+printf '%s\n' "$queries" | while read -r q; do node "$here/match_validate.mjs" "$world" --configs "$out/configs" --base-commit "$basecommit" ${q:+--query "$q"} >> "$out/validate.log" 2>&1 || { cat "$out/validate.log" >&2; exit 1; }; done || { echo "match.sh: fix the errors above; nothing rendered" >&2; exit 1; }
+grep -h '^warning\|^note' "$out/validate.log" 2>/dev/null | sort -u
+node "$here/match_reference.mjs" "$world" --configs "$out/configs" --out "$out/REFERENCE.md" || exit 1
 
 trial() {   # trial <dir> <scenes> <base dir> <query> <kind> <note>
   t=$1
@@ -71,12 +89,12 @@ trial() {   # trial <dir> <scenes> <base dir> <query> <kind> <note>
   baseopt=; [ -d "$3/stats" ] && [ "$t" != "$3" ] && baseopt="--base $3"
   RETAIL_SCENES="$2" sh "$here/retail.sh" "$world" --out "$t" ${4:+--query "$4"} $baseopt > "$t/retail.log" 2>&1 || { cat "$t/retail.log" >&2; echo "match.sh: the render or scoring failed: $t/retail.log" >&2; return 1; }
   "$py" "$here/match_classes.py" "$t/scenes" --out "$t/classes" --worlds "$world" > "$t/classes.log" 2>&1 || { cat "$t/classes.log" >&2; return 1; }
-  "$py" "$here/match_log.py" record "$t" --ledger "$ledger" --kind "$5" --note "$6" --query "$4" --commit "$(git -C "$repo" rev-parse --short HEAD)" --diff "$t/candidate.diff" --base "$3"
+  "$py" "$here/match_log.py" record "$t" --ledger "$ledger" --kind "$5" --note "$6" --query "$4" --commit "$(git -C "$repo" rev-parse --short HEAD)" --diff "$t/candidate.diff" --base "$3" --repo "$repo" --world "$world"
 }
 
 # The bases: the first run renders trial-000 (the tuning windows) and holdout-000 (the held-out window) from unchanged files.
 if [ ! -d "$out/trial-000/stats" ]; then
-  [ -z "$query$probe" ] || { echo "match.sh: run the base first (no --query or --probe), so later trials have something to compare with" >&2; exit 2; }
+  [ -z "$query$probe$only" ] || { echo "match.sh: run the base first (no --query or --probe), so later trials have something to compare with" >&2; exit 2; }
   if ! git -C "$repo" diff --quiet HEAD -- materials repro/scenes || [ -n "$(git -C "$repo" ls-files --others --exclude-standard -- materials repro/scenes)" ]; then
     echo "match.sh: the base must render the world files as committed; materials/ or repro/scenes/ has changes (git status). Commit or restore them first." >&2; exit 2
   fi
