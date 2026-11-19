@@ -199,6 +199,8 @@ def record(a):
                     print(f"      just under the threshold (not a clear; gap {', '.join(f'{was.get(k, 0):.2f}->{size.get(k, 0):.2f}' for k in slipped)}): {', '.join(slipped)}")
             if now - then:
                 print(f"      new since base:     {', '.join(sorted(now - then))}")
+        for x in classes.get(name, {}).get('warnings', []):
+            print(f"      WARNING: {x}")
         for f in w['findings'][:3]:
             print(f"      {f['size']:4.1f} {f['text']}")
         crops = classes.get(name, {}).get('crops', {})

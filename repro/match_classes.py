@@ -16,7 +16,8 @@ class actually drew. The classes:
 Both sides are classed from 16 px height cells, so a class boundary can sit up to half a cell from where the picture changes: each
 mask loses EDGE_PX px (half a cell) at its border, so a number describes the class, not the seam between two. A retail coast is
 drawn by its tiles, not by its heights, so a mask can still hold the other side of a waterline: a dry class drops pixels whose color
-is nearer that side's own water than its own land, and the water drops pixels nearer the land (`unmixed`). Per class and side:
+within COAST_PX of a waterline is nearer that side's own water than that class's own color, and the water drops pixels nearer the land
+(`unmixed`). Per class and side:
 share of the window, mean color (sRGB and CIELAB), luma mean and spread, band-pass energy at 2, 8 and 32 px, edge density and thin
 dark line density (stats.py's definitions, read inside the mask). Then plain-language findings where a gap passes a threshold
 (THRESHOLDS below), largest first, and 1x crops: for each class, the 256 px square where retail has the most of it, cut from both
@@ -49,6 +50,8 @@ THRESHOLDS = {'share': .05, 'luma': 8.0, 'color': 6.0, 'spread': 1.3, 'band': 1.
 # Below these both sides are too faint for a ratio to mean anything (a share of pixels).
 FLOORS = {'edges': .004, 'lines': .0003}
 MIN_PIXELS = 4000   # a class with fewer pixels on either side gets no texture comparison
+UNMIX_WARN = .25    # warn when unmixing drops more than this share of a class
+COAST_PX = 24       # unmixing looks this far from a waterline (one and a half height cells)
 
 
 def cell_classes(h, spacing):
@@ -93,21 +96,27 @@ def masks(screen, valid):
     return out
 
 
-def unmixed(rgb, ms):
-    """Drop from each dry class the pixels whose color is nearer this side's water than its land, and from the water those nearer the
-    land: a coast drawn off its height cells (retail's tiles) puts water pixels inside a shore mask. Medians of the side's own classes,
-    so it needs no world's colors. A side with too little water or land is left alone."""
+def unmixed(rgb, ms, screen):
+    """Near a waterline only (COAST_PX of it, by the side's own heights), drop from each dry class the pixels whose color is nearer
+    this side's water than that class's own, and from the water those nearer the land: a coast drawn off its height cells (retail's
+    tiles) puts water pixels inside a shore mask. Medians of the side's own classes, so it needs no world's colors; away from the
+    coast nothing is touched (gray rock on a snow world is not water). A side with too little water or land is left alone."""
     water = ms['water']
     dry = np.zeros_like(water)
     for name in CLASSES[1:]:
         dry |= ms[name]
     if water.sum() < MIN_PIXELS or dry.sum() < MIN_PIXELS:
         return ms
+    near_water = ndimage.distance_transform_edt(screen != 0) <= COAST_PX
+    near_land = ndimage.distance_transform_edt(screen == 0) <= COAST_PX
     px = rgb.astype(np.float64)
-    wmed, lmed = np.median(px[water], axis=0), np.median(px[dry], axis=0)
-    nearer_water = np.linalg.norm(px - wmed, axis=2) < np.linalg.norm(px - lmed, axis=2)
-    out = {name: m & ~nearer_water for name, m in ms.items()}
-    out['water'] = water & nearer_water
+    dist = lambda c: np.linalg.norm(px - c, axis=2)
+    to_water = dist(np.median(px[water], axis=0))
+    out = dict(ms)
+    for name in CLASSES[1:]:
+        if ms[name].sum() >= MIN_PIXELS:
+            out[name] = ms[name] & ~(near_water & (to_water < dist(np.median(px[ms[name]], axis=0))))
+    out['water'] = water & ~(near_land & (dist(np.median(px[dry], axis=0)) < to_water))
     return out
 
 
@@ -147,7 +156,11 @@ def side(pic_path, h, plain, size_check=None):
     inner[4:-4, 4:-4] = True
     cls = cell_classes(h, size / h.shape[0])
     screen = screen_classes(cls, h, plain, size)
-    return rgb, unmixed(rgb, masks(screen, valid & inner))
+    before = masks(screen, valid & inner)
+    after = unmixed(rgb, before, screen)
+    # The share of each class unmixing dropped: a world whose land and water look alike could lose a class to it.
+    dropped = {n: 1 - after[n].sum() / before[n].sum() for n in CLASSES if before[n].sum() >= MIN_PIXELS}
+    return rgb, after, dropped
 
 
 def ratio(a, b):
@@ -251,10 +264,12 @@ def window(d, out, crop):
     opic_size = Image.open(d / 'ours.png').size[0]
     oh = resample_heights(oh, max(2, round(opic_size / 16)))
     oplain = float(data.get('base', WORLD_BASE.get(d.name.split('-', 1)[0], 24)))
-    rpic, rm = side(d / 'retail.png', rh, rplain)
-    opic, om = side(d / 'ours.png', oh, oplain)
+    rpic, rm, rdrop = side(d / 'retail.png', rh, rplain)
+    opic, om, odrop = side(d / 'ours.png', oh, oplain)
+    warn = [f'{who} {n}: unmixing dropped {x:.0%} of its pixels as the other side of the waterline (land and water colors alike?)'
+            for who, dropped in (('retail', rdrop), ('ours', odrop)) for n, x in dropped.items() if x > UNMIX_WARN]
     rmaps, omaps = texture_maps(rpic), texture_maps(opic)
-    result = {'classes': {}, 'findings': [], 'crops': {}}
+    result = {'classes': {}, 'findings': [], 'crops': {}, 'warnings': warn}
     found = []
     for name in CLASSES:
         r, o = class_stats(rpic, rmaps, rm[name]), class_stats(opic, omaps, om[name])
@@ -312,12 +327,15 @@ def main(argv=None):
             res = window(d, out, a.crop)
             all_res[d.name] = res
             md.append(table_md(d.name, res))
+            md += [f'- WARNING: {x}' for x in res['warnings']] + ([''] if res['warnings'] else [])
     out.mkdir(parents=True, exist_ok=True)
     (out / 'classes.json').write_text(json.dumps(all_res, indent=1))
     (out / 'classes.md').write_text('\n'.join(md))
     for name, res in all_res.items():
         top = res['findings'][:3]
         print(f'{name:16s} ' + ('; '.join(f["text"] for f in top) if top else 'no class gap over threshold'))
+        for x in res['warnings']:
+            print(f'{"":16s} WARNING: {x}')
     print(f'classes {out / "classes.md"}; crops {out / "crops"}/<window>/<class>.png')
 
 
