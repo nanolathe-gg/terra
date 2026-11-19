@@ -334,14 +334,18 @@ export const smoothRadius = (radius, {spacing, refSpacing = spacing}) => Math.ma
 // context by its settings and the world's shape defaults (the params of a node with none). A height image is prepared each time: its samples
 // are its own arrays and the preparation only points at them.
 export const nodeContextKey = c => JSON.stringify(c) + '|' + JSON.stringify(c.params({params: {}}));
+// `unchanged`: the host knows the node is as it was at its last preparation here (createPagedFields: no edit has reached it since), so a kept
+// preparation is used without comparing the node's text.
 export function createNodePreparer(limit = 4) {
   const kept = new Map();   // lattice and context -> WeakMap(node -> {text, prepared})
-  return (n, geom, c, contextKey = nodeContextKey(c)) => {
+  return (n, geom, c, contextKey = nodeContextKey(c), unchanged = false) => {
     if (n.kind === 'heights') return prepareNode(n, geom, c);
     const key = [geom.grid, geom.spacing, geom.refSpacing ?? '', contextKey].join('|');
     let nodes = kept.get(key);
     if (!nodes) { if (kept.size >= limit) kept.delete(kept.keys().next().value); kept.set(key, nodes = new WeakMap()); }
-    const text = JSON.stringify(n), hit = nodes.get(n);
+    const hit = nodes.get(n);
+    if (hit && unchanged) return hit.prepared;
+    const text = JSON.stringify(n);
     if (hit?.text === text) return hit.prepared;
     const prepared = prepareNode(n, geom, c);
     nodes.set(n, {text, prepared});
@@ -1286,8 +1290,27 @@ export function createPagedFields(opts) {
     return engine = await createShapeEngine({device: d, grid: worldGrid, spacing, baseHeight, sea: c.sea, minH: c.minH, maxH: c.maxH, pages: true});
   })().catch(err => { enginePromise = null; throw err; });   // a failed start is tried again on the next call
   // One preparation of each node for a revision; a node the revision did not change keeps the last one's (createNodePreparer).
+  // Which nodes a revision may have changed follows from its rectangle: the host edits a node in place and then calls changed() with a
+  // rectangle that holds the node's reach before and after (nodeBounds in sculpt.js, which the cells it evaluates again depend on as well), so
+  // the node's last preparation, whose stamp region holds its points, meets it. `settled` holds the nodes no rectangle has reached since they
+  // were last prepared; their kept preparations are used as they are, and only the others are compared by their text. A whole change (a load,
+  // undo or redo, a reorder, the world's defaults) settles none. A node whose last preparation drew nothing (hidden, no points) or has no
+  // region (the ground node) is always compared.
   const keptPrepare = createNodePreparer();
-  const prepare = (n, geom, c) => { let p = prep.get(n); if (!p) { p = keptPrepare(n, geom, c, prepContext ??= nodeContextKey(c)); prep.set(n, p); } return p; };
+  let settled = new WeakSet(), lastPrep = new WeakMap();
+  const prepare = (n, geom, c) => {
+    let p = prep.get(n);
+    if (!p) { p = keptPrepare(n, geom, c, prepContext ??= nodeContextKey(c), settled.has(n)); prep.set(n, p); settled.add(n); lastPrep.set(n, p); }
+    return p;
+  };
+  const unsettle = r => {
+    if (!r) { settled = new WeakSet(); return; }
+    for (const n of nodes()) {
+      if (!settled.has(n)) continue;
+      const p = lastPrep.get(n);
+      if (!p || (p.multi || [p]).some(q => q.skip || !q.region || hits(q.coast ? q.coast.box : q.region, r))) settled.delete(n);
+    }
+  };
 
   // ---- resources
   const shapeBytes = () => { let n = 0; for (const pg of pagesMap.values()) if (pg.target) n += pg.target.bytes; return n; };
@@ -1663,6 +1686,7 @@ export function createPagedFields(opts) {
   // ---- changes
   function changed(rect = null, keepPrefix = 0) {
     revision++; prep = new Map(); prepContext = null;
+    unsettle(rect ? clip(rect) : null);
     check();
     const cr = rect ? clip(rect) : null, r = cr ? clip({x0: cr.x0 - 6, y0: cr.y0 - 6, x1: cr.x1 + 6, y1: cr.y1 + 6}) : null, event = {revision, rect: cr ? worldRect(cr) : null};
     const announce = event.rect;
