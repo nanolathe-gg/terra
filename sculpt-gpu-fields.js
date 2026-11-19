@@ -1718,8 +1718,10 @@ export function createPagedFields(opts) {
   // (pumpWeather), not when a tile first asks for its page.
   function settle() {
     const out = pendingStale; pendingStale = null;
-    for (const pg of pagesMap.values()) if (pg.target && !pg.cpu) wantCpu(pg);
-    for (const pg of pagesMap.values()) if (pg.target && pg.cpuRev !== pg.rev) wantCpu(pg);
+    // The copies trim() keeps: the CPU_PAGES resident pages used last (the order it lets them go in). A copy asked for past those was read
+    // and dropped again at every settle.
+    const kept = [...pagesMap.values()].filter(pg => pg.target).sort((a, b) => b.used - a.used).slice(0, CPU_PAGES);
+    for (const pg of kept) if (!pg.cpu || pg.cpuRev !== pg.rev) wantCpu(pg);
     if (time) pumpWeather();
     return out;
   }
