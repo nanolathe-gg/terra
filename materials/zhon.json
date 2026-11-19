@@ -1569,7 +1569,7 @@
    "scree": "0"
   },
   "export": {
-   "disabledReason": "Zhon has no retail planet or feature set; the owner must choose one before export"
+   "disabledReason": "no game map uses Zhon yet, so it has no planet or climate for the game to use. Its maps still save and open in the editor."
   }
  }
 }

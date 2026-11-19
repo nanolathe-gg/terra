@@ -246,7 +246,7 @@ export async function exportMap(s, {name, description, wasm, onChunk = () => {}}
   const {cellHeights} = await import('../sculpt-map.js'), page = await import('../sculpt-export.js'), {defaultStarts} = await import('../sculpt-features.js');
   const {encodePng} = await import('./png.mjs'), {exportWorker} = await import('./export-node.mjs');
   const catalogue = config.exportCatalog, climate = catalogue.worlds[config.biomeId]?.climate;
-  if (!climate) throw new Error(`export is unavailable for ${config.biomeId}: ${catalogue.worlds[config.biomeId]?.disabledReason || 'no retail planet'}`);
+  if (!climate) throw new Error(`export is unavailable for ${config.biomeId}: ${catalogue.worlds[config.biomeId]?.disabledReason || 'no game planet'}`);
   const sampled = await cellHeights(map, request => readWeathered(s, request)), palette = (await json('materials/palette.json')).indexed;
   const job = Array.from({length: 16}, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join('');
   const call = exportWorker(wasm), start = page.exportStart({job, config, map, catalogue, palette, name, description: description ?? page.DEFAULT_DESCRIPTION,

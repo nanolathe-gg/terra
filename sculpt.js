@@ -37,8 +37,8 @@ const $ = id => document.getElementById(id);
 const canvas = $('terrain'), overlay = $('overlay');
 const experiment = new URLSearchParams(location.search);
 // Saved maps (sculpt-maps.js): each map in this browser is its own entry and this tab edits one. The editor writes nothing to the address; its
-// own reloads leave what the next page needs with the tab, read here once as if it were in the address. A world switch carries the tab's map
-// into the new world (see carryNodes). Scratch pages (`scratch`, the checks' comparison sketches) save nothing.
+// own reloads leave what the next page needs with the tab, read here once as if it were in the address. A world switch carries a copy of the tab's map
+// into the new world (goToWorld, carryNodes). Scratch pages (`scratch`, the checks' comparison sketches) save nothing.
 const sessionStore=(()=>{try{return sessionStorage;}catch(_){return null;}})();
 const tabState=readTab(sessionStore);for(const [key,value] of Object.entries(tabState.next??{}))experiment.set(key,String(value));
 const SAVING=!experiment.has('scratch');
@@ -1745,7 +1745,7 @@ function syncHistoryNames() {
 function checkpoint(mapOnly=false) {
   flushEval(); keepWorldMaterials();
   history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); history.at(-1).name=changeName(history.at(-2),history.at(-1)); if (history.length>48) history.shift(); historyIndex=history.length-1;
-  renderLayers(); updateControls(); persistLater(); pickCard?.refresh();   // a pinned pixel reads again after every committed change
+  renderLayers(); updateControls(); persistLater(0); pickCard?.refresh();   // saved at once (persistLater); a pinned pixel reads again after every committed change
 }
 // A card change commits one undo step — never mid-gesture, where a checkpoint would capture a
 // half-drawn stroke or a half-moved selection (the gesture's own commit carries the change).
@@ -1927,15 +1927,22 @@ $('reset-strokes').onclick=() => {
   selected=-1;alsoSelected=[]; pathPoint=-1; pathAdding=false; evaluate(0); regionalFields.changed(); checkpoint(); queueWeather(); schedule();
   status('Reset every stroke to this world\'s defaults.');
 };
-function persistLater() {
+// Saves the map `delay` ms after the last call. A committed change (checkpoint: a stroke's end, a move, a card change) passes 0: the save runs
+// in the next task, after the change's own draw is scheduled, so a reload right after it keeps it (FLOWS #6). Continuous changes (slider
+// drags) keep the 450 ms wait, so a drag saves once at its end. Commits that come faster than 200 ms apart (a held arrow key nudging a
+// shape) wait for a pause of 200 ms instead of saving each time. A save costs about 5 ms of main thread at 40 shapes and 15 ms at 300.
+let lastSaveAt=-Infinity,saveHeld=false;   // saveHeld: commits are coming faster than 200 ms apart
+function persistLater(delay=450) {
   if (!SAVING) { $('save-state').textContent='Comparison sketch · use Map › Save as link or Download file to keep it.'; return; }
   if (!mapStore) { $('save-state').textContent=mapsNote||'Saving in this browser is unavailable. Use Save to keep this map as a file.'; return; }
+  if (delay<200) { saveHeld=saveHeld || performance.now()-lastSaveAt<200; if (saveHeld) delay=200; }
   clearTimeout(autosaveTimer); autosaveTimer=setTimeout(async () => {
+    saveHeld=false;
     if (stroke || moving || loading) { persistLater(); return; }
-    keepSaved=false;
+    keepSaved=false; lastSaveAt=performance.now();
     // Await the write: its promise is always truthy, and 'saved' must not show before IndexedDB answers.
     if (await saveWorking()) $('save-state').textContent='Your map is saved in this browser (Maps lists every map you keep here).';
-  },450);
+  },delay);
 }
 let keepSaved=false;   // set while this tab leaves for another map: leaving the page must not write the old one again
 addEventListener('pagehide',() => { worldInputQueue.flush();if (!stroke && !moving && !loading && !keepSaved) saveWorking(); });
@@ -2395,15 +2402,23 @@ function restorePlace() {
   if (view||panel||experiment.has('shape')) { const url=new URL(location.href); for (const key of ['view','panel','shape']) url.searchParams.delete(key); window.history.replaceState(null,'',url); }
   return Boolean(view);
 }
-// Another world for this tab's map: it is saved, then the page reloads in that world and carries it there, and the artist's place
-// (placeParams). A scratch page stays a scratch page.
-async function goToWorld(base,id,extra) {
+// Another world for this tab's map: it is saved, then a copy of it is saved as a new map (owner, 2026-11-19: "Fork it"), and the page
+// reloads in that world on the copy, which it carries there (carryNodes), with the artist's place (placeParams). The original stays in Maps
+// as it was, in its own world, with its tools. Without a store (or on a scratch page) the tab's map is carried, as before; so it is with `fork`
+// false, when the map's world itself goes (Delete this world) or becomes yours (Use for my world).
+async function goToWorld(base,id,extra,fork=true) {
   worldInputQueue.flush();
   if (!stroke && !moving && !loading) await saveWorking();
   extra={...placeParams(),...extra};
   const next={biome:base,...(id && id!==base?{world:id}:{}),...(experiment.has('scratch')?{scratch:experiment.get('scratch')}:{}),...(config.map?{mapX:config.map.unitsX,mapY:config.map.unitsY,sea:config.seaLevel}:{})};
   for (const [key,value] of Object.entries(extra||{})) if (value!=='' && value!==null && value!==undefined) next[key]=value; else delete next[key];
-  if (leaveFor(tabMapId,next)) keepSaved=true;
+  let target=tabMapId;
+  if (fork && SAVING && ready && tabMapId && mapStore) {
+    try { const copy=workingCopy(),copyId=newMapId(); await mapStore.put(copyId,copy,mapMeta(copyId,copy)); target=copyId; next.forkedFrom=activeWorld().name; }
+    catch (err) { error('A copy of your map for the other world could not be kept in this browser ('+err.message+'). The map stays in '+activeWorld().name+'.'); return; }
+  }
+  clearTimeout(autosaveTimer);
+  if (leaveFor(target,next)) keepSaved=true;
 }
 // Your own worlds in this browser's store: each on a built-in world this server has.
 const ownWorlds=() => Object.entries(worlds).filter(([id,w]) => !(id in (config.biomes||{})) && w.base in (config.biomes||{}));
@@ -2552,7 +2567,7 @@ function buildWorldPanel() {
   };
   const isCustom=!(worldId in (config.biomes||{}));
   $('world-delete').hidden=!isCustom;$('world-delete').textContent='Delete this world';
-  $('world-delete').onclick=() => { delete worlds[worldId]; saveWorlds(); goToWorld(config.biomeId); };
+  $('world-delete').onclick=() => { delete worlds[worldId]; saveWorlds(); goToWorld(config.biomeId,undefined,undefined,false); };
   // A world a map brought (its world differed from yours): say so, and offer to make it yours. Your earlier one stays, renamed.
   const from=worlds[worldId]?.openedFrom,target=from?(worlds[from.world]?.name||config.biomes?.[from.world]||from.world):'';
   $('world-from').hidden=$('world-adopt').hidden=!from;
@@ -2562,7 +2577,7 @@ function buildWorldPanel() {
     $('world-adopt').onclick=() => {
       const {openedFrom,...adopted}=worlds[worldId];
       if (worlds[from.world]) { const keep=`${target} before ${from.map}`.slice(0,120); worlds[keep.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,24)+'-'+Math.random().toString(36).slice(2,6)]={...worlds[from.world],name:keep}; }
-      worlds[from.world]={...adopted,name:target}; delete worlds[worldId]; saveWorlds(); goToWorld(adopted.base,from.world);
+      worlds[from.world]={...adopted,name:target}; delete worlds[worldId]; saveWorlds(); goToWorld(adopted.base,from.world,undefined,false);
     };
   }
 }
@@ -2982,12 +2997,12 @@ async function bootMap(pending=null) {
   syncColumnPanel=mountColumnPanel(()=>rockSelected>0?presetColumn():({column:columnForEdit(),bedColors:renderer.slotColors(0).beds,edited:Boolean(columnOverride)}),
     column=>rockSelected>0?editPresetColumn(column):editColumn(column),()=>rockSelected>0?checkpoint(true):commitColumn(),
     ()=>{if(rockSelected>0){const rock=mapRocks.find(r=>r.slot===rockSelected);editRocks(setRock(mapRocks,rockSelected,{knobs:rock.knobs,column:null}));checkpoint(true);}else{editColumn(null);commitColumn();}});
-  const saved=experiment.has('newMap')?null:workingMap,shared=experiment.has('shared');let resave=false;
+  const saved=experiment.has('newMap')?null:workingMap,shared=experiment.has('shared');let resave=false,forkNote='';
   if (saved) {
     try {
       const same=saved.biome===config.biomeId && (saved.world||saved.biome)===worldId;
       loadSketch(saved,!same);resave=!same||Boolean(tabState.next);   // carried or handed over: saved as it now opens, so a refresh opens it here
-      status(shared?'Opened a shared map. It is saved as a new map; your other maps are in Maps.':experiment.has('opened')?'Opened the map file. It is saved as a new map; your other maps are in Maps.':same?'Reopened your map.':'Carried your map into this world.');
+      status(shared?'Opened a shared map. It is saved as a new map; your other maps are in Maps.':experiment.has('opened')?'Opened the map file. It is saved as a new map; your other maps are in Maps.':experiment.has('forkedFrom')?(forkNote=`Copied your map into this world as a new map. The original is unchanged in ${experiment.get('forkedFrom')}; both are in Maps.`):same?'Reopened your map.':'Carried your map into this world.');
       if(shared)announceShared();
       showOwnWorldNote(shared);   // the map forks as an opened map does
     } catch (err) {
@@ -3009,6 +3024,7 @@ async function bootMap(pending=null) {
   updateControls(); resize(); schedule(); queueWeather();
   // A new map opens at Fit, to see all of it; a world switch where the artist was (restorePlace); every other load at 1x, centered on the map.
   if (!restorePlace()) $(experiment.has('newMap')?'fit':'one').click();
+  if (forkNote) status(forkNote);   // after the restored selection's own line
   if (shareError) error(shareError);
   $('new-map').disabled=false;
   if(experiment.has('newMap')){$('map-name').value=experiment.get('mapName')||'Untitled map';$('map-name').dispatchEvent(new Event('input'));saveWorking();}
@@ -3092,7 +3108,7 @@ function openNewMap(first=false, dimensionsFromMap=null) {
   $('new-map-form').onsubmit=async e=>{e.preventDefault();if(!e.target.reportValidity())return;
     clearTimeout(autosaveTimer);if(!await leaveMap()){$('new-map-error').textContent='Your current map could not be saved in this browser. Save it as a file before starting a new map.';return;}
     const own=!(picked in (config.biomes||{}))&&worlds[picked];
-    const next={biome:own?own.base:picked,...(own?{world:picked}:{}),mapName:$('new-map-name').value.trim()||'Untitled map',mapX:$('new-map-width').value,mapY:$('new-map-height').value,newMap:1,...(dimensionsFromMap?{sea:dimensionsFromMap.sea}:{})};
+    const next={biome:own?own.base:picked,...(own?{world:picked}:{}),mapName:$('new-map-name').value.trim()||'Untitled map',mapX:$('new-map-width').value,mapY:$('new-map-height').value,newMap:1,...(Number.isInteger(dimensionsFromMap?.sea)?{sea:dimensionsFromMap.sea}:{})};
     if(leaveFor(mapStore?newMapId():null,next))keepSaved=true;
   };
   dialog.showModal();
