@@ -864,20 +864,33 @@ fn sandCover(p: vec2f, slope: f32, relief: f32) -> f32 {
     // lower than p (sand moves downhill and outward, never up a slope) and only onto ground that is flat at p, so nothing new lands on
     // the flanks. Each tap fades over a reach that grows with how much deposit gathers there (low, concave ground runs out far, a
     // spur's foot hardly). The cover's strength wanders at 61, 23 and 9 px, so the fringe is ragged.
+    // How much sand there is follows how much ground shed it: the supply is the deepest deposit at p or its taps, in height units (the
+    // Time pass's rim at a knoll's foot is about one unit deep, under a mountain two to five), none at .2 and whole at 1.8. A foot's band
+    // and its run-out both take it, and the run-out's reach goes down to half, so a knoll keeps a thin rim and a mountain its apron.
     let uv = p / (u.size - 1.0);
-    var raw = weatherAt(uv).a;
-    let reachN = valueNoise(p / 53.0 + 71.0) * 0.5 + 0.5;
+    let here = weatherAt(uv);
     let flatHere = 1.0 - smoothstep(0.05, 0.25, slope);
+    if (flatHere <= 0.0 && here.a <= 0.0) { return 0.0; }   // a flank outside the Time pass's band: no run-out and no drift land here
+    let reachN = valueNoise(p / 53.0 + 71.0) * 0.5 + 0.5;
+    var tapAt: array<vec4f, 8>;   // each tap: its point, its radius
+    var tapMap: array<vec4f, 8>;  // and the Time pass's maps there
+    var deepest = here.g;
+    for (var k = 0; k < 8; k++) {
+        let a = f32(k) * 0.7853982 + valueNoise(p / 17.0 + f32(k) * 3.1) * 1.4;
+        let r = 10.0 + 110.0 * fract(f32(k) * 0.381966 + reachN * 0.8);
+        let q = p + vec2f(cos(a), sin(a)) * r;
+        tapAt[k] = vec4f(q, r, 0.0); tapMap[k] = weatherAt(q / (u.size - 1.0));
+        deepest = max(deepest, tapMap[k].g);
+    }
+    let supply = smoothstep(0.2, 1.8, 1.2 * deepest / max(1.0 - deepest, 0.001));   // the map holds deposit d as d / (d + 1.2)
+    var raw = here.a * supply;
     if (flatHere > 0.0) {
         let hHere = baseHeight(p);
         for (var k = 0; k < 8; k++) {
-            let a = f32(k) * 0.7853982 + valueNoise(p / 17.0 + f32(k) * 3.1) * 1.4;
-            let r = 10.0 + 110.0 * fract(f32(k) * 0.381966 + reachN * 0.8);
-            let q = p + vec2f(cos(a), sin(a)) * r;
-            let tap = weatherAt(q / (u.size - 1.0));
-            let reach = 150.0 * (0.2 + 0.8 * clamp(tap.g * 2.5, 0.0, 1.0)) * (0.35 + 1.1 * reachN);
+            let q = tapAt[k].xy; let r = tapAt[k].z; let tap = tapMap[k];
+            let reach = 150.0 * (0.2 + 0.8 * clamp(tap.g * 2.5, 0.0, 1.0)) * (0.35 + 1.1 * reachN) * (0.5 + 0.5 * supply);
             let downhill = smoothstep(-3.0, 1.0, baseHeight(q) - hHere);
-            raw = max(raw, tap.a * (1.0 - smoothstep(0.1, 1.0, r / reach)) * downhill * flatHere);
+            raw = max(raw, tap.a * supply * (1.0 - smoothstep(0.1, 1.0, r / max(reach, 0.001))) * downhill * flatHere);
         }
     }
     // Wind drifts: sand also settles where a rise upwind shelters level ground, whatever the water did. Eight looks upwind, 12 to 96 px, each
