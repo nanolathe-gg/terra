@@ -364,6 +364,7 @@ function updateControls() {
   const fixed=['erase','landform'].includes(kind);
   $('amount-control').hidden=fixed;
   $('amount-label').textContent=kind==='smooth' || isCover(kind)?'Strength':kind==='fissure'?'Depth':'Rise';
+  $('card-size-name').textContent=kind==='smooth' || isCover(kind)?'Size & strength':kind==='erase'?'Size & edge':'Size & height';   // the section's rows: a brush sets no height
   const [lo,hi]=amountRange(kind); $('amount').min=String(lo); $('amount').max=String(hi);
   $('amount').value=String(clamp(Number($('amount').value),lo,hi));
   const amountNow=Number($('amount').value);
