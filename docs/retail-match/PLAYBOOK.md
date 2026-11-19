@@ -41,7 +41,10 @@ rock), water depth and tone, and how much of a built-in surface shows.
 - **Watch for:**
   - A `--query` reaches World controls only. Stroke options (Steps,
     Gullies, a shape's rock) are refused with a message.
-  - A scene's own `query` beats your default, so check the scene file.
+  - A `--query` beats a scene's own `query`, but `world.knobDefaults` does
+    not: a value every scene sets in its query never reaches the windows
+    from `knobDefaults`. The validator warns when that happens. Green's
+    scenes all set `undulation`, which is a map setting (section 6).
   - Probes are cheap. Sweep three values across the range first, then
     narrow it down.
 
@@ -56,9 +59,13 @@ problem.
   the World controls marked "rock" in the reference.
 - **Which rock a window uses:** a stroke's `rockPreset` is a slot: 0 is the
   world's own rock (the rock keys in `knobDefaults`), 1 is `soil`, and from
-  2 on come `world.rock.presets` in order. Section 6 of the reference
-  prints your world's slots. Change the recipe a window's strokes actually
-  use, or the change will not show.
+  2 on come `world.rock.presets` in order. Section 7 of the reference
+  prints your world's slots and what each window's strokes use. Change the
+  recipe a window's strokes actually use, or the change will not show.
+- **A rock type per kind of map:** retail maps of one world differ (green-1's
+  broken hills, green-5's stepped ridge). Add a recipe for the look one map
+  needs, append its key to `world.rock.presets` (never insert: that moves
+  every later slot), and give that window's strokes its slot (section 6).
 - **Watch for:** recipe keys are lowercase. A recipe's knobs override the
   world's rock keys only for that rock.
 
@@ -75,7 +82,9 @@ small-scale art relief. Each world names a material per role in
 - `debris`: cliff fall;
 - `soil`, `snow`, `moss`, `sand`, `band`;
 - `crystal`;
-- any `extra` materials.
+- `extra`: a list of more materials (textures.json keys) a stroke may lay
+  as its ground. Each takes the next free material slot (section 7 of the
+  reference), so a map can have a ground of its own (section 6).
 
 A rock type may name its own rock material.
 
@@ -157,19 +166,48 @@ thins.
   three numbers that shift the water material's mean. The other measured
   water colors live in the same `water` block.
 
-### 6. Shapes: stroke cards and tool presets (the shape lane)
+### 6. Maps: a window's own choices (the map lane)
 
-**Use for:** a class whose share differs from retail (a `share` finding), a
-shore band that is too wide, or slopes that are too gentle. Only when
-`layout.png` shows the strokes do not follow the retail relief. Fields and
-their help are in section 5 of the reference.
+Each window is one retail map, and retail maps of one world differ: one is
+broken hills, another a stepped ridge, a third flat plain. A map artist makes
+those choices per map, from the world's kit. The map lane makes the same
+choices in a window's scene (`repro/scenes/<world>-<n>.json`). Section 7 of
+the reference prints the slots and what each scene uses now.
 
+**Use for:** a gap that only some windows have, when a world-wide change
+helps one window and hurts another.
+
+- **The choices a map makes:**
+  - **Rock type:** a stroke card's `rockPreset` (a rock slot). Add a recipe
+    to the world first if none fits (section 2).
+  - **Ground:** a stroke card's `groundPreset` (a material slot) on a
+    `landform` or `paint` stroke. Add the material to
+    `world.materials.extra` first (section 3). A `paint` stroke with a large
+    `radius` lays it over a plain.
+  - **Shape options:** Steps (`terraces`, `ledge`, `terraceJitter`,
+    `breakup`), `gullies`, `cracks`, `talus`, the section `curve` and the
+    rest of section 5 of the reference.
+  - **Ground relief:** the scene's `query` keys `undulation`,
+    `undulationScale`, `undulationCover` and `undulationArt`: the map's
+    rolling ground, which the game's heights keep. Our plains are flatter
+    than retail's on several Green windows. The validator refuses any other
+    key in a scene's query: World controls are the world's.
+- **Try:** edit the scene, then `sh repro/match.sh <world> --window
+  <world>-<n> --note "..."`, which renders only that window (about 20 s). A
+  map setting can be probed first: `--probe undulation=3,6,10 --window
+  <world>-<n>`.
 - **Watch for:**
-  - The windows use library shapes (`landform`, `hill`, `deep`, ...), not
-    your world's tools, so changing `world.shapes` presets does not move the
+  - A scene stroke takes its tool's shape preset (`world.shapes`), but not
+    the tool's `rock`. An unset `rockPreset` is -1, rock beneath, which on
+    open ground is the world's own rock.
+  - The windows mostly use library shapes (`landform`, `hill`, `deep`, ...),
+    not your world's tools, so changing `world.shapes` presets moves few
     scores.
   - A stroke's seed is the page seed plus its index times 7919, so
-    reordering strokes changes their noise.
+    reordering strokes changes their noise. Edit strokes in place.
+  - Moving the strokes themselves (their points, `diameter`, `elevation`)
+    is the shape lane: only where `layout.png` shows they do not follow the
+    retail relief (README.md, "The shape lane").
 
 ## Symptom to lever
 
@@ -193,9 +231,11 @@ moved, class by class, beside retail's value.
 | `level:color`, `level:luma` | ground material: its Gradient stops, palette | `groundPatch`, `lushness`, `ambient` |
 | `level:band2` (fine grain) | ground material: fine Noise `detail`, dither `amount` | `reliefAmount`, `plainRelief` |
 | `level:band8`, `level:band32` | ground material: broad Noise `size`, `layers` | `groundPatch`, `groundPatchSize`, `undulation`, `reliefPatchy` |
-| `level:edges`, `level:lines` too few | `banding` (contour lines), `plainRelief`, `lumpRelief` | ground material: Scatter pits or a Cracks noise; `crackSeverity` |
+| `level:edges`, `level:lines` too few | `bandLevel` (contour lines onto gentle ground), `banding`; the map's `undulation` (section 6) | ground material: Scatter pits or a Cracks noise; `plainRelief`, `lumpRelief` |
+| `level:edges` too many (regular dimples) | the map's `undulation`, `undulationScale` (section 6) | ground material's broad Noise |
 | `slope:color`, `slope:luma` | slope material; `hillLight` | `slopeTexture`, `faceFill`, `creaseShade` |
-| `slope:lines` too few | `banding`, `bandSoftness` (contour hatch), `slopeMarks`, `wrinkles` | a rock type's crack keys, for slopes made of that rock |
+| `slope:lines` too few | `banding`, `bandSoftness` (contour hatch), `slopeMarks`, `wrinkles` | the map lane: the window's strokes with Steps and a rock type of their own (section 6) |
+| One window's slopes or rock unlike the others' | the map lane: a rock type for that map, its strokes' Steps, `cracks`, `gullies` | a ground of its own |
 | `slope:edges` too many | `reliefAmount`, `worms`, `gentleRelief` | the slope material's fine Noise |
 | `steep:color` grayer, or greener than retail | rock material (the rock type's `material`, else the world's `rock`); `faceGrass`; surface rock rule | `faceTone`, `faceRindTone` |
 | `steep:luma` | `faceShade`, `shadeDepth`, `ambient`, `lightCap` | rock material Gradient |
@@ -221,8 +261,19 @@ moved, class by class, beside retail's value.
 - **The base gaps are not all yours to close.** If a window's `share`
   findings are large, its look scores mean less. Say so, and weigh the other
   windows more.
-- **Retail is consistent within a world.** If one window wants a change and
-  the rest refuse it, the change is fitting a fixture, not the world.
+- **A world's look is shared; a map's choices are not.** Light, materials
+  and the world's own rock are one answer for every window: if one window
+  wants a world change and the rest refuse it, look for the map choice
+  instead (section 6). In round 1, `wrinkles`, `plainRelief` and
+  `undulation` each helped green-5 and hurt green-1. Stepped hills of
+  escarpment rock on green-5 alone took its look from .70 to .56 without
+  touching the others.
+- **Use every kind of lever.** Probes are cheap, so a round drifts into
+  turning World controls. Round 1 spent 27 of 41 trials on probes and never
+  edited a material graph. Before a report says a texture or color gap
+  cannot be closed, it must show tries with a material and a surface layer
+  (and, for a single window, the map lane). `--log` counts the trials per
+  kind of lever.
 
 ## When a control moves nothing
 
@@ -235,8 +286,9 @@ You may read any code; you may not change it.
 2. **Find where it is drawn.** `grep -n "<key>" sculpt-renderer.js` gives
    the uniform's name. Then grep `engine-*.wgsl` for that uniform, and read
    the condition around it. For example, contour bands (`banding`) are drawn
-   in `engine-bake.wgsl` `contourBands`. They fade out on slopes steeper
-   than `bandFade`, and they take each rock type's own `banding`.
+   in `engine-bake.wgsl` `contourBands`. They start at slope 0.07 (lower
+   with `bandLevel`), fade out on slopes steeper than `bandFade`, and take
+   each rock type's own `banding`.
 3. **Write down what you found.** "Gated by X at 0", or "fades out above
    slope Y, where this window's hills are" is a finding. A proposal built on
    it is specific.
@@ -260,6 +312,12 @@ You may read any code; you may not change it.
 - **Trusting one score:** a gray that matches mean brightness, or boulders
   that add "edges".
 - **Judging a thumbnail:** cell sizes and grain only read at 1x.
-- **Fighting a scene's own `query`:** it wins over `knobDefaults`.
+- **Fighting a scene's own `query`:** it wins over `knobDefaults`. Round 1
+  spent three trials on `undulation` that way. It is a map setting: change
+  it in the scene.
+- **Reading a finding that is a measuring artifact:** a coast drawn off its
+  height cells once put water pixels in retail's shore mask, which read as a
+  "bluer wet shore" of 15 CIELAB. The class split now drops pixels nearer
+  the other side's color, but open the crop before you chase a color.
 - **Calling a control dead** when it was gated by another one at 0, such as
   `soilRim` for Bare soil.

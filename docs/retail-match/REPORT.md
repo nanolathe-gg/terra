@@ -22,9 +22,12 @@ each kept trial and the final holdout run:
 | Trial | Kept | Note | Mean shape | Mean look | Worst window (look) |
 | --- | --- | --- | ---: | ---: | --- |
 
+Then quote the log's last line, the count of trials per kind of lever.
+
 ## 3. Kept changes
 
-One entry per commit:
+One entry per commit, world changes first, then each window's map changes
+(`map:` commits) and shape changes (`fixture:` commits):
 
 - the commit;
 - the setting or file: the key path, the value before and after;
@@ -57,7 +60,9 @@ exactly these fields:
 - Retail shows: <what, at 1x, with the crop path>
 - Ours shows: <what, with the crop path>
 - Measured gap: <metric: retail X, ours Y, trial id>
-- Levers tried: <key=value (trial id, effect)>, ...   (every one, from the log)
+- Levers tried: <key=value (trial id, effect)>, ...   (every one, from the log; for a texture
+  or color gap, at least one material and one surface layer try; for a gap only some windows
+  have, the map lane)
 - Closest result: <trial id and why it is still wrong>
 - Missing piece: one of: new fact | new material node | wider control range |
   new effect | new tool or preset | stroke option | engine change
@@ -68,10 +73,13 @@ exactly these fields:
 A proposal names a generic capability, not a world-specific hack. Every
 world runs the same engine (AGENTS.md rule 7).
 
-## 7. Fixture notes
+## 7. Map and fixture notes
 
-Windows whose strokes do not follow the retail heights: what is off (cite
-`layout.png`), and whether you fixed it (the `fixture:` commit) or left it.
+For each window: the map choices it ended with (rock types, ground, steps,
+ground relief) and why that retail map wants them, so a reviewer can port
+them as tool presets or rock types. Then windows whose strokes do not
+follow the retail heights: what is off (cite `layout.png`), and whether you
+fixed it (the `fixture:` commit) or left it.
 
 ## 8. Not done
 

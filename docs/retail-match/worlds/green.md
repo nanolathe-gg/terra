@@ -51,8 +51,10 @@ These notes are by eye, from the base crops in
   green clumps. Ours separates them into large solid regions. Green-4's
   strokes also do not follow retail's relief well (shape .63), so weigh it
   less.
-- **Shores:** a narrow, slightly bluish wet band, with no sand on most maps
-  (owner's decision: no rock coasts on Green).
+- **Shores:** a narrow, slightly darker band, with no sand on most maps
+  (owner's decision: no rock coasts on Green). Near a bay, retail's grass
+  carries soft contour rings (green-3 shore crop). An earlier "bluish wet
+  band" was water pixels inside retail's shore mask, not the ground.
 - **Water:** saturated blue, with a pale shallow shelf and soft
   diagonal-streaked dither. Ours is close, but its water has more small
   edges (measured: green-3 water `edges` retail .005, ours .017).
@@ -60,13 +62,67 @@ These notes are by eye, from the base crops in
 ## Known from earlier rounds (docs/BIOME_CATALOG.md, "Green Planet")
 
 - Green's slope hatch comes from contour bands 1.3 units apart: `banding`
-  .6, no jag (`bandJag` 0). The catalog calls it "close", but green-5 shows
-  little of it. Find out why before adding anything: bands may need a rock
-  type, or the hills' slopes may fall outside the band.
+  .6, no jag (`bandJag` 0). Bands do draw on green-5's ridge flanks, but
+  faintly (measured 2026-11-18: doubling `banding` changed 8.5% of green-5's
+  pixels, all on the flanks), and never on its plain, because they start at
+  slope 0.07. `bandLevel` (new) moves that start down. A rock type carries
+  its own `banding`, so a map's strokes can have stronger bands than the
+  world's own rock.
 - Lighting on Green was set by the owner (2026-11-15) and stays unless a
   change is clearly better on every window.
 - No rock coasts on Green. Shores are a natural sand-grass edge.
 - Hills must stay grassy. Rock on a hill is cracks and patches, not a cap.
+
+## Start here (round 2)
+
+Round 1 (branch `match-green-2`, 42 trials, report in
+`$R/match/terraform-wt-match-green-2/green/REPORT.md`) kept two changes that
+did not land on main, and wrote six proposals. On review, three proposals
+held and three came from the harness, which is now fixed:
+
+- **`undulation` is a map setting.** Every Green scene sets `undulation=3`
+  in its query, so the world's value never reached a window, and round 1's
+  `--query undulation` probes were silently ignored. `--query` now wins, and
+  the map lane lets one window change its own. Measured on green-5 alone:
+  `undulation` 6 and 10 took its level share from 57% to 52% and 48%
+  (retail 43%) and its look from .70 to .68 and .66. Green-1's plain is the
+  opposite: busier than retail (level edges ours .0072, retail .0017, the
+  dimples of `undulation=3` at 48 px), so it may want less.
+- **The "bluer wet shore" was a measuring artifact** (water pixels in
+  retail's shore mask: 12.8% on green-3). Without them the two shores match
+  within 2 units of each channel. Ignore round 1's proposal 6.3 color half.
+- **Round 1's `stepSoftPx` 5 keep** cleared `water:edges` only by dropping
+  under a floor that has since been lowered: not a clear. Re-judge it.
+
+Leads, strongest first:
+
+1. **Re-apply the `evad` recipe** from round 1's commit e64ec6dd (the
+   pilot's trial-004): `faceRock` .35, `faceGrass` .8, `crackMajor` 1. Its
+   rock reads as cracks and patches in grass on green-1 and green-3, as
+   retail's does (by eye, twice). Then tune it.
+2. **Green-5 as a stepped ridge** (the map lane). Measured 2026-11-18 on
+   green-5 alone: its five `hill` strokes with `terraces` 8, `ledge` 30,
+   `terraceJitter` 80, `breakup` 60 took its look from .70 to .56 with
+   `rockPreset` 4 (escarpment) and .59 with 3 (greenstone); by eye the
+   greenstone's gray strata read closer. Retail's ridge is a broad gray rock
+   belt with ragged dark grass ledges around it; ours gets the gray belt
+   but not yet the ledges in the grass. Try a rock
+   type of its own for that ridge (stronger `banding`, `faceLayers`), and
+   the map's `undulation`.
+3. **`bandLevel`** (new, 0 to 1). Measured on all windows at 1: green-3 .09
+   to .08, green-5 .70 to .68, green-2 .20 to .31 (its slopes already carry
+   too many lines, and more reach them). Try it with a lower `banding` or
+   `bandFade`, and look at green-2's and green-3's level crops.
+4. **Green-4's rock mosaic** was never tried with a rock type: its strokes
+   use the world's own rock. Give them one (map lane) before calling it an
+   engine gap.
+5. **Green's ground material and slope material** were never edited in
+   round 1. The plains read brighter and more contrasty than retail's soft
+   olive on green-1 (by eye).
+
+Still open as engine questions (round 1's proposals that held): retail's
+ragged grass ledges beyond a ridge's rock (6.5, partly reachable with Steps
+above), and bands on near-level ground (6.1, now `bandLevel`).
 
 ## Pilot notes (2026-11-18)
 
