@@ -123,7 +123,7 @@ footer{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 12px;
 #map-features-panel{margin-top:0}
 #map-features-panel h3{font-size:13px;margin-bottom:8px}
 #map-features-panel .tools{grid-template-columns:1fr 1fr;gap:5px}
-#map-features-panel .tools button{font-size:11px;border:1px solid var(--line);height:32px}
+#map-features-panel .tools button{font-size:11px;border:1px solid var(--line);height:32px}#map-features-panel .tools button[aria-pressed=true]{background:#344c42;border-color:#78ae8d;color:#d9ffe5}
 #map-features-panel select{width:100%}
 #map-features-panel summary{margin-top:12px}
 #map-export{width:100%;background:#3c6551;border-color:#7faa91;margin-top:15px}
@@ -176,7 +176,7 @@ kbd{font:9px system-ui;color:var(--muted);margin-left:4px}
 .column-options{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}.column-options input[type=color]{height:28px}.column-body input:invalid{border-color:#d58f85}
 
 /* Remaining accepted detail treatments. */
-.segmented{display:flex;gap:0;margin:6px 0}.segmented button{flex:1;border-radius:0;padding:5px 7px}.segmented button:first-child{border-radius:5px 0 0 5px}.segmented button:last-child{border-radius:0 5px 5px 0}.segmented button[aria-pressed=true]{background:var(--accent);color:#10241d}
+.segmented{display:flex;gap:0;margin:6px 0}.segmented button{flex:1;border-radius:0;padding:5px 7px}.segmented button:first-child{border-radius:5px 0 0 5px}.segmented button:last-child{border-radius:0 5px 5px 0}.segmented button+button{margin-left:-1px}.segmented button[aria-pressed=true]{position:relative;z-index:1}
 .unavailable-summary{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:7px 0;color:var(--muted);font-size:11px}.unavailable-summary button{font-size:11px;padding:4px 7px}
 #column-panel{position:fixed;z-index:28;right:calc(var(--inspector-width, 520px) + 12px);top:64px;width:min(470px,calc(100vw - 550px));max-height:calc(100vh - 105px);overflow:auto;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 12px 50px #0008}#column-panel .panel-heading{display:flex;justify-content:space-between;align-items:center}#column-panel h2{font-size:15px}
 @media(max-width:1100px){#column-panel{right:16px;width:min(470px,calc(100vw - 32px))}}
