@@ -73,7 +73,7 @@ const HELP = {
 let mapUpdate=() => {},mapFeatures=null,mapMetadata=null,mapRevision=0;
 const mapData=() => ({...mapFeatures?.serialize(),...mapMetadata?.serialize()});
 function restoreMapData(data={}) { mapFeatures?.load(data||{}); mapMetadata?.load(data||{}); mapRevision++; }
-function mapChanged() { mapRevision++; checkpoint(true); schedule(false); }
+function mapChanged(act) { mapRevision++; checkpoint(true,act); schedule(false); }
 let config, renderer, grid, size, spacing, services;
 // A world's configuration file, by the same relative path on a static host and on the Go server: config/<world>.json.
 const configUrl=world=>`config/${encodeURIComponent(world)}.json`;
@@ -1723,7 +1723,8 @@ function flushEval() {
 }
 // What a history entry changed against the one before it, in the editor's words, for Undo and Redo: "the change to Plateau 1", "deleting
 // Hill 2", "adding Ramp 3", "renaming the map", joined with "and".
-function changeName(prev,next) {
+// `act`: what a features or starts edit did ("placing a tree", sculpt-features.js changed), named in place of "the change to features".
+function changeName(prev,next,act='') {
   if (!prev) return '';
   const same=k => JSON.stringify(prev[k])===JSON.stringify(next[k]),acts=[],changes=[];
   const named=(list,i) => list[i]?`${shapeLabel(list[i])} ${i+1}`:'';
@@ -1740,8 +1741,9 @@ function changeName(prev,next) {
   if (data(['name'])) acts.push('renaming the map');
   if (data(['description'])) changes.push('the map’s description');
   if (data(['settings'])) changes.push('the map’s game settings');
-  if (data(['features','featureSet','fill'])) changes.push('features');
-  if (data(['starts'])) changes.push('start positions');
+  const features=data(['features','featureSet','fill']),starts=data(['starts']);
+  if (act && (features || starts)) acts.push(act);
+  else { if (features) changes.push('features'); if (starts) changes.push('start positions'); }
   if (!same('tools')) changes.push('this map’s tools');
   return [...acts,...(changes.length?[`the change to ${changes.join(' and ')}`]:[])].join(' and ');
 }
@@ -1749,9 +1751,9 @@ function syncHistoryNames() {
   const back=historyIndex>0?history[historyIndex].name:'',ahead=history[historyIndex+1]?.name??'';
   $('undo').title=`Undo${back?' '+back:''} · ⌘ / Ctrl Z`;$('redo').title=`Redo${ahead?' '+ahead:''} · ⌘ / Ctrl Shift Z`;
 }
-function checkpoint(mapOnly=false) {
+function checkpoint(mapOnly=false,act='') {
   flushEval(); keepWorldMaterials();
-  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); history.at(-1).name=changeName(history.at(-2),history.at(-1)); if (history.length>48) history.shift(); historyIndex=history.length-1;
+  history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); history.at(-1).name=changeName(history.at(-2),history.at(-1),act); if (history.length>48) history.shift(); historyIndex=history.length-1;
   renderLayers(); updateControls(); persistLater(); pickCard?.refresh();   // a pinned pixel reads again after every committed change
 }
 // A card change commits one undo step — never mid-gesture, where a checkpoint would capture a

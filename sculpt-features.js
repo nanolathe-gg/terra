@@ -424,7 +424,9 @@ export async function mountMapFeatures(api) {
     $('feature-reroll').title=$('feature-reroll').disabled?(list.length?'Each selected feature’s style has one variant: raise its Variants to re-roll it.':'Select a feature to re-roll it.'):'Swap for another variant of the same kind';
   }
   function selectionChanged() { refreshSelection(); doc.dispatchEvent(new Event('terraform-feature-mode')); api.schedule(); }
-  function changed(text) { serialized=null; status(text); prune(); refreshSelection(); update(); api.change(); doc.dispatchEvent(new Event('terraform-feature-mode')); }
+  // `act` names the edit as an undo step ("Undo placing a tree"): an -ing phrase, as sculpt.js names shape edits.
+  function changed(text,act) { serialized=null; status(text); prune(); refreshSelection(); update(); api.change(act); doc.dispatchEvent(new Event('terraform-feature-mode')); }
+  const count=n => n===1?'a feature':`${n} features`;
   function activate(next) {
     if (!guard()) return false;
     finishGesture(false);
@@ -450,7 +452,7 @@ export async function mountMapFeatures(api) {
     if(!changeSet(kind,{params}))update();
   };
   $('feature-count').onchange=event => { if (!changeSet(placeKind,{count:Number(event.target.value)})) update(); };
-  $('feature-new-set').onclick=() => { if (!guard()) return; const seed=hash32(activeRecipe().seed,Date.now()>>>0); changeSet(placeKind,{seed},`New variants of ${activeRecipe().name}; its placed features take the new looks.`); };
+  $('feature-new-set').onclick=() => { if (!guard()) return; const seed=hash32(activeRecipe().seed,Date.now()>>>0); changeSet(placeKind,{seed},`New variants of ${activeRecipe().name}; its placed features take the new looks.`,`making new variants of ${activeRecipe().name}`); };
   for (const input of settingInputs) {
     const [kind,name,end]=input.dataset.setting.split('.');
     input.addEventListener('input',() => showNumericValue(input));
@@ -474,7 +476,7 @@ export async function mountMapFeatures(api) {
   // ---- edits ----
   // Edit only the active recipe. Validate the whole placement set before committing:
   // a larger footprint must never silently overlap or delete an authored feature.
-  function commitSet(next, text) {
+  function commitSet(next, text, act) {
     const previous=set, oldPlacements=placements, oldFootprints=placements.map(footprint);
     set=normalizeSet(next,config);
     const moved=placements.map((p,i) => {
@@ -490,13 +492,13 @@ export async function mountMapFeatures(api) {
     }
     placements=moved; selection=new Set(oldPlacements.flatMap((p,i) => selection.has(p)?[moved[i]]:[]));
     if(!activeList().some(v => v.index===placeVariant))placeVariant=-1;
-    changed(text); return true;
+    changed(text,act); return true;
   }
-  function changeSet(kind,edit,text) {
+  function changeSet(kind,edit,text,act) {
     if (!guard() || !set[kind]) return false;
     const current=activeRecipe(kind), next={...set,[kind]:{...set[kind],recipes:set[kind].recipes.map(r => r.id===current.id?{...r,...edit}:r)}};
     if(JSON.stringify(normalizeSet(next,config))===JSON.stringify(set))return false;
-    return commitSet(next,text || `Updated ${current.name}; its placed features take the new look.`);
+    return commitSet(next,text || `Updated ${current.name}; its placed features take the new look.`,act || `changing ${current.name}`);
   }
   function addRecipe(kind, preset, duplicate=false) {
     if(!guard() || !set[kind] || set[kind].recipes.length>=MAX_RECIPES)return false;
@@ -504,14 +506,14 @@ export async function mountMapFeatures(api) {
     if(id>1000000)return false;
     const recipe=duplicate?{...structuredClone(activeRecipe(kind)),id,name:activeRecipe(kind).name+' copy'}:makeRecipe(kind,preset.data,id,preset.name);
     const next={...set,[kind]:{nextId:id+1,recipes:[...group.recipes,recipe]}};
-    if(!commitSet(next,`Added ${recipe.name}.`))return false;
+    if(!commitSet(next,`Added ${recipe.name}.`,`adding ${recipe.name}`))return false;
     activeRecipes[kind]=id; placeVariant=-1; update(); return true;
   }
   function removeRecipe() {
     if(!guard())return false;
     const entry=activeRecipe(),group=set[placeKind];
     if(group.recipes.length<=1 || placements.some(p => p.kind===placeKind && recipeId(p.v)===entry.id))return false;
-    return commitSet({...set,[placeKind]:{...group,recipes:group.recipes.filter(r => r.id!==entry.id)}},`Removed ${entry.name}.`);
+    return commitSet({...set,[placeKind]:{...group,recipes:group.recipes.filter(r => r.id!==entry.id)}},`Removed ${entry.name}.`,`removing ${entry.name}`);
   }
   function addFeature(kind,x,z,options={}) {
     if (!guard()) return false;
@@ -526,17 +528,17 @@ export async function mountMapFeatures(api) {
     if (options.generated && (!gentleFootprint(p,terrainMask()) || nearMargin(p,fill.margin) || placements.some(q => overlaps(p,q,fill.gap)))) { status('Fill needs gentle dry ground, a free footprint and the selected margins.'); return false; }
     const kept=new Set(list2.map(key)); for (const k of generated) if (!kept.has(k)) generated.delete(k);
     placements=[...list2,p]; rolls++; if (options.generated) generated.add(key(p));
-    changed(`Placed ${LABELS[kind].toLowerCase()} ${v%MAX_VARIANTS+1} of ${list.length}${removed?`; cleared ${removed} fill features inside its margin`:''}.`); return true;
+    changed(`Placed ${LABELS[kind].toLowerCase()} ${v%MAX_VARIANTS+1} of ${list.length}${removed?`; cleared ${removed} fill features inside its margin`:''}.`,`placing a ${LABELS[kind].toLowerCase()}`); return true;
   }
   function removeFeature(index,notify=true) {
     if (!guard() || !Number.isInteger(index) || index<0 || index>=placements.length) return false;
     const [p]=placements.splice(index,1); generated.delete(key(p)); selection.delete(p);
-    if (notify) changed(`Removed ${LABELS[p.kind].toLowerCase()}.`); else api.schedule(); return true;
+    if (notify) changed(`Removed ${LABELS[p.kind].toLowerCase()}.`,`removing a ${LABELS[p.kind].toLowerCase()}`); else api.schedule(); return true;
   }
   function removeSelected() {
     if (!guard() || !selection.size) return false;
     const n=selection.size; placements=placements.filter(p => { const drop=selection.has(p); if (drop) generated.delete(key(p)); return !drop; }); selection=new Set();
-    changed(`Deleted ${n} ${n===1?'feature':'features'}.`); return true;
+    changed(`Deleted ${n} ${n===1?'feature':'features'}.`,`deleting ${count(n)}`); return true;
   }
   // Re-roll: another variant of the same kind and footprint (any other footprint that still fits when it has none).
   function rerollSelected() {
@@ -550,14 +552,14 @@ export async function mountMapFeatures(api) {
       p.v=pickVariant(pool,hash32(hash32(p.x,p.z),++rolls)/4294967296); swapped++;
     }
     if (!swapped) { status('Each selected feature is the only variant of its kind and size.'); return false; }
-    changed(`Re-rolled ${swapped} ${swapped===1?'feature':'features'}.`); return true;
+    changed(`Re-rolled ${swapped} ${swapped===1?'feature':'features'}.`,`re-rolling ${count(swapped)}`); return true;
   }
   function setSelectedMetal(value) {
     if (!guard()) return false;
     const metal=Math.round(clamp(value,0,255)),list=[...selection].filter(deposit).filter(p => p.metal!==metal);
     if (!list.length) { refreshSelection(); return false; }
     for (const p of list) p.metal=metal;
-    changed(`Set ${list.length===1?'the deposit’s':list.length+' deposits’'} metal to ${metal}.`); return true;
+    changed(`Set ${list.length===1?'the deposit’s':list.length+' deposits’'} metal to ${metal}.`,`setting metal to ${metal}`); return true;
   }
   // Moves the selection by whole cells; every moved footprint must stay in the play area and clear of the features left in place.
   function movable(dx,dz) {
@@ -570,7 +572,7 @@ export async function mountMapFeatures(api) {
     // Old keys go first, so a feature moving onto a cell another one leaves keeps its own fill mark and painted stamp.
     const carried=[...selection].map(p => { const before=key(p),entry={p,fill:generated.delete(before),stamp:stamps.get(before)}; stamps.delete(before); return entry; });
     for (const {p,fill:wasFill,stamp} of carried) { p.x+=dx; p.z+=dz; if (wasFill) generated.add(key(p)); if (stamp) { stamp.exactStale=true; stamps.set(key(p),stamp); } }
-    changed(`Moved ${selection.size} ${selection.size===1?'feature':'features'} ${Math.abs(dx)+Math.abs(dz)===1?'one cell':'by '+dx+', '+dz+' cells'}.`); return true;
+    changed(`Moved ${selection.size} ${selection.size===1?'feature':'features'} ${Math.abs(dx)+Math.abs(dz)===1?'one cell':'by '+dx+', '+dz+' cells'}.`,`moving ${count(selection.size)}`); return true;
   }
   function addStart(x,z) {
     if (!guard()) return false;
@@ -579,7 +581,7 @@ export async function mountMapFeatures(api) {
     if (starts.length>=MAX_STARTS) { status(`A map can have at most ${MAX_STARTS} starts. Move or remove an existing start.`); return false; }
     if (starts.some(s => s.x===p.x && s.z===p.z)) { status('Another start is already at that position.'); return false; }
     starts.push(p); selectedStart=starts.length-1; const trimmed=trimGenerated(); placements=trimmed.kept;
-    changed(`Added start ${selectedStart+1}${trimmed.removed?`; cleared ${trimmed.removed} fill features inside its margin`:''}.`); return true;
+    changed(`Added start ${selectedStart+1}${trimmed.removed?`; cleared ${trimmed.removed} fill features inside its margin`:''}.`,`adding start ${selectedStart+1}`); return true;
   }
   function moveStart(index,x,z) {
     if (!guard() || !Number.isInteger(index) || index<0 || index>=starts.length) return false;
@@ -588,12 +590,12 @@ export async function mountMapFeatures(api) {
     if (starts.some((s,i) => i!==index && s.x===p.x && s.z===p.z)) { status('Another start is already at that position.'); return false; }
     if (starts[index].x===p.x && starts[index].z===p.z) { update(); return true; }
     starts[index]=p; selectedStart=index; const trimmed=trimGenerated(); placements=trimmed.kept;
-    changed(`Moved start ${index+1}${trimmed.removed?`; cleared ${trimmed.removed} fill features inside its margin`:''}.`); return true;
+    changed(`Moved start ${index+1}${trimmed.removed?`; cleared ${trimmed.removed} fill features inside its margin`:''}.`,`moving start ${index+1}`); return true;
   }
   function removeStart(index) {
     if (!guard() || !Number.isInteger(index) || index<0 || index>=starts.length) return false;
     if (starts.length<=1) { status('Keep at least one start position.'); return false; }
-    starts.splice(index,1); selectedStart=Math.min(index,starts.length-1); changed('Removed the selected start.'); return true;
+    starts.splice(index,1); selectedStart=Math.min(index,starts.length-1); changed('Removed the selected start.',`removing start ${index+1}`); return true;
   }
   function setFill(value) {
     if (!guard()) return false;
@@ -602,7 +604,7 @@ export async function mountMapFeatures(api) {
     fill=fillOptions(value,fill);
     const trimmed=trimGenerated(); placements=trimmed.kept;
     if (!trimmed.removed && JSON.stringify(fill)===before) { update(); return true; }   // nothing changed: no undo step
-    changed(trimmed.removed?`Updated fill; cleared ${trimmed.removed} generated features inside the margin.`:'Updated fill controls.'); return true;
+    changed(trimmed.removed?`Updated fill; cleared ${trimmed.removed} generated features inside the margin.`:'Updated fill controls.','changing the fill settings'); return true;
   }
 
   function terrainMask(bounds={x0:0,z0:0,x1:cols,z1:rows}) {
@@ -669,7 +671,7 @@ export async function mountMapFeatures(api) {
       if (!free) continue;
       placements.push(placed); generated.add(key(placed)); put(placed); added++;
     }
-    if (added) changed(`Filled ${added} ${PLURALS[settings.kind]}.`); else status('No features fit this region with the current density, terrain, spacing and margins.');
+    if (added) changed(`Filled ${added} ${PLURALS[settings.kind]}.`,`filling ${added} ${PLURALS[settings.kind]}`); else status('No features fit this region with the current density, terrain, spacing and margins.');
     return {added};
   }
 
@@ -748,7 +750,7 @@ export async function mountMapFeatures(api) {
     const g=gesture; gesture=null;
     if (!g) return;
     if (canvas.hasPointerCapture?.(g.id)) canvas.releasePointerCapture(g.id);
-    if (g.type==='erase' && g.changed) changed('Erased feature footprints.');
+    if (g.type==='erase' && g.changed) changed('Erased feature footprints.','erasing features');
     if (commit && enabled()) {
       if (g.type==='fill') fillRegion(fill.kind,{type:fill.region,points:g.points,radius:fill.radius});
       else if (g.type==='start' && g.target) moveStart(g.index,g.target.x,g.target.z);
