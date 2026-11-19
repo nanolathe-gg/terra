@@ -174,7 +174,9 @@ export async function mountMapFeatures(api) {
     for (const [k,g] of grounds) if (!origins.has(k) && !g.pending) grounds.delete(k);
     const placed=new Set(placements.map(key)); for (const k of lifts.keys()) if (!placed.has(k)) lifts.delete(k);
     for (const kind of GROUND_KINDS) for (const v of variantList(kind)) keep.add('ground|'+kind+'|'+v.seed+'|'+JSON.stringify(kind==='deposit'?{...v.params,metal:depositMetal()}:v.params)+'|'+lightKey(sun));   // as thumbnail() keys them
-    for (const k of thumbs.keys()) if (!keep.has(k)) thumbs.delete(k);
+    // Evicted thumbs release their canvas: tree thumbnails close their OffscreenCanvas, and a
+    // ground entry answers the deliberate no-op close it was built with.
+    for (const [k,t] of thumbs) if (!keep.has(k)) { thumbs.delete(k); t.close?.(); }
   }
 
   // ---- positions (client.featureScreenPos/featureAnchorY: the footprint centre, lifted by half the mean of the anchor cell's four
