@@ -18,6 +18,7 @@ function standIn() {
     createShaderModule: () => ({}),
     createComputePipeline: () => ({getBindGroupLayout: () => ({})}),
     createComputePipelineAsync: async () => ({getBindGroupLayout: () => ({})}),
+    pushErrorScope() {}, popErrorScope: async () => null,
     createBindGroup: () => ({}),
     createCommandEncoder: () => ({beginComputePass: () => pass, copyTextureToTexture() {}, copyTextureToBuffer() {}, finish: () => ({})}),
     queue: {submit() {}, writeBuffer(buffer, offset, data) { writes.push({label: buffer.label, end: offset + data.byteLength, size: buffer.size}); }},
@@ -61,4 +62,22 @@ test('a layer is generated once its pipeline has compiled, and keeps its picture
   cache.sync(8, materials);
   assert.equal(cache.generations, 1, 'the next sync generates it');
   assert.deepEqual(told, [false, true], 'the renderer heard the compile start and end');
+});
+
+// A pipeline that fails to compile is not marked generated: the layer keeps its picture, the error names the material, and the compile is
+// tried again at the next change of the materials, not at every sync.
+test('a failed material compile names the material and is tried again at the next change', async () => {
+  const {renderer} = standIn(), cache = new MaterialCache(renderer, '/*MATERIAL_TAPS*/ /*MATERIAL_MAIN*/', ''), said = [];
+  let compiles = 0;
+  renderer.device.createComputePipelineAsync = async () => { compiles++; throw new Error('no such backend feature'); };
+  renderer.onerror = message => said.push(message);
+  const material = {...copyMaterial(LIBRARY['green-ground']), name: 'Mossy test'}, materials = new Map([[1, material]]);
+  cache.sync(8, materials); await cache.compiled(); await new Promise(r => setTimeout(r, 0));
+  assert.equal(cache.compiling(), false, 'a failure ends the wait');
+  cache.sync(8, materials); await new Promise(r => setTimeout(r, 0));
+  assert.equal(cache.generations, 0, 'nothing is marked generated');
+  assert.equal(compiles, 1, 'the same materials do not compile it again');
+  assert.equal(said.length, 1); assert.match(said[0], /Mossy test/);
+  cache.sync(8, new Map(materials)); await cache.compiled();
+  assert.equal(compiles, 2, 'the next change tries again');
 });

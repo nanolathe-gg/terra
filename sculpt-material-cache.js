@@ -54,22 +54,24 @@ export class MaterialCache {
     r.bindGroups = {}; this.keys.clear(); this.colorKeys.clear(); this.synced = null;
   }
   // A compiled pipeline (or set of them) by id: {ready, failed, promise}. The compile starts on first use; ready holds the result once it is
-  // done, failed its error. At most 24 are kept; an entry still compiling is never the one let go.
-  compile(id, make) {
+  // done, failed its error. At most 24 are kept; an entry still compiling is never the one let go. `materials` is the set the compile was
+  // started for: a failed compile is tried again only for another set (the next edit), so a failure is not compiled again at every draw.
+  compile(id, make, materials = null) {
     let e = this.pipelines.get(id);
+    if (e && e.failed && e.materials !== materials) { this.pipelines.delete(id); e = null; }
     if (e) { this.pipelines.delete(id); this.pipelines.set(id, e); return e; }
-    e = {ready: null, failed: null, promise: null};
-    e.promise = Promise.resolve().then(make).then(ready => { e.ready = ready; }, error => { e.failed = error; console.error(error); });
+    e = {ready: null, failed: null, materials, promise: null};
+    e.promise = Promise.resolve().then(make).then(ready => { e.ready = ready; }, error => { e.failed = error; });   // reported by sync (failed)
     this.pipelines.set(id, e);
     for (const [key, held] of this.pipelines) { if (this.pipelines.size <= 24) break; if (held.ready || held.failed) this.pipelines.delete(key); }
     return e;
   }
-  pipeline(program, thumbnails = false) {
+  pipeline(program, thumbnails = false, materials = null) {
     return this.compile((thumbnails ? 'thumbnails ' : '') + programKey(program), () => {
       const {taps, main} = programSource(program, thumbnails), r = this.renderer;
       const code = this.source.replace('/*MATERIAL_TAPS*/', taps).replace('/*MATERIAL_MAIN*/', main);
       return r.device.createComputePipelineAsync({label: 'material graph', layout: 'auto', compute: {module: r.device.createShaderModule({label: 'material graph', code}), entryPoint: thumbnails ? 'thumbMain' : 'groundMain'}});
-    });
+    }, materials);
   }
   // Stages (sculpt-materials.js stagePlan): one layer a staged node (Blur or Slope blur) for what the later passes read, and two scratch
   // layers (a stage's inputs, then a blur's first direction). Made the first time a material in use has one, at the repeat's size; materials
@@ -90,18 +92,18 @@ export class MaterialCache {
     this.stageTexture = this.scratchTexture = null; this.stageSize = 0;
     if (r.resources) r.fixedBytes = [...r.resources.values()].filter(v => v.kind === 'materials' || v.kind === 'shared').reduce((n, v) => n + v.bytes, 0);
   }
-  stagePipelines(program) {
+  stagePipelines(program, materials = null) {
     return this.compile('stages ' + programKey(program), async () => {
       const {taps, stages} = programSource(program), r = this.renderer, plan = stagePlan(program);
       const module = r.device.createShaderModule({label: 'material blur stages', code: this.source.replace('/*MATERIAL_TAPS*/', taps).replace('/*MATERIAL_MAIN*/', stages)});
       const make = entryPoint => r.device.createComputePipelineAsync({label: 'material ' + entryPoint, layout: 'auto', compute: {module, entryPoint}});
       const [blur, slope, line, ...staged] = await Promise.all([make('blurPass'), make('slopePass'), make('dirPass'), ...plan.stages.map((_, k) => make('stage' + k))]);
       return {stages: staged, blur, slope, line};
-    });
+    }, materials);
   }
   // The pipelines a program's pass needs, from compile(): main and, with staged nodes, its stages ({ready: {main, stages}} once both are).
-  passPipelines(program) {
-    const main = this.pipeline(program), stages = stagePlan(program).stages.length ? this.stagePipelines(program) : null;
+  passPipelines(program, materials) {
+    const main = this.pipeline(program, false, materials), stages = stagePlan(program).stages.length ? this.stagePipelines(program, materials) : null;
     return {failed: main.failed || stages?.failed || null, ready: main.ready && (!stages || stages.ready) ? {main: main.ready, stages: stages?.ready ?? null} : null, entries: [main, stages].filter(Boolean)};
   }
   // A program's stages into `encoder`, before its own pass: each staged node's inputs over the whole repeat, then its pass into its layer
@@ -153,18 +155,22 @@ export class MaterialCache {
     // One program row a material (e.row), which its Worn and Deposit layers share: the upload is sized by rows, not by cache layers.
     const rows = this.entries.reduce((n, e) => Math.max(n, e.row + 1), 1);
     const r = this.renderer, device = r.device, data = new ArrayBuffer(PROGRAM_BYTES * rows), view = new DataView(data), changed = [], waiting = new Set(), blank = new Set();
+    if (materials !== this.lastMaterials) { this.lastMaterials = materials; this.lastFailure = null; }
     for (const e of this.entries) {
       if (!e.state) writeProgram(view, e.row * PROGRAM_BYTES, e.program);
       const key = JSON.stringify(e.program.instructions.map(i => [i.code, i.links, i.args]));
       if (this.keys.get(e.layer) === key) continue;
-      const pipelines = this.passPipelines(e.program);
-      if (pipelines.failed) continue;   // the layer keeps what it holds
+      const pipelines = this.passPipelines(e.program, materials);
+      if (pipelines.failed) { this.failed(e, pipelines.failed); continue; }
       if (!pipelines.ready) { for (const entry of pipelines.entries) if (!entry.ready && !entry.failed) { waiting.add(entry); if (!this.keys.has(e.layer)) blank.add(entry); } continue; }
       changed.push([e, key, pipelines.ready]);
     }
     if (changed.length) {
       r.worldResource?.(this.programBuffer);
       device.queue.writeBuffer(this.programBuffer, 0, data);
+      // A pass the GPU refuses (validation) is not left marked as generated: its layers' keys go, its pipelines count as failed for these
+      // materials (so they are not tried again at every draw, only at the next change) and the error names the materials.
+      device.pushErrorScope('validation');
       const encoder = device.createCommandEncoder({label: 'material graphs'}), buffers = [];
       for (const [e, key, {main: pipeline, stages}] of changed) {
         const job = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}); buffers.push(job);
@@ -179,6 +185,15 @@ export class MaterialCache {
         this.keys.set(e.layer, key); this.generations++;
       }
       device.queue.submit([encoder.finish()]); buffers.forEach(b => b.destroy());
+      const generated = changed.map(([e]) => e);
+      device.popErrorScope().then(error => {
+        if (!error) return;
+        for (const e of generated) {
+          this.keys.delete(e.layer);
+          for (const entry of this.passPipelines(e.program, materials).entries) { entry.failed ??= error; entry.materials = materials; }
+          this.failed(e, error);
+        }
+      }, () => {});
     }
     this.reduce(pool, changed.map(([e]) => e.layer));
     if (changed.length) this.readMeans();
@@ -202,6 +217,15 @@ export class MaterialCache {
   compiling(blank = false) { return blank ? [...this.blank ?? []].some(e => this.waiting.has(e)) : this.waiting.size > 0; }
   // Resolves when the compiles the current materials waited for have ended (finished or failed).
   compiled() { return Promise.allSettled([...this.waiting].map(e => e.promise)); }
+  // A pipeline that failed to compile: the layer keeps what it holds, the error names the material, and its compile is tried again at the
+  // next change of the materials (compile).
+  failed(e, error) {
+    const said = `${e.material?.name || 'slot ' + e.slot}: ${error?.message || error}`;
+    if (this.lastFailure === said) return;
+    this.lastFailure = said;
+    console.error(error);
+    queueMicrotask(() => this.renderer.onerror?.(`The material ${JSON.stringify(e.material?.name || 'in slot ' + e.slot)} could not be drawn on this GPU, so it keeps its last picture: ${error?.message || error}`));
+  }
   // The mean color each slot's material is drawn in, read back after a regeneration (the renderer's drawnMeans; the editor's color pickers
   // show it). Asynchronous: a read overtaken by a newer one is dropped.
   async readMeans() {
