@@ -1909,18 +1909,19 @@ function scriptedScene(list,{ground=true,tools,materials}={}) {
   updateControls(); schedule(); queueWeather();
   return nodes.length;
 }
+// A map's save (Maps, Download file, share links): every stroke carries the settings its artist changed by hand (`edited`: those that
+// differ from the stroke's tool defaults), so a map from a file or a link carries the rest to another world's defaults as a local one does.
 function sketch() {
   worldInputQueue.flush();
   applySeedControl();
   rememberTool();
-  return {format:'nanolathe-terrain-sculpt',version:6,nodes:serializeNodes(),map:config.map,mapData:mapData(),biome:config.biomeId||'green',world:worldId,worldSettings:savedWorld(config,experiment,{...activeWorld(),materials:mapMaterials}),size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,varySeed,refinementSeed,
+  return {format:'nanolathe-terrain-sculpt',version:6,nodes:markEdited(serializeNodes(),n => nodeDefaults(n)),map:config.map,mapData:mapData(),biome:config.biomeId||'green',world:worldId,worldSettings:savedWorld(config,experiment,{...activeWorld(),materials:mapMaterials}),size,grid,baseHeight:config.baseHeight,seaLevel:config.seaLevel,seed,varySeed,refinementSeed,
     ...(columnOverride?{column:structuredClone(columnOverride)}:{}),rock:rockSettings(),rocks:structuredClone(mapRocks),materials:structuredClone(mapMaterials),...(mapTools.length?{tools:structuredClone(mapTools)}:{}),
     toolSettings,softness:Number($('softness').value),relief:Number($('relief').value),
     materialWeathering:Number($('material-weathering').value),depositSpread:Number($('deposit-spread').value),transitionDetail:Number($('transition-detail').value),
     tool,diameter:Number($('diameter').value),amount:Number($('amount').value),roughness:Number($('roughness').value),weather:$('weather').checked,clay:$('clay').checked,light:$('light').value,encoding:'stroke-graph'};
 }
-// The working copy is the sketch plus the world it was edited in and, per stroke, the settings the artist changed by hand
-// (those that differ from that world's defaults for the stroke's tool), so a switch can carry the rest to the new world's defaults.
+// A stroke's tool defaults: what its `edited` marks are measured against, and what a carry gives an unedited setting.
 function nodeDefaults(n,own=mapTools,tables) {
   const id=strokeTool(n,toolIds(own));
   return n.params && (n.kind==='landform' || FIXED_TOOLS.includes(id)) && id!=='move'?strokeParams(strokeCard(toolCard(id,own,tables))):null;
@@ -1928,7 +1929,6 @@ function nodeDefaults(n,own=mapTools,tables) {
 function workingCopy() {
   const s=sketch();
   s.world=worldId;
-  s.nodes=markEdited(s.nodes,n => nodeDefaults(n));
   return s;
 }
 // Writes this tab's map to its entry; answers the write (a promise), or false when nothing is saved (a scratch page, no map chosen, no store).
