@@ -874,7 +874,9 @@
 
     "escarpment",
 
-    "ridgestone"
+    "ridgestone",
+
+    "ridgeblock"
 
    ],
 
@@ -960,6 +962,32 @@
       "rockFace": 2.5,
       "faceRock": 1,
       "rockFaceFrom": 0.2
+     }
+    },
+
+    "ridgeblock": {
+     "label": "Blocky ridge",
+     "material": "green-darkrock",
+     "knobs": {
+      "faceStrata": 0,
+      "faceBlockSize": 20,
+      "faceBed": 6,
+      "faceLedge": 1.4,
+      "faceJoint": 1.9,
+      "faceWear": 0.1,
+      "faceCrease": 0.3,
+      "faceScratch": 0.2,
+      "faceGrass": 0.28,
+      "faceTone": 0.4,
+      "faceShade": 0.85,
+      "faceWet": 0.5,
+      "faceRindTone": -0.1,
+      "rockFace": 2.6,
+      "faceRock": 1,
+      "rockFaceFrom": 0.2,
+      "crackSeverity": 1,
+      "crackMajor": 0.6,
+      "debrisAmount": 0
      }
     }
 
