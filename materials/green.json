@@ -872,7 +872,9 @@
 
     "greenstone",
 
-    "escarpment"
+    "escarpment",
+
+    "ridgestone"
 
    ],
 
@@ -916,6 +918,26 @@
       "faceJoint": 1.2,
       "faceShade": 0.85,
       "debrisAmount": 0
+     }
+    },
+
+    "ridgestone": {
+     "label": "Terraced greenstone",
+     "knobs": {
+      "rockFace": 2,
+      "faceRock": 1,
+      "rockFaceFrom": 0.2,
+      "faceGrass": 0.45,
+      "faceLayers": 1.5,
+      "faceBlockSize": 9,
+      "faceJoint": 1.2,
+      "faceBed": 2.5,
+      "faceLedge": 3.5,
+      "faceShade": 0.85,
+      "debrisAmount": 0.6,
+      "debrisReach": 60,
+      "banding": 1,
+      "crackMajor": 1
      }
     },
 
