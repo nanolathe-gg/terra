@@ -554,11 +554,19 @@ function drawShapePreview() {
   if(selected>=0&&mapCanvas){const b=nodeBounds(nodes[selected]),v=mapCanvas.view(),pad=32;const x0=clamp((b.x0*spacing-v.x)*v.scale-pad,0,canvas.width),x1=clamp((b.x1*spacing-v.x)*v.scale+pad,0,canvas.width),y0=clamp((b.y0*spacing-v.y-180)*v.scale-pad,0,canvas.height),y1=clamp((b.y1*spacing-v.y+100)*v.scale+pad,0,canvas.height);if(x1>x0&&y1>y0){sx=x0;sy=y0;sw=x1-x0;sh=y1-y0;}}
   const ratio=Math.min(cv.width/sw,cv.height/sh),w=sw*ratio,h=sh*ratio;g.drawImage(canvas,sx,sy,sw,sh,(cv.width-w)/2,(cv.height-h)/2,w,h);
 }
+// A dashed height line across a curve editor, its label clear of the end knot and set beside any label on a line too close to share
+// a row with (sea, plain and elevation are often a few units apart).
+function heightRule(g,L) {
+  const placed=[];
+  return (y,color,label) => { g.strokeStyle=color; g.setLineDash([3,3]); g.beginPath(); g.moveTo(L.xL,y); g.lineTo(L.xR,y); g.stroke(); g.setLineDash([]);
+    if (!label) return; let x=L.xL+7; for (const p of placed) if (Math.abs(p.y-y)<10) x=Math.max(x,p.x1+6);
+    g.fillStyle=color; g.textAlign='left'; g.fillText(label,x,y-2); placed.push({y,x1:x+g.measureText(label).width}); };
+}
 function drawSection() {
   fitCanvas($('section-preview')); fitCanvas($('along-preview'));
   const cv=$('section-preview'),g=cv.getContext('2d'),c=curveContext(),L=sectionLayout(c),{ys,back}=sectionPreview(c.kind,c.q),n=ys.length-1;
   g.clearRect(0,0,L.W,L.H); g.font='9px system-ui';
-  const rule=(y,color,label) => { g.strokeStyle=color; g.setLineDash([3,3]); g.beginPath(); g.moveTo(L.xL,y); g.lineTo(L.xR,y); g.stroke(); g.setLineDash([]); if (label) { g.fillStyle=color; g.textAlign='left'; g.fillText(label,L.xL+2,y-2); } };
+  const rule=heightRule(g,L);
   if (c.land && L.ground) { rule(L.yH(0),'#8b9b87','ground'); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E>0?'+':''}${L.E}`); }
   else if (c.land) { rule(L.yH(L.sea),'#6aa7c4',`sea ${L.sea}`); rule(L.yH(L.plain),'#8b9b87',`plain ${L.plain}`); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E}`); }
   else { rule(L.yv(0),'#465344'); rule(L.yv(1),'#465344'); }
@@ -599,7 +607,7 @@ function alongLayout(c) {
 function drawAlong(c) {
   const cv=$('along-preview'),g=cv.getContext('2d'),L=alongLayout(c),knots=alongKnots(c.q),f=knotCurve(knots);
   g.clearRect(0,0,L.W,L.H); g.font='9px system-ui';
-  const rule=(y,color,label) => { g.strokeStyle=color; g.setLineDash([3,3]); g.beginPath(); g.moveTo(L.xL,y); g.lineTo(L.xR,y); g.stroke(); g.setLineDash([]); g.fillStyle=color; g.textAlign='left'; g.fillText(label,L.xL+2,y-2); };
+  const rule=heightRule(g,L);
   if (L.ground) { rule(L.yH(0),'#8b9b87','ground'); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E>0?'+':''}${L.E}`); }
   else { rule(L.yH(L.sea),'#6aa7c4',`sea ${L.sea}`); rule(L.yH(L.plain),'#8b9b87',`plain ${L.plain}`); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E}`); }
   const node=L.ground?null:selectedLandform(),N=48;
