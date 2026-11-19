@@ -890,7 +890,15 @@
 
       "faceGrass": 0.8,
 
-      "crackMajor": 1
+      "crackMajor": 1,
+
+      "rockFace": 1.2,
+
+      "faceWear": 0.5,
+
+      "faceBlockSize": 11,
+
+      "faceJoint": 0.05
 
      }
 
