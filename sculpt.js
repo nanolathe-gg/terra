@@ -1745,7 +1745,7 @@ function syncHistoryNames() {
 function checkpoint(mapOnly=false) {
   flushEval(); keepWorldMaterials();
   history.splice(historyIndex+1); history.push({nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:mapOnly?(history[historyIndex]?.terrainKey??++historySerial):++historySerial}); history.at(-1).name=changeName(history.at(-2),history.at(-1)); if (history.length>48) history.shift(); historyIndex=history.length-1;
-  renderLayers(); updateControls(); persistLater(); pickCard?.refresh();   // a pinned pixel reads again after every committed change
+  renderLayers(); updateControls(); persistLater(0); pickCard?.refresh();   // saved at once (persistLater); a pinned pixel reads again after every committed change
 }
 // A card change commits one undo step — never mid-gesture, where a checkpoint would capture a
 // half-drawn stroke or a half-moved selection (the gesture's own commit carries the change).
@@ -1927,15 +1927,22 @@ $('reset-strokes').onclick=() => {
   selected=-1;alsoSelected=[]; pathPoint=-1; pathAdding=false; evaluate(0); regionalFields.changed(); checkpoint(); queueWeather(); schedule();
   status('Reset every stroke to this world\'s defaults.');
 };
-function persistLater() {
+// Saves the map `delay` ms after the last call. A committed change (checkpoint: a stroke's end, a move, a card change) passes 0: the save runs
+// in the next task, after the change's own draw is scheduled, so a reload right after it keeps it (FLOWS #6). Continuous changes (slider
+// drags) keep the 450 ms wait, so a drag saves once at its end. Commits that come faster than 200 ms apart (a held arrow key nudging a
+// shape) wait for a pause of 200 ms instead of saving each time. A save costs about 5 ms of main thread at 40 shapes and 15 ms at 300.
+let lastSaveAt=-Infinity,saveHeld=false;   // saveHeld: commits are coming faster than 200 ms apart
+function persistLater(delay=450) {
   if (!SAVING) { $('save-state').textContent='Comparison sketch · use Map › Save as link or Download file to keep it.'; return; }
   if (!mapStore) { $('save-state').textContent=mapsNote||'Saving in this browser is unavailable. Use Save to keep this map as a file.'; return; }
+  if (delay<200) { saveHeld=saveHeld || performance.now()-lastSaveAt<200; if (saveHeld) delay=200; }
   clearTimeout(autosaveTimer); autosaveTimer=setTimeout(async () => {
+    saveHeld=false;
     if (stroke || moving || loading) { persistLater(); return; }
-    keepSaved=false;
+    keepSaved=false; lastSaveAt=performance.now();
     // Await the write: its promise is always truthy, and 'saved' must not show before IndexedDB answers.
     if (await saveWorking()) $('save-state').textContent='Your map is saved in this browser (Maps lists every map you keep here).';
-  },450);
+  },delay);
 }
 let keepSaved=false;   // set while this tab leaves for another map: leaving the page must not write the old one again
 addEventListener('pagehide',() => { worldInputQueue.flush();if (!stroke && !moving && !loading && !keepSaved) saveWorking(); });
