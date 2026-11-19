@@ -3101,7 +3101,7 @@ function openNewMap(first=false, dimensionsFromMap=null) {
   $('new-map-form').onsubmit=async e=>{e.preventDefault();if(!e.target.reportValidity())return;
     clearTimeout(autosaveTimer);if(!await leaveMap()){$('new-map-error').textContent='Your current map could not be saved in this browser. Save it as a file before starting a new map.';return;}
     const own=!(picked in (config.biomes||{}))&&worlds[picked];
-    const next={biome:own?own.base:picked,...(own?{world:picked}:{}),mapName:$('new-map-name').value.trim()||'Untitled map',mapX:$('new-map-width').value,mapY:$('new-map-height').value,newMap:1,...(dimensionsFromMap?{sea:dimensionsFromMap.sea}:{})};
+    const next={biome:own?own.base:picked,...(own?{world:picked}:{}),mapName:$('new-map-name').value.trim()||'Untitled map',mapX:$('new-map-width').value,mapY:$('new-map-height').value,newMap:1,...(Number.isInteger(dimensionsFromMap?.sea)?{sea:dimensionsFromMap.sea}:{})};
     if(leaveFor(mapStore?newMapId():null,next))keepSaved=true;
   };
   dialog.showModal();

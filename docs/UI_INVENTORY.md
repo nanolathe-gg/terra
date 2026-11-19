@@ -813,10 +813,10 @@ default on Green; the others appear when their parent is on.
 
 | Control | Id or key | Kind, range, Green value | What it does | Saved in | Shown at the baseline | Worlds | Accepted destination |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Width (units) | `map-x` | number; 1 to 40; Green: 4 |  | map file | default view |  | Top bar › Map menu › Map |
-| Height (units) | `map-y` | number; 1 to 40; Green: 4 |  | map file | default view |  | Top bar › Map menu › Map |
-| Sea level (0–255) | `map-sea` | number; 0 to 255; Green: 75 |  | map file | default view |  | Top bar › Map menu › Map |
-| New map canvas | `map-new` | button | 130 × 136 cells · 2080 × 2176 px · play 2048 × 2048 px \| New map starts blank. Yellow: play rectangle. Orange: height-dependent edge strips. Use the Features tool to place objects and player starts. | map file | default view |  | Top bar › Map menu › Map |
+| Width (units) | `map-x` | number; read-only for an open map; Green: 4 | The open map's width (editable only on the page with no map yet) | map file | default view |  | Top bar › Map menu › Map |
+| Height (units) | `map-y` | number; read-only for an open map; Green: 4 | The open map's height (editable only on the page with no map yet) | map file | default view |  | Top bar › Map menu › Map |
+| Sea level (0–255) | `map-sea` | number; read-only for an open map; Green: 75 | The open map's sea level (editable only on the page with no map yet) | map file | default view |  | Top bar › Map menu › Map |
+| New map canvas… | `map-new` | button | Opens New map at this map's size; the new map starts at its world's sea level. 130 × 136 cells · 2080 × 2176 px · play 2048 × 2048 px \| This map keeps its size and sea level. New map canvas… starts a blank map: choose its size there; it starts at its world’s sea level. Yellow: play rectangle. Orange: height-dependent edge strips. Use the Features tool to place objects and player starts. | map file | default view |  | Top bar › Map menu › Map |
 | Map name | `map-name` | text; Green: Sculpt map |  | map file | default view |  | Top bar › Map menu › Map |
 | Description | `map-description` | text; Green: Terrain editor prototype |  | map file | default view |  | Top bar › Map menu › Map |
 | Minimum wind | `map-minWind` | number; 0 to 2147483647; Green: 500 |  | map file | default view |  | Top bar › Map menu › Game settings (OTA) |
