@@ -485,14 +485,20 @@ function burntConiferFrame(P, seed) {
   }
   for (let y = y0 + 4; y < ay - 2; y += 2 + (r() < 0.4 ? 1 : 0)) {          // short twigs, alternating sides
     const t = (y - y0) / H, side = (y & 1) ? 1 : -1, len = Math.max(1, Math.round(hw(t) * (0.55 + 0.7 * r())));
-    for (let i = 1; i <= len; i++) forced.add((y + (i > 2 && r() < 0.3 ? 1 : 0)) * w + ax + side * i + (side > 0 ? 1 : 0));
+    // A twig can reach past the 4-px margin; keying its cell anyway wraps it to the opposite
+    // edge of the neighbouring row (k % w) as a phantom pixel. The draw calls stay in the
+    // old order, so the rng stream and every in-range pixel keep their old values.
+    for (let i = 1; i <= len; i++) { const dy = i > 2 && r() < 0.3 ? 1 : 0, x = ax + side * i + (side > 0 ? 1 : 0); if (x >= 0 && x < w) forced.add((y + dy) * w + x); }
   }
   for (let y = y0; y <= ay - 1; y++) {
     const t = (y - y0) / H, half = hw(t);
+    // The envelope reaches cx ± 1.5·half, farther than the margin at retail widths; an
+    // out-of-range column is scored (the stream must keep its order) and then dropped.
     for (let x = Math.floor(cx - half * 1.5) - 1; x <= Math.ceil(cx + half * 1.5) + 1; x++) {
       const sd = x < cx ? -1 : 1, hs = half * asym(y, -sd * 0.5), k = y * w + x, edge = Math.abs(x - cx) / Math.max(hs, 1);
       if (forced.has(k) || edge > 1.05) continue;
-      cand.push([0.5 * vnoise(x / 2.4, y / 1.2, s1) + 0.5 * rn() + 0.25 * edge * edge, k]);
+      const score = 0.5 * vnoise(x / 2.4, y / 1.2, s1) + 0.5 * rn() + 0.25 * edge * edge;
+      if (x >= 0 && x < w) cand.push([score, k]);
     }
   }
   cand.sort((a, b) => a[0] - b[0]);
