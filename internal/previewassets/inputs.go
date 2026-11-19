@@ -196,7 +196,10 @@ func check(s source) (Lock, error) {
 		return l, fmt.Errorf("previews are stale: rendering inputs changed; run repro/ui-previews.mjs with your own server/port, then go run ./cmd/previews publish")
 	}
 	b, err := s.read("ui-previews/manifest.json")
-	if err != nil || sum(b) != l.Files["manifest.json"] {
+	if err != nil {
+		return l, fmt.Errorf("preview manifest is missing; run go run ./cmd/previews fetch")
+	}
+	if sum(b) != l.Files["manifest.json"] {
 		return l, fmt.Errorf("preview manifest differs from the published bundle; re-render and publish")
 	}
 	return l, nil
