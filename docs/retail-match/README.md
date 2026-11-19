@@ -156,9 +156,11 @@ Change nothing else:
    - commit it with a message that says what changed, why, and the scores
      before and after, with the trial id. Start a map change's message with
      `map: <world>-<n>:` and a shape change's with `fixture:`;
-   - run `sh repro/match.sh <world> --keep-trial <trial>`, so its pictures
-     survive pruning. Do the same for any trial your report cites. Only the
-     last three trials keep their pictures otherwise.
+   - run `sh repro/match.sh <world> --keep-trial <trial>` right away, so
+     its pictures survive pruning. Do the same, at once, for any trial you
+     may cite. Only the last eight trials keep their pictures otherwise, and
+     a mark made after they are gone keeps nothing (round 1 lost the
+     pictures of every trial its report cited that way).
    
    To revert it, restore the files (`git checkout -- <file>`).
 5. **Checkpoint every 25 trials or so.**

@@ -43,7 +43,7 @@ These notes are by eye, from the base crops in
 - **Slopes:** ragged, stepped terraces. Each step is a jagged dark line, a
   shadowed riser 1-3 px tall, and the grass between steps is lumpy (green-5
   slope). Ours draws smooth grass there with almost no lines (measured:
-  green-5 slope `lines` retail .0043, ours .0002).
+  green-5 slope `lines` retail .0045, ours .0002).
 - **Rock:** gray rock shows as **thin dark cracks and small exposed patches
   inside the grass** on slopes and hill shoulders, never as a solid band.
   Ours lays a solid gray band at the foot of hills (green-1 steep crop). On
@@ -57,7 +57,8 @@ These notes are by eye, from the base crops in
   band" was water pixels inside retail's shore mask, not the ground.
 - **Water:** saturated blue, with a pale shallow shelf and soft
   diagonal-streaked dither. Ours is close, but its water has more small
-  edges (measured: green-3 water `edges` retail .005, ours .017).
+  edges (measured at the base: green-3 water `edges` retail .0030, ours .0083;
+  round 1's two keeps together brought ours to .0023).
 
 ## Known from earlier rounds (docs/BIOME_CATALOG.md, "Green Planet")
 
@@ -91,8 +92,12 @@ held and three came from the harness, which is now fixed:
 - **The "bluer wet shore" was a measuring artifact** (water pixels in
   retail's shore mask: 12.8% on green-3). Without them the two shores match
   within 2 units of each channel. Ignore round 1's proposal 6.3 color half.
-- **Round 1's `stepSoftPx` 5 keep** cleared `water:edges` only by dropping
-  under a floor that has since been lowered: not a clear. Re-judge it.
+- **Round 1's `stepSoftPx` 5 keep** moved green-3's water edges only from
+  .0102 to .0099 (old masks) and "cleared" by dropping under a floor that has
+  since been lowered. Most of the water-edge drop came with the `evad` keep
+  before it (.0166 to .0102). Under the new masks the two keeps together
+  take green-3's water edges from .0083 to .0023 (retail .0030; trial-034
+  re-split). Re-judge `stepSoftPx` alone, by eye on green-3's water crop.
 
 Leads, strongest first:
 

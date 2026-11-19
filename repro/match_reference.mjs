@@ -126,7 +126,7 @@ L.push('### Material slots (`groundPreset`)', ''); head(['slot', 'name', 'textur
 row([-1, 'ground beneath (keeps what is there)', '', '']);
 for (const m of materials) row([m.worldGround ? `${m.slot} (choose as 0)` : m.slot, m.name, m.source ? `\`${m.source}\`` : '', materialUse(m)]);
 L.push('', 'To give a map another ground, add its material to `world.materials.extra` (a list of textures.json keys); it takes the next free slot.',
-  'A `landform` or `paint` stroke lays it with `groundPreset`; a paint stroke with a large `radius` covers a plain.', '');
+  'A `landform` or `paint` stroke lays it with `groundPreset`; a paint stroke with a large `diameter` covers a plain, for example\n  `["paint", [[60, 300], [380, 320]], {"card": {"diameter": 300, "amount": 100, "groundPreset": 12}}]`.', '');
 L.push('### What each window\'s scene sets now', '', 'A scene stroke takes its tool\'s shape preset (`world.shapes`) but not the tool\'s `rock`: an unset `rockPreset` is -1, rock beneath, which',
   'on open ground is the world\'s own rock. Set `rockPreset` in a stroke\'s `card` to choose a rock type.', '');
 for (const f of readdirSync(join(repo, 'repro', 'scenes')).filter(f => new RegExp(`^${world}-[0-9]\\.json$`).test(f)).sort()) {

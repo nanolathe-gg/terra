@@ -123,9 +123,10 @@ page and an older card disagree, this page wins.
     - Do not tune a world toward retail crops, and do not turn a change
       down because it moves a retail score. The exception is a retail
       match round the owner starts (`docs/retail-match/`, owner
-      2026-11-18). It runs on its own branch, changes only world data,
-      and lands nothing directly: the owner reviews it, and kept looks
-      are ported by hand.
+      2026-11-18). It runs on its own branch, changes only world data and
+      that world's retail windows (`repro/scenes/<world>-<n>.json`, each
+      map's own choices), and lands nothing directly: the owner reviews
+      it, and kept looks are ported by hand.
     - Nothing retail is deleted. The retail windows
       (`repro/scenes/<world>-1..3.json`, crops in `$R/repro-r7`),
       `repro/retail.sh` and the comparison sheets are kept for the return.

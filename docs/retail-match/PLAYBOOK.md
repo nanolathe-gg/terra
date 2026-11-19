@@ -183,7 +183,11 @@ helps one window and hurts another.
   - **Ground:** a stroke card's `groundPreset` (a material slot) on a
     `landform` or `paint` stroke. Add the material to
     `world.materials.extra` first (section 3). A `paint` stroke with a large
-    `radius` lays it over a plain.
+    `diameter` lays it over a plain. Tested on green-5 (a stroke appended to
+    its scene's `strokes`, with slot 12 from section 7 of the reference):
+    `["paint", [[60, 300], [380, 320]], {"card": {"diameter": 300,
+    "amount": 100, "groundPreset": 12}}]`. Append new strokes at the end:
+    an inserted one shifts the seeds of every stroke after it.
   - **Shape options:** Steps (`terraces`, `ledge`, `terraceJitter`,
     `breakup`), `gullies`, `cracks`, `talus`, the section `curve` and the
     rest of section 5 of the reference.
