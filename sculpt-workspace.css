@@ -456,7 +456,9 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .map-view-note{position:absolute;z-index:6;top:10px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:5px 6px 5px 12px;border:1px solid #6f6136;border-radius:8px;background:#2d281bf0;color:#f1d58c;font-size:12px;font-weight:600;white-space:nowrap;box-shadow:0 6px 24px #0008}.map-view-note .small{color:#d6c9a3;font-weight:400}.map-view-note[hidden]{display:none}
 /* Pick's settings rows (the World rows' sliders, compact) and the surface layers at the pixel with why the others are not there. */
 .pick-rows{display:grid;gap:3px}.pick-rows .control{margin:0}
-.pick-more>summary{cursor:pointer;color:var(--muted);font-size:10.5px;display:flex;align-items:center;gap:6px}.pick-more[open]>summary{margin-bottom:4px}.pick-more>summary .scope-tag{margin-left:auto}
+.pick-more>summary{cursor:pointer;color:var(--muted);font-size:10.5px;display:flex;align-items:center;gap:6px;list-style:none}.pick-more[open]>summary{margin-bottom:4px}
+/* A flex summary loses the browser's marker: the same chevron as the card sections (.feature-group>summary). */
+.pick-more>summary:before{content:'›';flex:none;width:7px;font-size:14px;line-height:10px;text-align:center}.pick-more[open]>summary:before{transform:rotate(90deg)}.pick-more>summary .scope-tag{margin-left:auto}
 .pick-layer-list{margin:0;padding-left:16px;display:grid;gap:3px;font-size:10.5px;color:var(--muted)}.pick-layer-list li>button.link{margin-right:5px;font-size:inherit;padding:0}
 .pick-layer-list .pick-move{font-size:inherit}.pick-moved{margin:6px 0 0;color:var(--text)}
 /* The card's profile is compact (its silhouette, still editable); Full size opens it at the workspace's size. */
