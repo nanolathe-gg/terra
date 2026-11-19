@@ -794,7 +794,9 @@ fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec3
     if (u.flatBank > 0.0 && h < u.base - 0.5) { return vec3f(0.0); }
     // Bands fade out over slopes bandFade * 0.35 / 0.75 to bandFade (default
     // 0.35-0.75; Green fades sooner, as retail's banded slopes are gentle).
-    var gate = smoothstep(0.07, 0.18, slope) * (1.0 - smoothstep(u.bandFade * (0.35 / 0.75), u.bandFade, slope));
+    // Their lower end moves down with bandLevel: retail's bands run onto nearly level ground (rings round a bay, lines across a plain),
+    // spaced bandSpacing / slope px apart, so they thin out there rather than stop.
+    var gate = smoothstep(mix(0.07, 0.004, u.bandLevel), mix(0.18, 0.03, u.bandLevel), slope) * (1.0 - smoothstep(u.bandFade * (0.35 / 0.75), u.bandFade, slope));
     // H5 3a: retail's gentle slopes carry few of the small dashes the risers make there.
     gate *= 1.0 - u.terraceCalm * (1.0 - smoothstep(0.15, 0.40, slope));
     if (gate <= 0.0) { return vec3f(0.0); }
@@ -826,7 +828,7 @@ fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec3
     dash = mix(dash, 1.0, 0.7 * clamp(u.bandJag, 0.0, 1.0));
     let strength = banding * gate * dash;
     // Distance from the riser's middle, in world px along the slope.
-    let px = abs(v - (1.0 - w * 0.5)) * S / max(slope, 0.02);
+    let px = abs(v - (1.0 - w * 0.5)) * S / max(slope, 0.004);   // a line stays one or two px wide down to the gentlest slope the gate allows
     let line = (1.0 - smoothstep(0.3, 1.0, px)) * strength * u.bandLine;
     // The riser leans downhill (-fall): lit if that faces the sun.
     let facing = dot(-fall, normalize(u.sun.xy + 1e-6));

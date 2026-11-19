@@ -104,6 +104,7 @@
     "faceStreakFrom": 0.3,
     "bandJag": 0,
     "bandFade": 0.75,
+    "bandLevel": 0,
     "flatBank": 0,
     "terraces": 0,
     "ledge": 0.6,

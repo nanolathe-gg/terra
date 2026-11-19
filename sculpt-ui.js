@@ -181,7 +181,7 @@ export const WORLD_HOMES={
  'Rock types/Special surfaces':'pockmark pockSize moonCups moonCupSize moonCupDepth cupStretch moonRibs moonRibDepth moonRibDark moonFolds moonFoldSpacing iceCrystal iceCrest iceSnow iceFall iceApron gougeWeb',
  'Cliffs & stones/Where rock shows':'rimReach shoreRock shoreShelf',
  'Cliffs & stones/Loose stones':'looseSupply boulders',
- 'Cliffs & stones/Bands':'bandSoftness sandBanding sandBandSpacing layerCrease desertCapFlat',
+ 'Cliffs & stones/Bands':'bandSoftness bandLevel sandBanding sandBandSpacing layerCrease desertCapFlat',
  'Cliffs & stones/Special surfaces':'iceFrost lavaCrust lavaPillow lavaChip lavaVeins lavaCalm lavaDusk iceSoft',
  'Sand/':'sandCrown sand sandLee wind sandDust sandGrass sandLight ripple rippleHeight',
  'Water & shores/Depths & edges':'deepDepth waterSoft crispShore deepEdge stepSoftPx shelfWander shoalRag shoalShoreSoft',
