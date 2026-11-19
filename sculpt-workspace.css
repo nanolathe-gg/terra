@@ -114,7 +114,7 @@
 .tool-name{font-size:9px;line-height:1.15;color:#b9c8c4;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tool-groups button[aria-pressed=true],.rail-button.has-current,.rail-foot button[aria-expanded=true],.rail-foot button[aria-pressed=true]{background:#354d40;border-color:#82b597}
 .tool-groups button[aria-pressed=true] .tool-name,.rail-button.has-current .tool-name{color:#e4f6e6}
-.rail-button{position:relative}.rail-button:after{content:'';position:absolute;right:4px;bottom:4px;border:3px solid transparent;border-right-color:#8fa39b;border-bottom-color:#8fa39b}
+.rail-button{position:relative}.rail-button:after{content:'';position:absolute;right:4px;top:4px;border:3px solid transparent;border-right-color:#8fa39b;border-top-color:#8fa39b}   /* top right: clear of the label below */
 .rail-button[aria-expanded=true]{background:#2e3a40;border-color:#5a7465}
 .tool-groups .tool-flyout{display:none}#land-flyout{--flyout-top:100px}#water-flyout{--flyout-top:150px}#brushes-flyout{--flyout-top:200px}
 .tool-groups .rail-button[aria-expanded=true]+.tool-flyout{display:grid;position:absolute;left:52px;top:0;z-index:8;width:188px;max-height:calc(100vh - var(--flyout-top) - 46px);overflow-y:auto;scrollbar-width:thin;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;padding:8px;background:var(--panel);border:1px solid #5a7465;border-radius:8px;box-shadow:0 12px 40px #000a}
