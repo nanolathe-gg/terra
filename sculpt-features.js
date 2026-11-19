@@ -344,7 +344,7 @@ export async function mountMapFeatures(api) {
     numericInputs.forEach(showNumericValue);
     $('feature-count-line').textContent=`${placements.length} features · ${starts.length} starts`;
     $('feature-state').textContent=message;
-    const hints={place:`Click a cell to place a ${LABELS[placeKind].toLowerCase()} (${placeVariant>=0?`variant ${placeVariant%MAX_VARIANTS+1}`:'a random variant'}). Select (V) moves, re-rolls and deletes placed features.`,erase:'Click or drag across feature footprints to erase them.',starts:'Click empty ground to add a start. Drag a marker, or Shift-click ground, to move the selected start.',fill:`${PLURALS[fill.kind]} fill: ${fill.region==='brush'?'drag a brush':fill.region==='lasso'?'draw a closed lasso':'click connected gentle dry ground'}. Space or middle-drag still pans.`};
+    const hints={place:`Click a cell to place a ${LABELS[placeKind].toLowerCase()} (${placeVariant>=0?`variant ${placeVariant%MAX_VARIANTS+1}`:'a random variant'}). Select (V) moves, re-rolls and deletes placed features.`,erase:'Click or drag across feature footprints to erase them.',starts:'Click empty ground to add a start. Drag a marker, or Shift-click ground, to move the selected start.',fill:`${(PLURALS[fill.kind]??fill.kind).replace(/^./,c => c.toUpperCase())} fill: ${fill.region==='brush'?'drag a brush':fill.region==='lasso'?'draw a closed lasso':'click connected gentle dry ground'}. Space or middle-drag still pans.`};
     $('feature-help').textContent=hints[mode]||'Choose a feature tool, or keep sculpting terrain. Space or middle-drag pans in every tool.';
     refreshVariants();
     api.schedule();

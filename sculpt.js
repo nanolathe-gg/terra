@@ -342,6 +342,12 @@ function updateControls() {
   $('path-extend').disabled=!pathEditing||pathPoint<0||locked;
   $('path-extend').setAttribute('aria-pressed',String(pathAdding));
   $('path-remove').disabled=!pathEditing||paths.length<=1||locked;
+  // A disabled path action says why (rule 9); locked (a load, a stroke or a drag under way) passes in a moment and needs no reason.
+  const pathWhy=(id,reason,title)=>{$(id).title=$(id).disabled&&!locked&&pathEditing?reason:title;};
+  pathWhy('path-add',pointAt===activePath.length-1?'The last point has nothing after it: select an earlier point':'Select a point first','Insert a point after the selected one');
+  pathWhy('path-delete',pathPoint<0?'Select a point first':'A path keeps at least one point','Delete the selected point');
+  pathWhy('path-extend','Select a point to extend or branch from','Draw on from the selected point; from a middle point it branches');
+  pathWhy('path-remove','This is the shape’s only path: delete the shape instead','Delete the selected path');
   if(pathEditing){$('shape-path-list').replaceChildren(...paths.map((path,i)=>{const b=document.createElement('button');b.textContent=`Path ${i+1} · ${path.length} points`;b.setAttribute('aria-pressed',String(i===pathIndex));b.disabled=locked;b.onclick=()=>{pathIndex=i;pathPoint=-1;pathAdding=false;updateControls();schedule();};return b;}));}
   for(const id of ['rotate-left','rotate-right','scale-down','scale-up'])$(id).disabled=!nodes[selected]?.points||locked;
   $('view-clay').setAttribute('aria-pressed',String(!$('view-passability').matches('[aria-pressed=true]')&&$('clay').checked));
@@ -576,7 +582,7 @@ function drawSection() {
   // The controls round the canvas.
   const form=$('curve-form'),choices=LANDFORM_FORMS; if (form.dataset.kind!==c.kind) { form.replaceChildren(new Option('The shape\'s own',''),...choices.map(([id,label]) => new Option(label,id))); form.dataset.kind=c.kind; }
   form.value=choices.some(([id]) => id===c.q.curve?.form)?c.q.curve.form:''; $('curve-reset').disabled=!c.q.curve?.knots;
-  $('curve-link').hidden=$('curve-mirror').hidden=!c.land; $('curve-link').setAttribute('aria-pressed',String(sidesLinked(c))); $('curve-link').textContent=sidesLinked(c)?'Sides linked':'Link sides'; $('curve-mirror').disabled=sidesLinked(c);
+  $('curve-link').hidden=$('curve-mirror').hidden=!c.land; $('curve-link').setAttribute('aria-pressed',String(sidesLinked(c))); $('curve-link').textContent=sidesLinked(c)?'Sides linked':'Link sides'; $('curve-mirror').disabled=sidesLinked(c); $('curve-mirror').title=sidesLinked(c)?'The sides are linked: unlink them to mirror the section':'Flip the section left to right';
   $('along-block').hidden=!c.land;
   const facing=Math.round(c.q.facing||0),toward=FACING_CHOICES.find(f => f[0]===(facing||3))[1];
   $('curve-lean').textContent=`Lean ${(Math.round(L.ratio*100)/100).toFixed(2)} : 1 toward ${toward.toLowerCase()}`;
@@ -1624,6 +1630,7 @@ function selectNode(i,keepOthers=false) {
   renderLayers(); updateControls(); schedule(false);
   if (another && n?.kind==='landform' && n.params) followCardRock();
   if (n) status(alsoSelected.length?`${selectedShapes().length} shapes selected. Drag one to move them together; Shift-click adds or removes.`:`Selected ${shapeName(i)}. Drag to transform or edit its settings.`);
+  else if (/^Selected |^\d+ shapes selected\. /.test($('status').textContent)) status('');   // the selection message goes with the selection
 }
 // Shift-click on the map or in the Shapes list. Answers whether the shape is now selected.
 function toggleShape(i) {
