@@ -211,6 +211,8 @@
 .map-navigator .panel-heading{display:none}
 #minimap-host{height:118px;width:118px;border-color:#3d5148}#minimap-host canvas{width:116px;height:116px;max-width:100%;object-fit:contain}
 .workspace:has(#passability-legend:not([hidden])) .map-navigator{display:none}
+/* The docked Materials map is a third of the width: the navigator would cover a quarter of it, so only the zoom buttons stay. */
+.app.material-docked .map-navigator{display:none}
 .map-zoom{position:absolute;right:16px;bottom:16px;z-index:3;display:flex;align-items:center;gap:3px;padding:4px;border:1px solid #71857766;border-radius:8px;background:#141c21ee;box-shadow:0 3px 18px #0006}
 .map-zoom button,.map-zoom select{padding:3px 7px;font-size:11px}
 
