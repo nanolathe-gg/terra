@@ -1600,7 +1600,7 @@ function copyShapes() {
   shapeClipboard={nodes:cloneNodes(group.map(i => nodes[i])),pastes:0};
   status(group.length>1?`Copied ${group.length} shapes.`:`Copied ${shapeName(group[0])}.`); return true;
 }
-function pasteShapes() {
+function pasteShapes(verb='Pasted') {
   if (!shapeClipboard || stroke || moving || loading || !ready) return false;
   const copies=cloneNodes(shapeClipboard.nodes),step=32*(shapeClipboard.pastes+1);
   const m=fitToMap(copies.flatMap(n => n.points),[1,0,0,1,step,step]);
@@ -1610,10 +1610,10 @@ function pasteShapes() {
   const first=nodes.length; nodes.push(...copies);
   evaluate(first,copies.reduce((r,n) => unionRect(r,nodeBounds(n)),null));
   checkpoint(); pathEditing=false; alsoSelected=copies.slice(1).map((_,k) => first+1+k); selectNode(first,true);
-  status(copies.length>1?`Pasted ${copies.length} shapes.`:`Pasted ${shapeName(first)}.`);
+  status(copies.length>1?`${verb} ${copies.length} shapes.`:`${verb} ${shapeName(first)}.`);
   renderLayers(); updateControls(); schedule(); queueWeather(); return true;
 }
-function duplicateShapes() { return copyShapes() && pasteShapes(); }
+function duplicateShapes() { return copyShapes() && pasteShapes('Duplicated'); }
 function pickNode(p) {
   let best=-1,bestScore=Infinity;
   nodes.forEach((n,i) => { const d=nodeDistance(n,p),reach=Math.max(24,(n.params?.radius||40)); if (d<reach && d/reach<=bestScore) { bestScore=d/reach; best=i; } });
@@ -2284,6 +2284,8 @@ window.addEventListener('keydown',event => {
     if (act && !stroke && !moving && !mapFeatures?.active && !picking && act()) { event.preventDefault(); return; }
   }
   if ((event.key==='Delete' || event.key==='Backspace') && pathEditing && pathPoint>=0 && selected>=0 && !stroke && !moving) {event.preventDefault();$('path-delete').click();return;}
+  // In Edit path, Delete acts on points: with none picked (a missed click on a small handle) it does not fall through to deleting the shape.
+  if ((event.key==='Delete' || event.key==='Backspace') && pathEditing && pathPoint<0 && selected>=0 && !stroke && !moving && !event.metaKey && !event.ctrlKey) {event.preventDefault();status('Pick a point to delete it. To delete the shape, leave Edit path (P) first.');return;}
   if(event.key==='Escape'&&!moving&&!stroke){event.preventDefault();if(!editorUI.exitFocus()){if(picking)setPicking(false);else if(pathAdding){pathAdding=false;updateControls();schedule();}else if(drawMode==='add'){drawMode='select';updateControls();schedule();}else if(pathEditing)setPathMode(false);else selectNode(-1);}return;}
   const arrow={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];
   if(arrow&&tool==='move'&&selected>=0&&event.target===overlay&&!event.metaKey&&!event.ctrlKey&&!stroke&&!moving){
