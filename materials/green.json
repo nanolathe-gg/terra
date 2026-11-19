@@ -884,7 +884,13 @@
 
      "knobs": {
 
-      "faceLayers": 0.2
+      "faceLayers": 0.2,
+
+      "faceRock": 0.35,
+
+      "faceGrass": 0.8,
+
+      "crackMajor": 1
 
      }
 
