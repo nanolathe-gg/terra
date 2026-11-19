@@ -17,8 +17,11 @@ import (
 	"unicode/utf8"
 )
 
+// The same limits the save-link Worker refuses (deploy/worker/worker.js MAX_UNCOMPRESSED
+// and MAX_RATIO), so a save this server accepts in development shares in production.
 const maxCompressed = 1024 * 1024
-const maxUncompressed = 16 * 1024 * 1024
+const maxUncompressed = 8 * 1024 * 1024
+const maxRatio = 40
 
 var mapID = regexp.MustCompile(`^[a-z2-7]{16}$`)
 
@@ -40,9 +43,17 @@ func saveError(body []byte) (int, string) {
 		return 400, "The gzip data is damaged or does not hold UTF-8 text."
 	}
 	defer gz.Close()
-	raw, err := io.ReadAll(io.LimitReader(gz, maxUncompressed+1))
-	if len(raw) > maxUncompressed {
-		return 413, "The save is too large once uncompressed (limit 16 MB)."
+	// A body may inflate to at most maxRatio times its gzip size (plus a little), so a small gzip bomb costs as little as a small save to refuse.
+	limit := int64(maxUncompressed)
+	if r := int64(len(body))*maxRatio + 65536; r < limit {
+		limit = r
+	}
+	raw, err := io.ReadAll(io.LimitReader(gz, limit+1))
+	if int64(len(raw)) > limit {
+		if limit == maxUncompressed {
+			return 413, "The save is too large once uncompressed (limit 8 MB)."
+		}
+		return 413, fmt.Sprintf("The save is too large once uncompressed (limit %d times its gzip size).", maxRatio)
 	}
 	if err != nil || !utf8.Valid(raw) {
 		return 400, "The gzip data is damaged or does not hold UTF-8 text."

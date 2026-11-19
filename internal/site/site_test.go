@@ -213,6 +213,11 @@ func TestLocalSaveLinks(t *testing.T) {
 	if status, _ := saveError(oversized); status != 413 {
 		t.Fatal("uncompressed limit", status)
 	}
+	// A small gzip that inflates past maxRatio times its own size is refused, as the Worker refuses it.
+	bomb := zipped(t, bytes.Repeat([]byte("x"), 200*1024))
+	if status, _ := saveError(bomb); status != 413 {
+		t.Fatal("inflation ratio limit", status)
+	}
 	for _, b := range [][]byte{[]byte("plain"), body[:len(body)-4]} {
 		if status, _ := saveError(b); status != 400 {
 			t.Fatal("damaged gzip accepted", status)
