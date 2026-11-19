@@ -212,11 +212,12 @@ export async function mountMapFeatures(api) {
   const corner=(x,z) => { const h=api.sample(x*CELL,z*CELL); return Number.isFinite(h)?Math.round(clamp(h,0,255)):-1; };
   // The lift waits for heights the fields hold now (api.known): until the anchor cell's corners are read (a map just opened, an edit not yet
   // copied back), a placement keeps the lift it last had, and one with none yet is not drawn (anchor answers null). No sprite jumps as the
-  // base height, then the shapes' heights, then the Time pass's arrive.
+  // base height, then the shapes' heights, then the Time pass's arrive. Heights that are only the coarse lattice's (api.known answers
+  // 'coarse': a paged map's page whose CPU copy was let go) place a placement with no lift yet, and never replace a lift it has.
   const lifts=new Map(),CORNERS=[[0,0],[1,0],[0,1],[1,1]];
   function anchor(p) {
-    const [fw,fz]=footprint(p),k=key(p);
-    if (!api.known || CORNERS.every(([i,j]) => api.known((p.x+i)*CELL,(p.z+j)*CELL))) lifts.set(k,(corner(p.x,p.z)+corner(p.x+1,p.z)+corner(p.x,p.z+1)+corner(p.x+1,p.z+1))>>3);
+    const [fw,fz]=footprint(p),k=key(p),known=api.known&&CORNERS.map(([i,j]) => api.known((p.x+i)*CELL,(p.z+j)*CELL));
+    if (!known || known.every(Boolean) && (!lifts.has(k) || !known.includes('coarse'))) lifts.set(k,(corner(p.x,p.z)+corner(p.x+1,p.z)+corner(p.x,p.z+1)+corner(p.x+1,p.z+1))>>3);
     const lift=lifts.get(k);
     return lift===undefined?null:{x:p.x*CELL+fw*8,y:p.z*CELL+fz*8-lift};
   }

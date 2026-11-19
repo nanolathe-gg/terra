@@ -814,6 +814,9 @@ function evaluate(from=0,rect=null) {
   if(materialCovers){materialTerrainDirty=true;markChanged();return;}
   regionalFields.changed(regionalDirtyRect(from,rect)); markChanged();
 }
+// The earliest stage a material change since the last compile reached: a layer whose pipeline was still compiling kept its old picture, so
+// the tiles draw again from there once it is generated (renderer.onmaterials).
+let materialStage=null;
 // The renderer holds the materials in use: the world's ground and water, and those a visible stroke chose.
 function syncMaterials() {
   if (!renderer) return;
@@ -831,7 +834,9 @@ function setRendererMaterials(next) {
   // A slot's cache layers and the world surfaces it draws (its roles: the solid reads which slot is the rock's, and no scan covers it).
   const layers=list=>[...list].sort(([a],[b])=>a-b).map(([slot,m])=>[slot,...materialStates(m),...Object.keys(m).filter(k=>/^world[A-Z]/.test(k)&&m[k]).sort(),m.worldLayer??''].join(':')).join(',');
   const height=layers(before)===layers(after)&&[...after].every(([slot,m])=>materialHeightKey(m)===materialHeightKey(before.get(slot)));
-  return [height?null:'C',uniform,'F'].filter(Boolean).sort()[0];
+  const stage=[height?null:'C',uniform,'F'].filter(Boolean).sort()[0];
+  materialStage=renderer.materialsCompiling()?[materialStage,stage].filter(Boolean).sort()[0]:stage;
+  return stage;
 }
 function restoreMaterials(materials) {
   mapMaterials=structuredClone(materials); nodes=keepStrokeMaterials(nodes,mapMaterials); syncMaterialChoices(); syncMaterials(); materialEditor?.refresh(); keepWorldMaterials(); surfacePanel?.refresh();
@@ -1218,7 +1223,7 @@ function makeRegionalFields() {
   const common={worldSize,worldGrid,baseHeight:config.baseHeight,maskKeys:MASK_KEYS,nodes:() => nodes,device:() => renderer?.device,context:shapeContext,gesture:() => Boolean(stroke||moving||controlsEditing||worldInputQueue.active),gestureSettled:()=>mapCanvas?.refineWhileHeld?.()??false};
   // pageRing (a ring by hand) and timeApron are test hooks of the page ring rule and the Time pass's window; no page needs them.
   const query=new URLSearchParams(location.search);
-  return pagedWanted()?createPagedFields({...common,budget:gpuBudget,heapBudget:() => fieldsHeapBudget,foregroundPending:()=>Boolean(mapCanvas?.gpuWorkPending?.()||mapCanvas?.foregroundPending?.()),prepareBackground:bytes=>mapCanvas?.prepareBackground?.(bytes)??true,apron:Number(query.get('timeApron')||TIME_APRON),forceRing:Number(query.get('pageRing')||0)}):createGpuFields(common);
+  return pagedWanted()?createPagedFields({...common,budget:gpuBudget,heapBudget:() => fieldsHeapBudget,foregroundPending:()=>Boolean(mapCanvas?.gpuWorkPending?.()||mapCanvas?.foregroundPending?.()),prepareBackground:bytes=>mapCanvas?.prepareBackground?.(bytes)??true,cpuCopied:()=>mapCanvas?.schedule(),apron:Number(query.get('timeApron')||TIME_APRON),forceRing:Number(query.get('pageRing')||0)}):createGpuFields(common);
 }
 // Every application receives a bounded prefix window. Temporary global views
 // let the existing brush routines keep their row strides; no node retains a
@@ -1353,8 +1358,11 @@ function regionalHeightCell(x,y) {
 // release, and a map just opened has none yet), and for a weathered view (`weathered`, the canvas's Weathered view) where Weathering is on, the
 // Time pass's height there too. The map's overlays (a shape's path, the features) keep the height a point last had until it is, so they do not
 // jump as old, coarse and final heights arrive.
+// A failed Time pass leaves the view on the heights it had (the authored height where the pass would have changed it): no pass is coming
+// until Weathering is turned off and on again, so those are the heights the overlays take.
 function heightKnown(x,y,weathered=true) {
   if (stroke || moving) return false;
+  if (weatherState==='failed') weathered=false;
   if (pagedOn()) return regionalFields.heightKnown?.(x,y,weathered)??true;
   if (regionalFields.pending?.()) return false;
   if (!weathered || !weatherOn()) return true;
@@ -3007,6 +3015,8 @@ async function bootMap(pending=null) {
   mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
   renderer=mapCanvas.renderer; renderer.onerror=message => error(message); materialUseKey='[]'; syncMaterials();
+  // A material's pipeline started or finished compiling (sculpt-material-cache.js): the export says why it waits, and a generated layer is drawn.
+  renderer.onmaterials=done=>{ if(done)worldChanged({stage:materialStage??'C',world:false}); if(!renderer.materialsCompiling())materialStage=null; updateControls(); schedule(); };
   // A material's drawn color read back (sculpt-material-cache.js readMeans): the Color pickers show it.
   renderer.onmeans=()=>{syncRockColors();refreshShallowRow();surfacePanel?.refresh();materialEditor?.refreshColors?.();pickCard?.colors();};   // the world's ground and water are materials: a renderer has none until told
   worldChanged(renderer.setColors(worldColors()));$('export').textContent='Save view image';

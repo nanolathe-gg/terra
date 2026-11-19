@@ -2,6 +2,9 @@
 // (half floats), one of its art height (a full float: relief is lit from its differences), one more layer of each for each state it draws (Worn,
 // Deposit), a layer of that color reduced to its game-palette colors, and one texel of its mean color. A graph is compiled to a
 // pipeline once per shape; its numbers are a buffer upload. A palette-only edit redoes the reduction, not the fields.
+// Pipelines are compiled asynchronously (createComputePipelineAsync): a large graph takes seconds to compile, and a synchronous compile held
+// the GPU queue, so the map stopped drawing at every wire edit. Until a layer's new pipeline is ready the layer keeps the picture it has, and
+// the draws that must not use an old picture wait for it (TerrainRenderer.materialsReady).
 import {MATERIAL_SLOTS, materialColor, compileMaterial, PROGRAM_BYTES, STEP_STRIDE, MAX_NODES, MAX_STAGES, materialRenderKey, programKey, programSource, stagePlan, materialCacheUsage, paletteRgb, THUMB, THUMB_STRIDE, materialStates, MATERIAL_STATES} from './sculpt-materials.js';
 
 const SCRATCH_ROW = MATERIAL_SLOTS;   // the materialGraphs row a thumbnail run borrows (after one a slot)
@@ -28,6 +31,7 @@ export class MaterialCache {
   constructor(renderer, source, reduceSource) {
     this.renderer = renderer; this.source = source; this.reduceSource = reduceSource;
     this.pipelines = new Map(); this.keys = new Map(); this.colorKeys = new Map(); this.layers = []; this.pool = 0; this.generations = 0;
+    this.waiting = new Set();   // the compiles the current materials wait for (their pipelines' entries)
     this.programBuffer = renderer.device.createBuffer({label: 'material graphs', size: PROGRAM_BYTES * (SCRATCH_ROW + 1), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST});
     renderer.track?.(this.programBuffer, 'material graphs', this.programBuffer.size, 'materials');
     renderer.worldResource?.(this.programBuffer);   // the cache is world data: each write bumps the world version in the tile input checksum
@@ -49,15 +53,25 @@ export class MaterialCache {
     if (r.resources) r.fixedBytes = [...r.resources.values()].filter(v => v.kind === 'materials' || v.kind === 'shared').reduce((n, v) => n + v.bytes, 0);
     r.bindGroups = {}; this.keys.clear(); this.colorKeys.clear(); this.synced = null;
   }
-  pipeline(program, thumbnails = false) {
-    const id = (thumbnails ? 'thumbnails ' : '') + programKey(program);
-    if (!this.pipelines.has(id)) {
-      if (this.pipelines.size >= 24) this.pipelines.delete(this.pipelines.keys().next().value);
+  // A compiled pipeline (or set of them) by id: {ready, failed, promise}. The compile starts on first use; ready holds the result once it is
+  // done, failed its error. At most 24 are kept; an entry still compiling is never the one let go. `materials` is the set the compile was
+  // started for: a failed compile is tried again only for another set (the next edit), so a failure is not compiled again at every draw.
+  compile(id, make, materials = null) {
+    let e = this.pipelines.get(id);
+    if (e && e.failed && e.materials !== materials) { this.pipelines.delete(id); e = null; }
+    if (e) { this.pipelines.delete(id); this.pipelines.set(id, e); return e; }
+    e = {ready: null, failed: null, materials, promise: null};
+    e.promise = Promise.resolve().then(make).then(ready => { e.ready = ready; }, error => { e.failed = error; });   // reported by sync (failed)
+    this.pipelines.set(id, e);
+    for (const [key, held] of this.pipelines) { if (this.pipelines.size <= 24) break; if (held.ready || held.failed) this.pipelines.delete(key); }
+    return e;
+  }
+  pipeline(program, thumbnails = false, materials = null) {
+    return this.compile((thumbnails ? 'thumbnails ' : '') + programKey(program), () => {
       const {taps, main} = programSource(program, thumbnails), r = this.renderer;
       const code = this.source.replace('/*MATERIAL_TAPS*/', taps).replace('/*MATERIAL_MAIN*/', main);
-      this.pipelines.set(id, r.device.createComputePipeline({label: 'material graph', layout: 'auto', compute: {module: r.device.createShaderModule({label: 'material graph', code}), entryPoint: thumbnails ? 'thumbMain' : 'groundMain'}}));
-    }
-    return this.pipelines.get(id);
+      return r.device.createComputePipelineAsync({label: 'material graph', layout: 'auto', compute: {module: r.device.createShaderModule({label: 'material graph', code}), entryPoint: thumbnails ? 'thumbMain' : 'groundMain'}});
+    }, materials);
   }
   // Stages (sculpt-materials.js stagePlan): one layer a staged node (Blur or Slope blur) for what the later passes read, and two scratch
   // layers (a stage's inputs, then a blur's first direction). Made the first time a material in use has one, at the repeat's size; materials
@@ -78,23 +92,26 @@ export class MaterialCache {
     this.stageTexture = this.scratchTexture = null; this.stageSize = 0;
     if (r.resources) r.fixedBytes = [...r.resources.values()].filter(v => v.kind === 'materials' || v.kind === 'shared').reduce((n, v) => n + v.bytes, 0);
   }
-  stagePipelines(program) {
-    const id = 'stages ' + programKey(program);
-    if (!this.pipelines.has(id)) {
-      if (this.pipelines.size >= 24) this.pipelines.delete(this.pipelines.keys().next().value);
+  stagePipelines(program, materials = null) {
+    return this.compile('stages ' + programKey(program), async () => {
       const {taps, stages} = programSource(program), r = this.renderer, plan = stagePlan(program);
       const module = r.device.createShaderModule({label: 'material blur stages', code: this.source.replace('/*MATERIAL_TAPS*/', taps).replace('/*MATERIAL_MAIN*/', stages)});
-      const make = entryPoint => r.device.createComputePipeline({label: 'material ' + entryPoint, layout: 'auto', compute: {module, entryPoint}});
-      this.pipelines.set(id, {stages: plan.stages.map((_, k) => make('stage' + k)), blur: make('blurPass'), slope: make('slopePass'), line: make('dirPass')});
-    }
-    return this.pipelines.get(id);
+      const make = entryPoint => r.device.createComputePipelineAsync({label: 'material ' + entryPoint, layout: 'auto', compute: {module, entryPoint}});
+      const [blur, slope, line, ...staged] = await Promise.all([make('blurPass'), make('slopePass'), make('dirPass'), ...plan.stages.map((_, k) => make('stage' + k))]);
+      return {stages: staged, blur, slope, line};
+    }, materials);
+  }
+  // The pipelines a program's pass needs, from compile(): main and, with staged nodes, its stages ({ready: {main, stages}} once both are).
+  passPipelines(program, materials) {
+    const main = this.pipeline(program, false, materials), stages = stagePlan(program).stages.length ? this.stagePipelines(program, materials) : null;
+    return {failed: main.failed || stages?.failed || null, ready: main.ready && (!stages || stages.ready) ? {main: main.ready, stages: stages?.ready ?? null} : null, entries: [main, stages].filter(Boolean)};
   }
   // A program's stages into `encoder`, before its own pass: each staged node's inputs over the whole repeat, then its pass into its layer
   // (a Blur across and down or a Slope blur along its slope).
-  runStages(encoder, program, row, size, buffers) {
+  runStages(encoder, program, row, size, buffers, pipelines) {
     const plan = stagePlan(program); if (!plan.stages.length) return;
     this.stageTextures(size);
-    const device = this.renderer.device, {stages, blur, slope, line} = this.stagePipelines(program), groups = Math.ceil(size / 8);
+    const device = this.renderer.device, {stages, blur, slope, line} = pipelines, groups = Math.ceil(size / 8);
     const job = values => { const b = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}); buffers.push(b); device.queue.writeBuffer(b, 0, new Uint32Array(values)); return b; };
     const layer = (texture, k) => texture.createView({dimension: '2d', baseArrayLayer: k, arrayLayerCount: 1});
     const graphs = pipeline => device.createBindGroup({layout: pipeline.getBindGroupLayout(0), entries: [{binding: 15, resource: {buffer: this.programBuffer}}]});
@@ -130,25 +147,35 @@ export class MaterialCache {
   // Generates what changed. Called inside the draw cycle, so a fast drag never queues more than one run a frame.
   // Every tile draw and color batch calls it: the same materials (the renderer's list is replaced, never changed in place, by setMaterials)
   // at the same pool on an unchanged cache have nothing to generate, so that call returns at once (0.4-0.5 ms a call with Green's 12).
+  // A layer whose pipeline is still compiling is left as it is (its key is not set) and generated by the first sync after the compile; a
+  // compile that ends clears `synced` and tells the renderer (onmaterials), whose next draw comes here again.
   sync(pool, materials) {
     if (this.synced === materials && this.pool === pool) return;
     this.prepare(pool, materials);
     // One program row a material (e.row), which its Worn and Deposit layers share: the upload is sized by rows, not by cache layers.
     const rows = this.entries.reduce((n, e) => Math.max(n, e.row + 1), 1);
-    const r = this.renderer, device = r.device, data = new ArrayBuffer(PROGRAM_BYTES * rows), view = new DataView(data), changed = [];
+    const r = this.renderer, device = r.device, data = new ArrayBuffer(PROGRAM_BYTES * rows), view = new DataView(data), changed = [], waiting = new Set(), blank = new Set();
+    if (materials !== this.lastMaterials) { this.lastMaterials = materials; this.lastFailure = null; }
     for (const e of this.entries) {
       if (!e.state) writeProgram(view, e.row * PROGRAM_BYTES, e.program);
       const key = JSON.stringify(e.program.instructions.map(i => [i.code, i.links, i.args]));
-      if (this.keys.get(e.layer) !== key) changed.push([e, key]);
+      if (this.keys.get(e.layer) === key) continue;
+      const pipelines = this.passPipelines(e.program, materials);
+      if (pipelines.failed) { this.failed(e, pipelines.failed); continue; }
+      if (!pipelines.ready) { for (const entry of pipelines.entries) if (!entry.ready && !entry.failed) { waiting.add(entry); if (!this.keys.has(e.layer)) blank.add(entry); } continue; }
+      changed.push([e, key, pipelines.ready]);
     }
     if (changed.length) {
       r.worldResource?.(this.programBuffer);
       device.queue.writeBuffer(this.programBuffer, 0, data);
+      // A pass the GPU refuses (validation) is not left marked as generated: its layers' keys go, its pipelines count as failed for these
+      // materials (so they are not tried again at every draw, only at the next change) and the error names the materials.
+      device.pushErrorScope('validation');
       const encoder = device.createCommandEncoder({label: 'material graphs'}), buffers = [];
-      for (const [e, key] of changed) {
-        const pipeline = this.pipeline(e.program), job = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}); buffers.push(job);
+      for (const [e, key, {main: pipeline, stages}] of changed) {
+        const job = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}); buffers.push(job);
         device.queue.writeBuffer(job, 0, new Uint32Array([e.slot, e.layer, e.row, e.stateCode]));
-        this.runStages(encoder, e.program, e.row, pool, buffers);
+        this.runStages(encoder, e.program, e.row, pool, buffers, stages);
         const pass = encoder.beginComputePass({label: 'material graph'}); pass.setPipeline(pipeline);
         pass.setBindGroup(0, device.createBindGroup({layout: pipeline.getBindGroupLayout(0), entries: [{binding: 15, resource: {buffer: this.programBuffer}}]}));
         pass.setBindGroup(1, device.createBindGroup({layout: pipeline.getBindGroupLayout(1), entries: [
@@ -158,10 +185,46 @@ export class MaterialCache {
         this.keys.set(e.layer, key); this.generations++;
       }
       device.queue.submit([encoder.finish()]); buffers.forEach(b => b.destroy());
+      const generated = changed.map(([e]) => e);
+      device.popErrorScope().then(error => {
+        if (!error) return;
+        for (const e of generated) {
+          this.keys.delete(e.layer);
+          for (const entry of this.passPipelines(e.program, materials).entries) { entry.failed ??= error; entry.materials = materials; }
+          this.failed(e, error);
+        }
+      }, () => {});
     }
     this.reduce(pool, changed.map(([e]) => e.layer));
     if (changed.length) this.readMeans();
+    this.wait(waiting); this.blank = blank;
     this.synced = materials;   // only once the whole sync ran: a throw leaves the next call to try again
+  }
+  // The compiles the current materials wait for. Each that ends clears `synced`, so the next sync generates what it can now, and tells the
+  // renderer (onmaterials), which draws again; it is told as well when the waiting starts, so the export can say why it waits.
+  wait(entries) {
+    const before = this.waiting.size;
+    this.waiting = entries;
+    for (const e of entries) e.promise.then(() => {
+      if (!this.waiting.has(e)) return;
+      this.waiting.delete(e); this.synced = null;
+      queueMicrotask(() => this.renderer.onmaterials?.(true));
+    });
+    if (!before && entries.size) queueMicrotask(() => this.renderer.onmaterials?.(false));
+  }
+  // Whether a layer the current materials need is still compiling; with `blank`, only one that holds no picture yet (a new layer, or every
+  // layer after the cache was laid out again), which nothing may draw from.
+  compiling(blank = false) { return blank ? [...this.blank ?? []].some(e => this.waiting.has(e)) : this.waiting.size > 0; }
+  // Resolves when the compiles the current materials waited for have ended (finished or failed).
+  compiled() { return Promise.allSettled([...this.waiting].map(e => e.promise)); }
+  // A pipeline that failed to compile: the layer keeps what it holds, the error names the material, and its compile is tried again at the
+  // next change of the materials (compile).
+  failed(e, error) {
+    const said = `${e.material?.name || 'slot ' + e.slot}: ${error?.message || error}`;
+    if (this.lastFailure === said) return;
+    this.lastFailure = said;
+    console.error(error);
+    queueMicrotask(() => this.renderer.onerror?.(`The material ${JSON.stringify(e.material?.name || 'in slot ' + e.slot)} could not be drawn on this GPU, so it keeps its last picture: ${error?.message || error}`));
   }
   // The mean color each slot's material is drawn in, read back after a regeneration (the renderer's drawnMeans; the editor's color pickers
   // show it). Asynchronous: a read overtaken by a newer one is dropped.
@@ -219,14 +282,17 @@ export class MaterialCache {
   // histogram. The same node functions run; only where their values are written differs.
   async thumbnails(material, period) {
     const r = this.renderer, device = r.device, program = compileMaterial(material), count = program.instructions.length;
+    const main = this.pipeline(program, true), staged = stagePlan(program).stages.length ? this.stagePipelines(program) : null;
+    await Promise.all([main.promise, staged?.promise]);
+    if (main.failed || staged?.failed) throw main.failed || staged.failed;
     const data = new ArrayBuffer(PROGRAM_BYTES); writeProgram(new DataView(data), 0, program);
-    device.queue.writeBuffer(this.programBuffer, SCRATCH_ROW * PROGRAM_BYTES, data);
+    device.queue.writeBuffer(this.programBuffer, SCRATCH_ROW * PROGRAM_BYTES, data);   // after the wait: the scratch row is this run's until its submit
     this.thumbTexture ??= device.createTexture({label: 'material node thumbnails', size: [THUMB, THUMB, MAX_NODES], format: 'rgba8unorm', usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC});
-    const pipeline = this.pipeline(program, true), job = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
+    const pipeline = main.ready, job = device.createBuffer({size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST});
     device.queue.writeBuffer(job, 0, new Uint32Array([period, THUMB_STRIDE, SCRATCH_ROW, 0]));
     const bytes = THUMB * THUMB * 4, buffer = device.createBuffer({size: bytes * count, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ});
     const encoder = device.createCommandEncoder({label: 'material node thumbnails'}), stageJobs = [];
-    this.runStages(encoder, program, SCRATCH_ROW, period, stageJobs);
+    this.runStages(encoder, program, SCRATCH_ROW, period, stageJobs, staged?.ready);
     const pass = encoder.beginComputePass();
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, device.createBindGroup({layout: pipeline.getBindGroupLayout(0), entries: [{binding: 15, resource: {buffer: this.programBuffer}}]}));

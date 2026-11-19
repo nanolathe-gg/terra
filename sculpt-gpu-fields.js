@@ -334,14 +334,18 @@ export const smoothRadius = (radius, {spacing, refSpacing = spacing}) => Math.ma
 // context by its settings and the world's shape defaults (the params of a node with none). A height image is prepared each time: its samples
 // are its own arrays and the preparation only points at them.
 export const nodeContextKey = c => JSON.stringify(c) + '|' + JSON.stringify(c.params({params: {}}));
+// `unchanged`: the host knows the node is as it was at its last preparation here (createPagedFields: no edit has reached it since), so a kept
+// preparation is used without comparing the node's text.
 export function createNodePreparer(limit = 4) {
   const kept = new Map();   // lattice and context -> WeakMap(node -> {text, prepared})
-  return (n, geom, c, contextKey = nodeContextKey(c)) => {
+  return (n, geom, c, contextKey = nodeContextKey(c), unchanged = false) => {
     if (n.kind === 'heights') return prepareNode(n, geom, c);
     const key = [geom.grid, geom.spacing, geom.refSpacing ?? '', contextKey].join('|');
     let nodes = kept.get(key);
     if (!nodes) { if (kept.size >= limit) kept.delete(kept.keys().next().value); kept.set(key, nodes = new WeakMap()); }
-    const text = JSON.stringify(n), hit = nodes.get(n);
+    const hit = nodes.get(n);
+    if (hit && unchanged) return hit.prepared;
+    const text = JSON.stringify(n);
     if (hit?.text === text) return hit.prepared;
     const prepared = prepareNode(n, geom, c);
     nodes.set(n, {text, prepared});
@@ -696,8 +700,12 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
     const add = (entry, region, extra = {}) => passes.push({entry, region, u: {...base, rx0: region.x0, ry0: region.y0, rx1: region.x1, ry1: region.y1, ...extra}});
     if (!readOnly) {
     // Phase 1: prepare every node (its segment and mask-write lists).
+    // A page evaluation packs only the nodes that can write its buffer: every pass of a stamp stays inside its region, and of a coast node
+    // inside its coast box (the footprint grown by its reach), so a node whose box misses the page writes nothing there and adds nothing to
+    // the rectangles the earlier nodes cover (plan below). Ground and height images are kept as they are.
+    const meetsTarget = p => !target || p.skip || p.op === 'ground' || p.op === 'heights' || !p.region || Boolean(intersect(whole, p.coast ? p.coast.box : p.region));
     const prepared = [];
-    for (const n of list) { const p0 = (prepare || prepareNode)(n, geom, ctx); if (p0.multi) prepared.push(...p0.multi); else prepared.push(p0); }
+    for (const n of list) { const p0 = (prepare || prepareNode)(n, geom, ctx); for (const p of p0.multi || [p0]) if (meetsTarget(p)) prepared.push(p); }
     if (target) { const need = shapeScratchBytes(target.pw * target.ph, prepared); if (!pageScratch || pageScratch.size < need) { pageScratch?.destroy(); pageScratch = buf(need, ST, 'page scratch'); } }
     else scratch(shapeScratchBytes(cells, prepared)/4);
     for (const p of prepared) {
@@ -1282,8 +1290,31 @@ export function createPagedFields(opts) {
     return engine = await createShapeEngine({device: d, grid: worldGrid, spacing, baseHeight, sea: c.sea, minH: c.minH, maxH: c.maxH, pages: true});
   })().catch(err => { enginePromise = null; throw err; });   // a failed start is tried again on the next call
   // One preparation of each node for a revision; a node the revision did not change keeps the last one's (createNodePreparer).
+  // Which nodes a revision may have changed follows from its rectangle: the host edits a node in place and then calls changed() with a
+  // rectangle that holds the node's reach before and after (nodeBounds in sculpt.js, which the cells it evaluates again depend on as well), so
+  // the node's last preparation, whose stamp region holds its points, meets it. `settled` holds the nodes no rectangle has reached since they
+  // were last prepared; their kept preparations are used as they are, and only the others are compared by their text. A whole change (a load,
+  // undo or redo, a reorder, the world's defaults) settles none. A node whose last preparation drew nothing (hidden, no points) or has no
+  // region (the ground node) is always compared.
   const keptPrepare = createNodePreparer();
-  const prepare = (n, geom, c) => { let p = prep.get(n); if (!p) { p = keptPrepare(n, geom, c, prepContext ??= nodeContextKey(c)); prep.set(n, p); } return p; };
+  let settled = new WeakSet(), lastPrep = new WeakMap(), settledContext = null;
+  const prepare = (n, geom, c) => {
+    let p = prep.get(n);
+    if (!p) {
+      prepContext ??= nodeContextKey(c);
+      if (prepContext !== settledContext) { settled = new WeakSet(); settledContext = prepContext; }   // another context: its kept preparations may be older
+      p = keptPrepare(n, geom, c, prepContext, settled.has(n)); prep.set(n, p); settled.add(n); lastPrep.set(n, p);
+    }
+    return p;
+  };
+  const unsettle = r => {
+    if (!r) { settled = new WeakSet(); return; }
+    for (const n of nodes()) {
+      if (!settled.has(n)) continue;
+      const p = lastPrep.get(n);
+      if (!p || (p.multi || [p]).some(q => q.skip || !q.region || hits(q.coast ? q.coast.box : q.region, r))) settled.delete(n);
+    }
+  };
 
   // ---- resources
   const shapeBytes = () => { let n = 0; for (const pg of pagesMap.values()) if (pg.target) n += pg.target.bytes; return n; };
@@ -1395,7 +1426,7 @@ export function createPagedFields(opts) {
     for (const k of [...cpuWanted]) {
       if (gesture() || foregroundPending() || opts.prepareBackground?.(SIDE*SIDE*8)===false) { cpuTimer = setTimeout(pumpCpu, 100); return; }
       cpuWanted.delete(k); const pg = pagesMap.get(k); if (!pg) continue;
-      pg.pins++; cpuReading++;   // not evicted while its buffers are read
+      pg.pins++; cpuReading++; pg.cpuBusy = true;   // not evicted while its buffers are read
       try {
         if (pg.target) {
           current(pg);
@@ -1406,9 +1437,10 @@ export function createPagedFields(opts) {
           const w = pg.weather, raw = await readBuffer(device(), w.weather, 0, 2 * CORE * CORE * 4);
           if (pg.weather === w) pg.cpuW = {base: new Float32Array(raw, 0, CORE * CORE), e: new Float32Array(raw, CORE * CORE * 4, CORE * CORE),source:w};
         }
-      } catch (err) { error = err; fail(err); } finally { unpin(pg); cpuReading--; }
+      } catch (err) { error = err; fail(err); } finally { unpin(pg); cpuReading--; pg.cpuBusy = false; }
     }
     trim();
+    opts.cpuCopied?.();   // the overlays that wait for a page's heights (heightKnown) draw again
   }
 
   // ---- the coarse lattice
@@ -1498,6 +1530,7 @@ export function createPagedFields(opts) {
       pg.weatherMs = performance.now() - t0; weatherRuns++; weatherMsTotal += pg.weatherMs;
       touch(pg); wantCpu(pg);
     } catch (err) {
+      if (timeKey === key && pg.staleSeq === seq) pg.weatherFailed = seq;   // heightKnown stops waiting for this result: the page's weather stays as it was
       if(err.name!=='AbortError'||timeKey===key&&pg.staleSeq===seq)throw err;
     } finally {
       uniforms.forEach(b => b.destroy());
@@ -1659,6 +1692,7 @@ export function createPagedFields(opts) {
   // ---- changes
   function changed(rect = null, keepPrefix = 0) {
     revision++; prep = new Map(); prepContext = null;
+    unsettle(rect ? clip(rect) : null);
     check();
     const cr = rect ? clip(rect) : null, r = cr ? clip({x0: cr.x0 - 6, y0: cr.y0 - 6, x1: cr.x1 + 6, y1: cr.y1 + 6}) : null, event = {revision, rect: cr ? worldRect(cr) : null};
     const announce = event.rect;
@@ -1688,8 +1722,10 @@ export function createPagedFields(opts) {
   // (pumpWeather), not when a tile first asks for its page.
   function settle() {
     const out = pendingStale; pendingStale = null;
-    for (const pg of pagesMap.values()) if (pg.target && !pg.cpu) wantCpu(pg);
-    for (const pg of pagesMap.values()) if (pg.target && pg.cpuRev !== pg.rev) wantCpu(pg);
+    // The copies trim() keeps: the CPU_PAGES resident pages used last (the order it lets them go in). A copy asked for past those was read
+    // and dropped again at every settle.
+    const kept = [...pagesMap.values()].filter(pg => pg.target).sort((a, b) => b.used - a.used).slice(0, CPU_PAGES);
+    for (const pg of kept) if (!pg.cpu || pg.cpuRev !== pg.rev) wantCpu(pg);
     if (time) pumpWeather();
     return out;
   }
@@ -1740,9 +1776,17 @@ export function createPagedFields(opts) {
     // pass's current result. The overlays hold a point's last height until it is (sculpt.js heightKnown).
     heightKnown: (x, y, weathered = true) => {
       const ix = clamp(Math.round(x / spacing), 0, worldGrid - 1), iy = clamp(Math.round(y / spacing), 0, worldGrid - 1), pg = pageAt(ix, iy);
-      if (pg?.target) { if (!pg.cpu || pg.cpuRev !== pg.rev) return false; }
-      else if (!coarseHave[Math.round(iy / COARSE) * coarseW + Math.round(ix / COARSE)] || (pg && coarseQueue.has(pg.key))) return false;
-      return !weathered || !time || !pg?.weather || (!pg.stale && pg.cpuW?.source === pg.weather);
+      if (pg?.target && pg.cpu && pg.cpuRev === pg.rev) return !weathered || !time || !pg.weather || (!pg.stale && pg.cpuW?.source === pg.weather) || pg.weatherFailed === pg.staleSeq;
+      if (pg?.target) {
+        if (pg.cpuRev !== pg.rev || pg.cpuBusy) return false;   // a new target or an edit: its copy is on its way (ensureShape, changed)
+        // trim() let the copy go and nothing has changed since. The copy is asked for again once a revision (a page in view, touched so the
+        // copy is not the first trim lets go); until it lands the answer waits, and once it has been asked for, the page answers as one with no
+        // target does, from the coarse lattice, which sample reads too. More pages in view than CPU_PAGES then read once each, not in turn forever.
+        if (pg.cpuAsked !== pg.rev) { pg.cpuAsked = pg.rev; touch(pg); wantCpu(pg); return false; }
+        if (cpuWanted.has(pg.key)) return false;
+        return coarseHave[Math.round(iy / COARSE) * coarseW + Math.round(ix / COARSE)] && !coarseQueue.has(pg.key) ? 'coarse' : false;   // a feature keeps a lift it has (sculpt-features.js anchor)
+      }
+      return Boolean(coarseHave[Math.round(iy / COARSE) * coarseW + Math.round(ix / COARSE)]) && !(pg && coarseQueue.has(pg.key));
     },
     changed, refit: () => { const before = RING; check(); if (RING !== before) changed(); }, ready: () => Promise.resolve(), pending: () => false,
     readAsync: async (request, o) => readRect(toCells(request), o),

@@ -500,3 +500,17 @@ test('Use as world ground on a layer’s copy: the layer takes a fresh copy of i
   let full = list; while (full.length < MATERIAL_SLOTS - 1) full = addMaterial(full, LIBRARY['green-ground'], 'Filler').materials;
   assert.throws(() => assignMaterial(full, snow.slot, 'worldGround'), /surface layers/);
 });
+
+// A legal graph could cost over a thousand node evaluations a pixel (a Light and a Cavity two deep over a Scatter chain: a 273 ms pass at 512 px
+// on an Apple M3 Pro); copyMaterial refuses one past MAX_COST, which leaves every library material well inside.
+test('a material too costly to draw is refused, and every library material is within the bound', async () => {
+  const {materialCost, MAX_COST} = await import('../sculpt-materials.js');
+  const nodes = [], dots = {spacing: 2, radius: 16, coverage: 1, jitter: 1.8, sizeVariation: 1, elongation: 1};
+  let prev = null;
+  for (let i = 0; i < 15; i++) { nodes.push({id: 's' + i, type: 'scatter', params: {...dots, seed: i}}, {id: 'c' + i, type: 'combine', kind: 'add', in: {a: prev ?? 's' + i, b: 's' + i}}); prev = 'c' + i; }
+  nodes.push({id: 'L1', type: 'light', in: {in: prev}}, {id: 'C1', type: 'combine', in: {a: 'L1', b: prev}}, {id: 'L2', type: 'light', in: {in: 'C1'}});
+  nodes.push({id: 'L3', type: 'cavity', params: {radius: 8}, in: {in: prev}}, {id: 'C2', type: 'combine', in: {a: 'L3', b: prev}}, {id: 'L4', type: 'cavity', params: {radius: 8}, in: {in: 'C2'}});
+  nodes.push({id: 'F', type: 'combine', in: {a: 'L2', b: 'L4'}}, {id: 'G', type: 'gradient', in: {in: 'F'}}, {id: 'out', type: 'output', in: {color: 'G', height: 'F'}});
+  assert.throws(() => copyMaterial({nodes, palette: [], controls: []}), /too costly to draw: each pixel would evaluate 1495 nodes/);
+  for (const [key, m] of Object.entries(LIBRARY)) assert.ok(materialCost(copyMaterial(m).nodes) <= MAX_COST / 4, `${key} costs ${materialCost(copyMaterial(m).nodes)}`);
+});
