@@ -33,6 +33,11 @@ jobs:
         with:
           go-version-file: go.mod
       - run: sh repro/check.sh quick
+      # The deploy job is the only one that compiles the site packages, and it is gated off
+      # while the repository is private; the check job compiles and tests them itself
+      # (CPU only: no GPU, no browser, no network).
+      - run: go build ./...
+      - run: go test ./internal/...
       # The pre-push hook's history check, here too: a push without the hook, or a pull request, cannot bring generated preview PNGs or
       # browser output (smoke-out/, Chrome profiles) into the history.
       - name: Check the history for generated files
