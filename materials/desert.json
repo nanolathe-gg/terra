@@ -1087,7 +1087,7 @@
   },
   "export": {
    "planet": "Desert",
-   "defaultSeaLevel": 0,
+   "defaultSeaLevel": 64,
    "climate": {
     "minWind": 400,
     "maxWind": 3000,
