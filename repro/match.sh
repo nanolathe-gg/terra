@@ -14,8 +14,9 @@
 # anything.
 # The highest-numbered window (repro/scenes/<world>-<n>.json) is held out: trials never render it, so a change that only fits the
 # windows it was tuned on shows when --holdout renders that one. Retail pixels stay under <out>, outside the checkout.
-# To save disk, pictures older than the last KEEP_LAST trials are deleted (scores, findings and the diff stay); trial-000, holdout-000
-# and trials marked to keep (--keep, --keep-trial) keep theirs. Mark a trial while its pictures are still there.
+# To save disk, scene pictures and triptychs older than the last KEEP_LAST trials are deleted; scores, findings, the diff and the
+# class crops (classes/crops: about 4 MB for a trial of all windows, against 54 MB of scene pictures) always stay. trial-000,
+# holdout-000 and trials marked to keep (--keep, --keep-trial) keep everything. Mark a trial while its scene pictures are still there.
 here=$(cd "$(dirname "$0")" && pwd); repo=$(cd "$here/.." && pwd)
 KEEP_LAST=8
 R=${R:-/tmp/nanolathe-map-editor}
@@ -63,7 +64,7 @@ if [ -n "$keeptrial" ]; then
   [ -d "$out/$keeptrial" ] || { echo "match.sh: no trial $out/$keeptrial" >&2; exit 2; }
   : > "$out/$keeptrial/keep"
   if [ -z "$(find "$out/$keeptrial" -name 'ours.png' -print -quit 2>/dev/null)" ]; then
-    echo "match.sh: $keeptrial is marked, but its pictures were already deleted (only the last $KEEP_LAST trials keep theirs). Cite its numbers, not its crops; to see it again, re-apply its candidate.diff and run a new trial." >&2; exit 1
+    echo "match.sh: $keeptrial is marked, but its scene pictures were already deleted (only the last $KEEP_LAST trials keep theirs). Its class crops are still in classes/crops; to see the whole scene again, re-apply its candidate.diff and run a new trial." >&2; exit 1
   fi
   echo "match.sh: $keeptrial keeps its pictures"; exit 0
 fi
@@ -122,11 +123,12 @@ else
   next; trial "$dir" "$scenes" "$base" "$query" $kind "$note" || exit 1
 fi
 
-# Prune pictures of all but the last KEEP_LAST trials of this kind (keeping the base and marked trials).
+# Prune scene pictures and triptychs of all but the last KEEP_LAST trials of this kind (keeping the base and marked trials).
+# The class crops stay for every trial: they are small, and later rounds read them.
 total=$(ls -d "$out/$prefix"-[0-9][0-9][0-9] 2>/dev/null | wc -l | tr -d ' ')
 [ "$total" -gt $KEEP_LAST ] && ls -d "$out/$prefix"-[0-9][0-9][0-9] | sort | head -n $((total - KEEP_LAST)) | while read -r old; do
   [ "$old" = "$base" ] || [ -e "$old/keep" ] || [ ! -d "$old/scenes" ] && continue
-  find "$old/scenes" "$old/classes/crops" "$old/triptych" -name '*.png' -type f -delete 2>/dev/null
+  find "$old/scenes" "$old/triptych" -name '*.png' -type f -delete 2>/dev/null
   find "$old/scenes" -name 'ours-heights.json' -type f -delete 2>/dev/null
 done
 exit 0
