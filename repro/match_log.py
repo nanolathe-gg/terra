@@ -52,7 +52,7 @@ CLEAR = .8   # a cleared finding's gap is at most this, in threshold units (1 is
 # The kinds of lever, by the part of the world data a trial changed (`levers`).
 KINDS = [('world control', ('world.knobDefaults', 'world.engineDefaults', 'query')), ('rock type', ('world.rock',)),
          ('surface layer', ('world.surface',)), ('material', ('world.materials', 'textures:')), ('shape preset', ('world.shapes', 'world.tools')),
-         ('map (scene)', ('scene:',)), ('other world data', ('',))]
+         ('contour lines', ('world.column',)), ('map (scene)', ('scene:',)), ('other world data', ('',))]
 
 
 MAP_QUERY = ('query:undulation',)   # the map's own ground relief (undulation, undulationScale, ...): a scene's query keeps it
@@ -223,14 +223,21 @@ def show(a):
     print(f"{'trial':12s} {'kind':8s} {'shape':>5s} {'look':>5s}  " + ' '.join(f'{n[-9:]:>9s}' for n in names) + '  note')
     for e in es[-a.last:] if a.last else es:
         per = ' '.join(f"{fmt(e['windows'][n]['look']) if n in e['windows'] else '-':>9s}" for n in names)
-        print(f"{e['trial']:12s} {e['kind']:8s} {fmt(e['shape']):>5s} {fmt(e['look']):>5s}  {per}  {e['note']}{' [' + e['query'] + ']' if e['query'] else ''}")
-    print('(per-window columns are the look score, - where a trial did not render that window; lower is closer to retail)')
+        # A trial of some windows (--window) has no mean comparable with a full trial's: its score is in its window's column.
+        some = e['kind'] != 'holdout' and set(e['windows']) != set(names)
+        shape, look = ('-', '-') if some else (fmt(e['shape']), fmt(e['look']))
+        print(f"{e['trial']:12s} {e['kind']:8s} {shape:>5s} {look:>5s}  {per}  {e['note']}{' [' + e['query'] + ']' if e['query'] else ''}")
+    print('(per-window columns are the look score, - where a trial did not render that window; lower is closer to retail. The mean'
+          ' columns are - for a trial of some windows, and a holdout row\'s are its held-out window\'s)')
     counts = {}
     for e in es:
         for k in {kind_of(lever) for lever in e.get('levers', [])}:
             counts[k] = counts.get(k, 0) + 1
     if counts:
         print('trials per kind of lever (a trial counts once per kind it moved): ' + ', '.join(f'{k} {counts[k]}' for k, _ in KINDS if k in counts))
+    untried = [k for k, _ in KINDS if k not in counts and k != 'other world data']
+    if untried:
+        print(f"no trial yet moved: {', '.join(untried)}. A \"cannot\" in the report needs each kind tried or said why it cannot reach the gap (README.md)")
 
 
 def main():

@@ -874,7 +874,9 @@
 
     "escarpment",
 
-    "ridgestone"
+    "ridgestone",
+
+    "ridgeblock"
 
    ],
 
@@ -961,6 +963,32 @@
       "faceRock": 1,
       "rockFaceFrom": 0.2
      }
+    },
+
+    "ridgeblock": {
+     "label": "Blocky ridge",
+     "material": "green-darkrock",
+     "knobs": {
+      "faceStrata": 0,
+      "faceBlockSize": 20,
+      "faceBed": 6,
+      "faceLedge": 1.4,
+      "faceJoint": 1.9,
+      "faceWear": 0.1,
+      "faceCrease": 0.3,
+      "faceScratch": 0.2,
+      "faceGrass": 0.28,
+      "faceTone": 0.4,
+      "faceShade": 0.85,
+      "faceWet": 0.5,
+      "faceRindTone": -0.1,
+      "rockFace": 2.6,
+      "faceRock": 1,
+      "rockFaceFrom": 0.2,
+      "crackSeverity": 1,
+      "crackMajor": 0.6,
+      "debrisAmount": 0
+     }
     }
 
    }
@@ -1026,7 +1054,7 @@
    "sections": [
     {"start": 0, "beds": [[4, 0.9, 0], [7, 0.2, 1], [3, 0.7, 0], [8, 0.15, 1], [5, 1, 0], [7, 0.3, 1], [4, 0.6, 0], [9, 0.2, 1]]}
    ],
-   "bands": [1.3, 0.84],
+   "bands": [1.3, 0.65],
    "wander": {"value": 5}
   },
   "export": {

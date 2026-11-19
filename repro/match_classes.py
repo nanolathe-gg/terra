@@ -7,11 +7,16 @@ crop.json, ours.png and ours-heights.json. Each side is classed by its own heigh
 picture is drawn (a cell shows at screenY = worldY - (height - plain)/2, retail_crop.py), so a class mask lies on the pixels that
 class actually drew. The classes:
 
-  water   below the sea;
+  deep    below the sea by SHELF_DEPTH or more (open water);
+  shelf   below the sea by less than SHELF_DEPTH (the light shallow shelf a coast or reef carries);
   shore   dry, within SHORE_PX px of water;
-  level   dry, slope under .08 (height units per px, on 16 px cells as stats.py measures);
+  flat    dry, slope under .03 (height units per px, on 16 px cells as stats.py measures): plains and level tops;
+  gentle  dry, slope .03 to .08: grades a plain rises on, where contour hatching starts;
   slope   dry, slope .08 to .5;
   steep   dry, slope .5 and over (cliffs, faces).
+
+Water and level ground are split because one number over both hides which part a change moved: an edge count that rose on the deep
+water could pass for a textured shelf, and lines across a flat plain for a hatched grade.
 
 Both sides are classed from 16 px height cells, so a class boundary can sit up to half a cell from where the picture changes: each
 mask loses EDGE_PX px (half a cell) at its border, so a number describes the class, not the seam between two. A retail coast is
@@ -40,10 +45,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from stats import (DISK5, EDGE_THRESH, FPS, THIN_THRESH, WORLD_BASE, find_windows, luma,  # noqa: E402
                    resample_heights, srgb_to_lab)
 
-CLASSES = ['water', 'shore', 'level', 'slope', 'steep']
+CLASSES = ['deep', 'shelf', 'shore', 'flat', 'gentle', 'slope', 'steep']
+WATER = ('deep', 'shelf')   # the classes below the sea, first in CLASSES
 SHORE_PX = 40
 EDGE_PX = 8   # half a 16 px height cell
-LEVEL, STEEP = .08, .5
+FLAT, LEVEL, STEEP = .03, .08, .5
+SHELF_DEPTH = 32   # height units below the sea: retail Green's shelf is light to about 25 and dark from 40, and ours follows it
 # A finding is reported when a gap passes its threshold: luma in 0-255 units, color as CIELAB distance of the class means, share
 # in points of the window, and the texture numbers as a ratio ours / retail outside [1/r, r].
 THRESHOLDS = {'share': .05, 'luma': 8.0, 'color': 6.0, 'spread': 1.3, 'band': 1.3, 'edges': 1.5, 'lines': 1.6}
@@ -60,11 +67,14 @@ def cell_classes(h, spacing):
     gy, gx = np.gradient(h, spacing, spacing)
     slope = np.hypot(gx, gy)
     near = ndimage.distance_transform_edt(dry) * spacing <= SHORE_PX
-    out = np.full(h.shape, 2, np.uint8)
-    out[slope >= LEVEL] = 3
-    out[slope >= STEEP] = 4
-    out[dry & near & (slope < STEEP)] = 1
-    out[~dry] = 0
+    c = CLASSES.index
+    out = np.full(h.shape, c('flat'), np.uint8)
+    out[slope >= FLAT] = c('gentle')
+    out[slope >= LEVEL] = c('slope')
+    out[slope >= STEEP] = c('steep')
+    out[dry & near & (slope < STEEP)] = c('shore')
+    out[~dry] = c('shelf')
+    out[h <= -SHELF_DEPTH] = c('deep')
     return out
 
 
@@ -100,23 +110,28 @@ def unmixed(rgb, ms, screen):
     """Near a waterline only (COAST_PX of it, by the side's own heights), drop from each dry class the pixels whose color is nearer
     this side's water than that class's own, and from the water those nearer the land: a coast drawn off its height cells (retail's
     tiles) puts water pixels inside a shore mask. Medians of the side's own classes, so it needs no world's colors; away from the
-    coast nothing is touched (gray rock on a snow world is not water). A side with too little water or land is left alone."""
-    water = ms['water']
-    dry = np.zeros_like(water)
-    for name in CLASSES[1:]:
-        dry |= ms[name]
+    coast nothing is touched (gray rock on a snow world is not water). A side with too little water or land is left alone. The
+    water's own color is the nearer of its classes' medians (a shelf and the deep water differ)."""
+    water, dry = np.zeros_like(ms['deep']), np.zeros_like(ms['deep'])
+    for name in CLASSES:
+        if name in WATER:
+            water |= ms[name]
+        else:
+            dry |= ms[name]
     if water.sum() < MIN_PIXELS or dry.sum() < MIN_PIXELS:
         return ms
-    near_water = ndimage.distance_transform_edt(screen != 0) <= COAST_PX
-    near_land = ndimage.distance_transform_edt(screen == 0) <= COAST_PX
+    wet = np.isin(screen, [CLASSES.index(n) for n in WATER])
+    near_water = ndimage.distance_transform_edt(~wet) <= COAST_PX
+    near_land = ndimage.distance_transform_edt(wet) <= COAST_PX
     px = rgb.astype(np.float64)
     dist = lambda c: np.linalg.norm(px - c, axis=2)
-    to_water = dist(np.median(px[water], axis=0))
+    own = {n: dist(np.median(px[ms[n]], axis=0)) for n in CLASSES if ms[n].sum() >= MIN_PIXELS}
+    to_water = np.min([own[n] for n in WATER if n in own] or [dist(np.median(px[water], axis=0))], axis=0)
+    to_land = dist(np.median(px[dry], axis=0))
     out = dict(ms)
-    for name in CLASSES[1:]:
-        if ms[name].sum() >= MIN_PIXELS:
-            out[name] = ms[name] & ~(near_water & (to_water < dist(np.median(px[ms[name]], axis=0))))
-    out['water'] = water & ~(near_land & (dist(np.median(px[dry], axis=0)) < to_water))
+    for name in CLASSES:
+        if name in own:
+            out[name] = ms[name] & ~((near_water & (to_water < own[name])) if name not in WATER else (near_land & (to_land < own[name])))
     return out
 
 
@@ -319,7 +334,7 @@ def main(argv=None):
     want = [w for w in a.worlds.split(',') if w]
     all_res = {}
     md = ['# Per-class gaps: retail vs ours', '',
-          'Each side is classed by its own heights (water, shore, level, slope, steep). `r` is retail, `o` ours.', '']
+          'Each side is classed by its own heights (' + ', '.join(CLASSES) + '). `r` is retail, `o` ours.', '']
     for w, dirs in worlds.items():
         if want and w not in want:
             continue
