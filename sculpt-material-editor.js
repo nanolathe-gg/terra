@@ -2,7 +2,7 @@
 // Focus graph covers the two previews while settings stay in view. Every element is in index.html; edits use the map's own undo and save.
 import {NODES, NODE_TYPES, accepts, snippetNodes, DITHER, LIBRARY, MAX_NODES, MAX_STOPS, MAX_PALETTE, MAX_CONTROLS, MAX_FRAMES, MATERIAL_SLOTS, THUMB,
   nodeParams, nodeKinds, nodeTypes, makeNode, copyMaterial, blankMaterial, reseedMaterial, controlSpec, controlRange, materialRenderKey, materialTint, paletteRgb, materialColor, recolorMaterial,
-  addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText, MAP_ROLES, roleOf, roleName, materialStatesApply} from './sculpt-materials.js';
+  addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText, MAP_ROLES, roleOf, roleName, materialStatesApply, gameArtColor} from './sculpt-materials.js';
 import {mountMaterialGraph, CARD, cardHeight} from './sculpt-material-graph.js';
 import {MaterialPreview, TILE, TERRAIN, SWATCH} from './sculpt-material-preview.js';
 import gamePalette from './materials/palette.json' with {type: 'json'};
@@ -316,10 +316,11 @@ export function mountMaterialEditor(host) {
     ctx.fillStyle = '#e8d38a'; for (const key of ['low', 'high']) ctx.fillRect(Math.max(0, Math.min(w - 2, n.params[key] * w)), 0, 2, h);
   }
 
-  // Palette pane: the game's 256 colors; a click puts one in or out of the material's set.
+  // Palette pane: the game's 256 colors; a click puts one in or out of the material's set. A strike marks
+  // the Windows system slots the game's map art never draws with; adding one is refused (it would be re-reduced).
   function drawPaletteGrid(canvas, size, chosen) {
     const ctx = canvas.getContext('2d'), columns = canvas.width / size;
-    gamePalette.indexed.forEach((rgb, i) => { const x = (i % columns) * size, y = Math.floor(i / columns) * size; ctx.fillStyle = hex(rgb); ctx.fillRect(x, y, size, size); if (chosen && !chosen.has(i)) { ctx.fillStyle = '#10171acc'; ctx.fillRect(x, y, size, size); ctx.fillStyle = hex(rgb); ctx.fillRect(x + size * .3, y + size * .3, size * .4, size * .4); } });
+    gamePalette.indexed.forEach((rgb, i) => { const x = (i % columns) * size, y = Math.floor(i / columns) * size; ctx.fillStyle = hex(rgb); ctx.fillRect(x, y, size, size); if (!gameArtColor(i)) { ctx.strokeStyle = '#000000b0'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x + 1, y + size - 1); ctx.lineTo(x + size - 1, y + 1); ctx.stroke(); } if (chosen && !chosen.has(i)) { ctx.fillStyle = '#10171acc'; ctx.fillRect(x, y, size, size); ctx.fillStyle = hex(rgb); ctx.fillRect(x + size * .3, y + size * .3, size * .4, size * .4); } });
     if (chosen) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; for (const i of chosen) ctx.strokeRect((i % columns) * size + 1, Math.floor(i / columns) * size + 1, size - 2, size - 2); }
   }
   function refreshPalette(m) {
@@ -328,13 +329,13 @@ export function mountMaterialEditor(host) {
     $('palette-clear').disabled = !m.palette.length;
     DITHER.forEach(p => { setScrub('dither-' + p.key, p, m.dither[p.key]); $('dither-' + p.key).disabled = m.palette.length < 2 || (p.key !== 'amount' && m.dither.amount <= 0); });
   }
-  $('palette-grid').onclick = attempt(e => { const index = cellAt($('palette-grid'), e, CELL); if (index < 0 || index > 255) return; change(m => { if (m.palette.includes(index)) m.palette = m.palette.filter(i => i !== index); else { if (m.palette.length >= MAX_PALETTE) throw Error(`A material palette holds at most ${MAX_PALETTE} colors.`); m.palette.push(index); } }); });
+  $('palette-grid').onclick = attempt(e => { const index = cellAt($('palette-grid'), e, CELL); if (index < 0 || index > 255) return; change(m => { if (m.palette.includes(index)) m.palette = m.palette.filter(i => i !== index); else { if (!gameArtColor(index)) throw Error(`Slot ${index} is a Windows system color the game's map art does not draw with; the material's pixels would be re-reduced to another entry anyway.`); if (m.palette.length >= MAX_PALETTE) throw Error(`A material palette holds at most ${MAX_PALETTE} colors.`); m.palette.push(index); } }); });
   $('palette-clear').onclick = attempt(() => change(m => { m.palette = []; }));
   // The game colors nearest what the material's color output actually makes, the most used first.
   $('palette-auto').onclick = attempt(() => {
     const m = material(), out = m.nodes.find(n => n.type === 'output').in.color, pixels = thumbPixels.get(out);
     if (!pixels) throw Error('Connect a color to the Material node first.');
-    const counts = new Map(), nearest = rgb => { let best = 0, d = Infinity; gamePalette.indexed.forEach((c, i) => { const e = (c[0] - rgb[0]) ** 2 + (c[1] - rgb[1]) ** 2 + (c[2] - rgb[2]) ** 2; if (e < d) { d = e; best = i; } }); return best; };
+    const counts = new Map(), nearest = rgb => { let best = 0, d = Infinity; gamePalette.indexed.forEach((c, i) => { if (!gameArtColor(i)) return; const e = (c[0] - rgb[0]) ** 2 + (c[1] - rgb[1]) ** 2 + (c[2] - rgb[2]) ** 2; if (e < d) { d = e; best = i; } }); return best; };
     for (let i = 0; i < pixels.length; i += 16) for (const gain of [.88, 1, 1.12]) { const index = nearest([pixels[i] * gain, pixels[i + 1] * gain, pixels[i + 2] * gain]); counts.set(index, (counts.get(index) ?? 0) + 1); }
     change(o => { o.palette = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 24).map(([i]) => i); if (o.dither.amount <= 0) o.dither.amount = 1; });
   });
@@ -404,7 +405,7 @@ export function mountMaterialEditor(host) {
     waiting.set(key, new Set([canvas]));
     preview.swatch(host.renderer(), m, (error, picture) => {
       const canvases = waiting.get(key) ?? []; waiting.delete(key); if (error || !picture) return;
-      swatches.set(key, picture); if (swatches.size > 320) swatches.delete(swatches.keys().next().value);
+      swatches.set(key, picture); if (swatches.size > 320) { const [oldKey, oldPicture] = swatches.entries().next().value; swatches.delete(oldKey); oldPicture.close?.(); }
       for (const c of canvases) if (c.dataset.want === key) { c.getContext('2d').drawImage(picture, 0, 0); c.dataset.key = key; }
     });
   }

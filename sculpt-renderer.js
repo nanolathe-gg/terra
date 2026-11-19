@@ -5,7 +5,7 @@
 
 import {tablePlacementRows,coverRows,groundPool,PLACEMENT_ROW,PLANT_REACH,surfaceRows,SURFACE_FLAGS_ROW} from './sculpt-material-model.js';
 import {MaterialCache,writeMaterialSlot} from './sculpt-material-cache.js';
-import {copyMaterial,materialCacheUsage,materialStaged,materialTint,materialColor,materialRenderKey,MATERIAL_REPEAT,MATERIAL_SLOTS,MAP_ROLES,LIBRARY,materialStates} from './sculpt-materials.js';
+import {copyMaterial,materialCacheUsage,materialStaged,materialTint,materialColor,materialRenderKey,MATERIAL_REPEAT,MATERIAL_SLOTS,MAP_ROLES,LIBRARY,materialStates,gameArtColor} from './sculpt-materials.js';
 import {columnRows,columnTones,toneColor} from './sculpt-column.js';
 import {waterTone} from './sculpt-knobs.js';
 import {makeNoise, NOISE_SIZE} from './sculpt-noise.js';
@@ -200,7 +200,7 @@ export class TerrainRenderer {
     this.paletteIndexed = palette.indexed;
     // Slots 0-9 and 246-254 of the game's palette are Windows' static system colours, which its map art does not draw with (255, white,
     // it does: snow and surf). A colour that only those slots hold stays out of the lookup unless a world's table picks it by entry.
-    const art = new Set(palette.indexed.filter((_, i) => i >= 10 && (i < 246 || i === 255)).map(String));
+    const art = new Set(palette.indexed.filter((_, i) => gameArtColor(i)).map(String));
     this.paletteArt = palette.colours.map((_, i) => i).filter(i => art.has(String(palette.colours[i])));
     this.commonSource = common;
     this.outputSource = extra[extra.length - 1];

@@ -12,6 +12,12 @@ export const MATERIAL_CACHE_BYTES = 128 * 1024 * 1024;
 export const MAX_NODES = 40, MAX_STOPS = 8, MAX_PALETTE = 32, MAX_CONTROLS = 12, MAX_FRAMES = 12, MAX_TAPPED = 4, MAX_STAGES = 4;
 export const THUMB = 64, THUMB_STRIDE = 2;
 
+// The palette slots the game's map art draws with: not Windows' static system colours (0-9, 246-254); 255, white,
+// it does (snow and surf). The renderer's ground-art lookup keeps to these (sculpt-renderer.js), so a palette entry
+// outside them is unreachable — the output stage would re-reduce its pixels to another slot — and the editor's
+// pickers and recolor searches do not offer them.
+export const gameArtColor = i => i >= 10 && (i < 246 || i === 255);
+
 const P = (key, label, min, max, value, step = 0) => ({key, label, min, max, value, step});
 const SEED = P('seed', 'Seed', 0, 999, 0, 1);
 const NOISE = [P('size', 'Size (px)', 1, 256, 8), P('detail', 'Fine detail', 0, 1, 0), P('layers', 'Broad layers', 0, 5, 0), SEED];
@@ -505,7 +511,7 @@ export function recolorMaterial(material, rgb, from = materialColor(material)) {
 }
 function nearestGameColor(rgb) {
   let best = 0, distance = Infinity;
-  gamePalette.indexed.forEach((c, i) => { const e = (c[0] - rgb[0]) ** 2 + (c[1] - rgb[1]) ** 2 + (c[2] - rgb[2]) ** 2; if (e < distance) { distance = e; best = i; } });
+  gamePalette.indexed.forEach((c, i) => { if (!gameArtColor(i)) return; const e = (c[0] - rgb[0]) ** 2 + (c[1] - rgb[1]) ** 2 + (c[2] - rgb[2]) ** 2; if (e < distance) { distance = e; best = i; } });
   return best;
 }
 // What decides a material's art height (the bake, the geometry and the solid read it: engine-common.wgsl materialRelief): its seed, its
