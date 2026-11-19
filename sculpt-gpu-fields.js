@@ -1297,10 +1297,14 @@ export function createPagedFields(opts) {
   // undo or redo, a reorder, the world's defaults) settles none. A node whose last preparation drew nothing (hidden, no points) or has no
   // region (the ground node) is always compared.
   const keptPrepare = createNodePreparer();
-  let settled = new WeakSet(), lastPrep = new WeakMap();
+  let settled = new WeakSet(), lastPrep = new WeakMap(), settledContext = null;
   const prepare = (n, geom, c) => {
     let p = prep.get(n);
-    if (!p) { p = keptPrepare(n, geom, c, prepContext ??= nodeContextKey(c), settled.has(n)); prep.set(n, p); settled.add(n); lastPrep.set(n, p); }
+    if (!p) {
+      prepContext ??= nodeContextKey(c);
+      if (prepContext !== settledContext) { settled = new WeakSet(); settledContext = prepContext; }   // another context: its kept preparations may be older
+      p = keptPrepare(n, geom, c, prepContext, settled.has(n)); prep.set(n, p); settled.add(n); lastPrep.set(n, p);
+    }
     return p;
   };
   const unsettle = r => {
