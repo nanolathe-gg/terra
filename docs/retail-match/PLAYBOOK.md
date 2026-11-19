@@ -213,12 +213,16 @@ helps one window and hurts another.
   map setting can be probed first: `--probe undulation=3,6,10 --window
   <world>-<n>`.
 - **Watch for:**
-  - A scene stroke takes its tool's shape preset (`world.shapes`), but not
-    the tool's `rock`. An unset `rockPreset` is -1, rock beneath, which on
-    open ground is the world's own rock.
-  - The windows mostly use library shapes (`landform`, `hill`, `deep`, ...),
-    not your world's tools, so changing `world.shapes` presets moves few
-    scores.
+  - A scene stroke starts from the world's numbers for the shape it names
+    (`world.shapes.hill` for a `hill` stroke), then its `card` on top. So a
+    shape preset moves a window only when it is the preset of a kind that
+    window's strokes name and sets a key their cards leave out. The windows
+    use library shapes (`landform`, `hill`, `deep`, ...); a world's own
+    shapes (those with a `from`, such as Green's `massif`) are never named
+    by a scene. Round 4's trial-063 changed `massif` and nothing moved.
+    REFERENCE.md lists each window's stroke kinds.
+  - A stroke does not take the tool's `rock`. An unset `rockPreset` is -1,
+    rock beneath, which on open ground is the world's own rock.
   - A stroke's seed is the page seed plus its index times 7919, so
     reordering strokes changes their noise. Edit strokes in place.
   - Moving the strokes themselves (their points, `diameter`, `elevation`)
@@ -237,8 +241,14 @@ Finding keys are `<class>:<metric>`. The classes are:
 - `slope`: .08 to .5;
 - `steep`: .5 and over.
 
-The metrics are `share`, `luma`, `color`, `spread`, `band2`, `band8`,
-`band32`, `edges` and `lines`.
+The metrics are `share`, `luma`, `dark`, `light`, `color`, `spread`,
+`band2`, `band8`, `band32`, `edges` and `lines`. `dark` and `light` are the
+class's 1st and 99th luma percentiles: ours reaching darker or brighter
+than retail by more than a palette step means pixels retail rarely draws
+there. A mean or an edge count can reward those. Round 4's green-5 grass
+matched retail's edge count with specks darker than nearly every retail
+pixel on that plain (1.33% of ours below luma 35, 0.09% of retail's), and round 3's water flecks looked brighter than retail's
+water by eye. Check `dark` and `light` before you keep a texture change.
 
 Water and level ground are split so a change cannot score on the wrong
 part. A change aimed at the shelf must move `shelf`; if it moves `deep`
@@ -263,7 +273,8 @@ moved, class by class, beside retail's value.
 | `flat:band2` (fine grain) | ground material: fine Noise `detail`, dither `amount` | `reliefAmount`, `plainRelief` |
 | `flat:band8`, `flat:band32` | ground material: broad Noise `size`, `layers` | `groundPatch`, `groundPatchSize`, `undulation`, `reliefPatchy` |
 | `gentle:lines`, `gentle:edges` too few (a hatched grade) | `banding`, `bandLevel` (check `flat` did not gain lines retail lacks) | ground material: Scatter pits or a Cracks noise |
-| `flat:edges`, `flat:lines` too few | ground material: Scatter specks (round 3's 0.7 px dots did not show; try a radius of 1 px or more), Cracks noise; `plainRelief`, `lumpRelief` | `bandLevel`, only where retail's plain carries lines by eye |
+| `flat:edges`, `flat:lines` too few | ground material: a wider 1 px palette spread in its dither (retail Green's plain is dark green to bright teal flecks, not black dots); Scatter specks of 1 px or more that stay inside retail's `dark` (round 4's specks went below it); Cracks noise; `plainRelief`, `lumpRelief` | `bandLevel`, only where retail's plain carries lines by eye |
+| `*:dark` (ours darker) or `*:light` (ours brighter) | whatever the trial last added: specks, flecks, dither or a material's Gradient ends | the palette list the material reduces to |
 | `flat:edges` too many (regular dimples) | the map's `undulationArt` (art only, the heights keep rolling), `undulation`, `undulationScale` (section 6) | ground material's broad Noise |
 | `slope:color`, `slope:luma` | slope material; `hillLight` | `slopeTexture`, `faceFill`, `creaseShade` |
 | `slope:lines` too few | `banding`, `bandSoftness` (contour hatch), `slopeMarks`, `wrinkles` | the map lane: the window's strokes with Steps and a rock type of their own (section 6) |
@@ -277,7 +288,7 @@ moved, class by class, beside retail's value.
 | `shore:color`, `shore:luma` | beach (a `beach` role material, `beachWidth`), `lowReach`, `lowGrain`, `shoreEdge` | `wetSwath`, `wetGround`, `crispShore`, a surface layer on `toWater` |
 | `deep:color`, `deep:luma` | water material; `deepDepth` | colors |
 | `shelf:color`, `shelf:luma` | `shallowDepth`, `bedTint`, `bedBright`, `shallowTone` | water material |
-| `shelf:edges` too few (retail's specks and streaks on the shelf) | `bedRelief`, `shoalRag`; the shallow-water surface layer | the water material, but check `deep` did not move with it |
+| `shelf:edges` too few (retail's specks and streaks on the shelf) | `bedContrast` (carries the bed's grain into the shelf tint; Green sets 0.7, and 1.0 took green-1's shelf edges from 0.08x to 0.53x retail), with `bedFlat`, `bedRelief`, `shoalRag`; the shallow-water surface layer | the water material, but its grain reaches only the deep water (the shelf is tinted by the water's mean color, `engine-frag.wgsl` `litBed`) |
 | `deep:edges` or `shelf:edges` too many | `bedRelief`, `bedFlat`, `waterSoft`, `shoalRag` | water material's fine Noise |
 | Everything a touch dark or flat | `ambient`, `lightCap`, `sunHeight` | `shadeDepth`, `flatOcclusion` |
 

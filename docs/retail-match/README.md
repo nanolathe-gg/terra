@@ -158,10 +158,12 @@ Change nothing else:
      before and after, with the trial id. Start a map change's message with
      `map: <world>-<n>:` and a shape change's with `fixture:`;
    - run `sh repro/match.sh <world> --keep-trial <trial>` right away, so
-     its pictures survive pruning. Do the same, at once, for any trial you
-     may cite. Only the last eight trials keep their pictures otherwise, and
-     a mark made after they are gone keeps nothing (round 1 lost the
-     pictures of every trial its report cited that way).
+     its scene pictures survive pruning. Do the same, at once, for any
+     trial whose whole scene you may cite. Every trial keeps its class
+     crops (`classes/crops`), but only the last eight keep their scene
+     pictures and triptych otherwise, and a mark made after they are gone
+     keeps nothing (round 1 lost the pictures of every trial its report
+     cited that way). Cite a crop before you re-render a trial to see it.
    
    To revert it, restore the files (`git checkout -- <file>`).
 5. **Checkpoint every 25 trials or so.**
@@ -213,11 +215,17 @@ Change nothing else:
   Round 3 reported that an unwired Scatter node reads zero; it reads the
   pixel's position (`sculpt-materials.js`, `programSource`), and only a
   disabled node gives zero. Its dots were 0.7 px, which is the likelier
-  reason they did not show.
+  reason they did not show. Round 4 wrote that the shelf cannot take a
+  fine speckle, but never tried `bedContrast`, the control that carries the
+  bed's grain into the shelf; and that a shape preset cannot reach a
+  window, from a trial that changed a shape no window draws.
 - **Scores can be gamed.** In past rounds, a flat gray matched retail's
   average brightness, scattered dark boulders improved a score, and
-  blotches added "texture". Reject any change that improves a score by
-  painting something retail does not have.
+  blotches added "texture". Round 4 matched green-5's plain edge count
+  with specks darker than nearly every pixel retail draws there. Reject any
+  change that improves a score by painting something retail does not have,
+  and check the class's `dark` and `light` findings before you keep a
+  texture change.
 - **Judge at 1x.** TA's detail is one art pixel: grit, cracks, single-pixel
   edges. The crops are doubled so you keep it. Do not judge from
   thumbnails.
