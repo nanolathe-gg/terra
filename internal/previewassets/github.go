@@ -255,12 +255,17 @@ func publish(root, dir, repository string) (Lock, error) {
 		return l, err
 	}
 	if filepath.Clean(dir) != filepath.Clean(destination) {
+		// Temp and rename, as fetch copies: a dev server reading ui-previews never sees a partial file.
 		for name := range l.Files {
 			b, e := os.ReadFile(filepath.Join(dir, name))
 			if e != nil {
 				return l, e
 			}
-			if e = os.WriteFile(filepath.Join(destination, name), b, 0644); e != nil {
+			target := filepath.Join(destination, name)
+			if e = os.WriteFile(target+".tmp", b, 0644); e != nil {
+				return l, e
+			}
+			if e = os.Rename(target+".tmp", target); e != nil {
 				return l, e
 			}
 		}
