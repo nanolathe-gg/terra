@@ -273,12 +273,13 @@ function flash(el) {
   el.classList.remove('find-flash'); void el.offsetWidth; el.classList.add('find-flash');
   clearTimeout(flashes.get(el)); flashes.set(el, setTimeout(() => el.classList.remove('find-flash'), 1600));
 }
-// Scroll only the scrolling panels that hold an element (scrollIntoView would also move the page's overflow-hidden frames).
+// Scroll only the scrolling panels that hold an element (scrollIntoView would also move the page's overflow-hidden frames and
+// push the whole editor off screen). align: true centers it, false scrolls the least that shows it, 'start' puts it at the top.
 export function bringIntoView(el, center = true) {
   for (let a = el?.parentElement; a && a !== document.body; a = a.parentElement) {
     if (a.scrollHeight <= a.clientHeight || !/auto|scroll/.test(getComputedStyle(a).overflowY)) continue;
     const r = el.getBoundingClientRect(), box = a.getBoundingClientRect(), top = r.top - box.top - a.clientTop, bottom = top + r.height;
-    const by = center ? top - (a.clientHeight - r.height) / 2 : top < 0 ? top : bottom > a.clientHeight ? bottom - a.clientHeight : 0;
+    const by = center === 'start' ? top : center ? top - (a.clientHeight - r.height) / 2 : top < 0 ? top : bottom > a.clientHeight ? bottom - a.clientHeight : 0;
     if (by) a.scrollTop += by;
   }
 }

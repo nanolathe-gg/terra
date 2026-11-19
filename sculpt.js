@@ -23,7 +23,7 @@ import {isRiver,pointsSignature,movedRiver,seedRiverLine} from './sculpt-river.j
 import {HELP_TOOLS} from './sculpt-help-examples.js';
 import {copySurface,layerKey,withSurfaceMaterials} from './sculpt-material-model.js';
 import {mountSurfacePanel,BUILTIN_LABELS} from './sculpt-surface-panel.js';
-import {goTo} from './sculpt-find.js';
+import {goTo, bringIntoView} from './sculpt-find.js';
 import {mountPick} from './sculpt-pick.js';
 import {worldKit,storedWorldKit,baseRockKeys,sameKitData,assertKitMaterials,authoredWorldTool,newWorldKey,instantiateWorldKit,stageWorldKitEdit,publishWorldRock,publishWorldTool,addWorldRockInstance,resetWorldKitInstances,resolvedWorldCard,worldToolUnavailable} from './sculpt-world-kit.js';
 import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,toolMaterialSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,markEdited,copyMapTools,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
@@ -1026,7 +1026,7 @@ function pickHost() {
     },
     // Select: the shape selected and the Select tool in hand. Shape settings: the shape selected and its card shown, Pick still in hand.
     selectShape:i => { if (!nodes[i]) return; document.querySelector('[data-tool="move"]').click(); selectNode(i); },
-    shapeSettings:i => { if (!nodes[i]) return; selectNode(i); $('tab-tool').click(); $('brush-panel').scrollIntoView({block:'nearest',behavior:'smooth'}); },
+    shapeSettings:i => { if (!nodes[i]) return; selectNode(i); $('tab-tool').click(); bringIntoView($('brush-panel'),false); },
     rock:slot => {
       if (slot!==0 && !mapRocks.some(r => r.slot===slot)) return null;
       const m=rockMaterialOf(slot);
@@ -1043,7 +1043,7 @@ function pickHost() {
       if(commit){checkpoint(true);materialEditor?.refresh();}
     },
     editMaterial:(slot,button) => materialEditor?.open(slot,button),
-    openSurface:(at,read) => { surfacePanel?.show(at,read); openWorldSection('wsec-surface'); $('surface-inspect-result').scrollIntoView({block:'nearest',behavior:'smooth'}); },
+    openSurface:(at,read) => { surfacePanel?.show(at,read); openWorldSection('wsec-surface'); bringIntoView($('surface-inspect-result'),false); },
     // World › Surface's detail, once open, follows each new pick, so it never describes another pixel than the card.
     read:(at,read) => { if (!$('surface-inspect-result').hidden) surfacePanel?.show(at,read); },
     openColors:() => { openWorldHome('water'); document.querySelector('[data-world-color=shallowTone]').querySelector('input[type=color][aria-label^="Shallow water"]')?.focus({preventScroll:true}); },
@@ -2442,7 +2442,7 @@ function resetWorld(){
   buildWorldPanel();syncRockChoices();syncRocks();syncRockPanel();syncWorldControls();surfacePanel?.refresh();updateControls();status('Reset world settings to '+baseWorldConfig.biome+'.');
 }
 for(const id of ['wsec-world','tab-world'])$(id).addEventListener('click',()=>requestAnimationFrame(syncWorldHome));
-function openWorldHome(card){openWorldSection('wsec-world');syncWorldHome();const el=$('world-home-'+card);el?.scrollIntoView({block:'start'});el?.querySelector('button,input,select')?.focus({preventScroll:true});}
+function openWorldHome(card){openWorldSection('wsec-world');syncWorldHome();const el=$('world-home-'+card);if(el)bringIntoView(el,'start');el?.querySelector('button,input,select')?.focus({preventScroll:true});}
 let worldHomeSummary='';
 // viewOnly: a pan or zoom changes only which rock types are in view, not the count of changes (which rebuilds the world's kit).
 function syncWorldHome(viewOnly=false){

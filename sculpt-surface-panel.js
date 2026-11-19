@@ -5,6 +5,7 @@
 // row previews where that layer lies on the map. The list is a world setting: `host.apply(next, {commit})` stores it.
 import {SURFACE_BUILTINS, SURFACE_NEEDS, SURFACE_STAGE_NAMES, SURFACE_FACTS, SURFACE_RULE_TERMS, SURFACE_DRAWABLE, SURFACE_FIXED, SURFACE_OWN_AMOUNT, PLANT_KINDS, PLANT_LABELS, PLANT_FACTS, surfaceRows, spreadRule, SURFACE_FACT_RANGE, SURFACE_FACT_GRAY, SURFACE_FACT_ROOT, factPosition, factAtPosition, isMaterialLayer, layerKey} from './sculpt-material-model.js';
 import {controlRow} from './sculpt-workspace.js';
+import {bringIntoView} from './sculpt-find.js';
 
 const $ = id => document.getElementById(id);
 // Each fact's name for an artist (its range: sculpt-material-model.js SURFACE_FACT_RANGE).
@@ -518,7 +519,7 @@ export function mountSurfacePanel(host) {
     let moved = false;
     for (const e of [back, shownRow]) { const section = e?.closest('details.surface-section'); if (section && !section.open) { section.open = true; moved ||= e === back; } }
     back?.focus({preventScroll: true});
-    if (moved) back.closest('.surface-layer')?.scrollIntoView({block: 'nearest'});   // its row left for a folded section: follow it
+    if (moved) { const r = back.closest('.surface-layer'); if (r) bringIntoView(r, false); }   // its row left for a folded section: follow it
     sendView();   // a Solo or a hidden layer that is gone (prune) shows the others again
   }
   // After a World setting, a rock type in use or a role material changed: rebuild if a layer has changed section or reason.
@@ -552,7 +553,7 @@ export function mountSurfacePanel(host) {
     const stage = stageOf(layer), next = [...layers]; let at = 0; for (let j = next.length - 1; j >= 0; j--) if (stageOf(next[j]) <= stage) { at = j + 1; break; }
     next.splice(at, 0, layer); open.add(layer.id); revealNext = layer.id; put(next, true);
     const row = list.querySelector(`[data-key="${CSS.escape(layer.id)}"]`);
-    row?.scrollIntoView({block: 'nearest', behavior: 'smooth'}); row?.querySelector('.surface-toggle')?.focus({preventScroll: true});
+    if (row) bringIntoView(row, false); row?.querySelector('.surface-toggle')?.focus({preventScroll: true});
   }
   // The inspector (show, host.inspect): the layers that drew one pixel, top first, with what each covers and what of it shows, the effects
   // laid after them, and the facts rules read there. A pixel comes from Pick (Pick on the map starts it: host.pick; its card's Surface door
@@ -571,7 +572,7 @@ export function mountSurfacePanel(host) {
   function reinspect() { if (lastAt && !result.hidden) inspect(); }
   function openLayer(key) {
     open.add(key); build({reveal: key});
-    const row = list.querySelector(`[data-key="${CSS.escape(key)}"]`); row?.scrollIntoView({block: 'nearest', behavior: 'smooth'}); row?.querySelector('.surface-toggle')?.focus({preventScroll: true});
+    const row = list.querySelector(`[data-key="${CSS.escape(key)}"]`); if (row) bringIntoView(row, false); row?.querySelector('.surface-toggle')?.focus({preventScroll: true});
   }
   function showInspect(read) {
     const again = el('button', {type: 'button', textContent: 'Read again'}), close = el('button', {type: 'button', textContent: 'Close'});
