@@ -349,7 +349,7 @@ export async function mountMapFeatures(api) {
     numericInputs.forEach(showNumericValue);
     $('feature-count-line').textContent=`${placements.length} features · ${starts.length} starts`;
     $('feature-state').textContent=message;
-    const hints={place:`Click a cell to place a ${LABELS[placeKind].toLowerCase()} (${placeVariant>=0?`variant ${placeVariant%MAX_VARIANTS+1}`:'a random variant'}). Select (V) moves, re-rolls and deletes placed features.`,erase:'Click or drag across feature footprints to erase them.',starts:'Click empty ground to add a start. Drag a marker, or Shift-click ground, to move the selected start.',fill:`${PLURALS[fill.kind]} fill: ${fill.region==='brush'?'drag a brush':fill.region==='lasso'?'draw a closed lasso':'click connected gentle dry ground'}. Space or middle-drag still pans.`};
+    const hints={place:`Click a cell to place a ${LABELS[placeKind].toLowerCase()} (${placeVariant>=0?`variant ${placeVariant%MAX_VARIANTS+1}`:'a random variant'}). Select (V) moves, re-rolls and deletes placed features.`,erase:'Click or drag across feature footprints to erase them.',starts:'Click empty ground to add a start. Drag a marker, or Shift-click ground, to move the selected start.',fill:`${(PLURALS[fill.kind]??fill.kind).replace(/^./,c => c.toUpperCase())} fill: ${fill.region==='brush'?'drag a brush':fill.region==='lasso'?'draw a closed lasso':'click connected gentle dry ground'}. Space or middle-drag still pans.`};
     $('feature-help').textContent=hints[mode]||'Choose a feature tool, or keep sculpting terrain. Space or middle-drag pans in every tool.';
     refreshVariants();
     api.schedule();
@@ -813,6 +813,9 @@ export async function mountMapFeatures(api) {
   },true);
   canvas.addEventListener('pointerleave',() => { if (!gesture) { hover=null; api.schedule(); } },true);
   const typing=target => ['INPUT','SELECT','TEXTAREA'].includes(target?.tagName) || target?.isContentEditable;
+  const OPEN_ABOVE='details.top-menu[open],details.share-menu[open],details.status-details[open],.rail-button[aria-expanded="true"],#pane-map:not([hidden]),#pane-graphics:not([hidden]),#pane-export:not([hidden]),.app.curves-large';
+  // The Surface gallery counts only while it shows (closeTop leaves one open behind another tab alone).
+  const openAbove=() => doc.querySelector(OPEN_ABOVE) || doc.getElementById('find-results')?.hidden===false || (doc.getElementById('surface-add')?.getAttribute('aria-expanded')==='true' && doc.getElementById('surface-add').getClientRects().length>0);
   doc.addEventListener('keydown',event => {
     if (typing(event.target) || doc.querySelector('dialog:modal')) return;   // a modal dialog (sculpt.js) has the keys
     if (event.code==='Space') { if (event.target?.tagName!=='BUTTON') space=true; return; }
@@ -823,7 +826,8 @@ export async function mountMapFeatures(api) {
     if (!mode) return;
     // Undo and Redo (sculpt.js) act with the tool still in hand; a gesture under way is dropped first.
     if ((event.metaKey||event.ctrlKey) && event.key.toLowerCase()==='z') { if (gesture) finishGesture(false); return; }
-    if (event.key==='Escape') { if (doc.querySelector('#map-features-panel details.top-menu[open]')) return;   // the open menu closes first (sculpt-ui.js closeTop)
+    // An open menu, flyout, panel or Find closes first (sculpt-ui.js closeTop); the tool goes on the next Escape.
+    if (event.key==='Escape') { if (openAbove()) return;
       stop(event); deactivate(); }
     else if (['Delete','Backspace'].includes(event.key)) { stop(event); if (!event.repeat && mode==='starts') removeStart(selectedStart); }
   },true);

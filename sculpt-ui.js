@@ -70,11 +70,17 @@ export function mountEditorUI(){
  // The View button names the view in use (Art, Clay or Passability), whichever script presses it.
  const views=['view-rendered','view-clay','view-passability'].map($),showView=()=>{$('view-name').textContent=(views.find(b=>b.getAttribute('aria-pressed')==='true')||views[0]).textContent;};
  new MutationObserver(showView).observe($('pane-graphics').querySelector('.view-switch'),{attributes:true,subtree:true,attributeFilter:['aria-pressed']});showView();
+ // The page itself never scrolls (html and body hide their overflow), but a focus or scrollIntoView can still move it and push the
+ // top bar off screen with no way back short of a reload. Put it back.
+ window.addEventListener('scroll',()=>{if(window.scrollX||window.scrollY)window.scrollTo(0,0);});
  document.addEventListener('pointerdown',e=>{
   const t=e.target instanceof Element?e.target:null;if(!t)return;
-  if(!t.closest('.tool-group'))closeFlyouts();
-  for(const [button,pane,menu] of surfaces)if(menu&&!$(pane).hidden&&!t.closest('#'+pane)&&!t.closest('#'+button))setSurface(button,pane,false);
-  for(const d of document.querySelectorAll('details.top-menu[open]'))if(!d.contains(t))d.open=false;
+  let closed=!t.closest('.tool-group')&&closeFlyouts();
+  for(const [button,pane,menu] of surfaces)if(menu&&!$(pane).hidden&&!t.closest('#'+pane)&&!t.closest('#'+button)){setSurface(button,pane,false);closed=true;}
+  for(const d of document.querySelectorAll('details.top-menu[open],details.status-details[open]'))if(!d.contains(t)){d.open=false;closed=true;}
+  // A press that only closes a menu does nothing else: on the map it would draw a shape, on a curve add a knot. A control
+  // (a button, a field, a slider) still takes the press, so moving to another menu or tool stays one click.
+  if(closed&&!t.closest('button,input,select,textarea,summary,a,label,[role=slider],[role=tab],[role=option]')){e.stopPropagation();e.preventDefault();}
  },true);
  // The curve editors at full size: the same element, laid over the map view while the button is pressed.
  // Its header names what the curves belong to, as the card does (#brush-title, #brush-scope-tag), and closes back to the card.

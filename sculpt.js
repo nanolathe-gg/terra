@@ -23,7 +23,7 @@ import {isRiver,pointsSignature,movedRiver,seedRiverLine} from './sculpt-river.j
 import {HELP_TOOLS} from './sculpt-help-examples.js';
 import {copySurface,layerKey,withSurfaceMaterials} from './sculpt-material-model.js';
 import {mountSurfacePanel,BUILTIN_LABELS} from './sculpt-surface-panel.js';
-import {goTo} from './sculpt-find.js';
+import {goTo, bringIntoView} from './sculpt-find.js';
 import {mountPick} from './sculpt-pick.js';
 import {worldKit,storedWorldKit,baseRockKeys,sameKitData,assertKitMaterials,authoredWorldTool,newWorldKey,instantiateWorldKit,stageWorldKitEdit,publishWorldRock,publishWorldTool,addWorldRockInstance,resetWorldKitInstances,resolvedWorldCard,worldToolUnavailable} from './sculpt-world-kit.js';
 import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,toolMaterialSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,markEdited,copyMapTools,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
@@ -342,6 +342,12 @@ function updateControls() {
   $('path-extend').disabled=!pathEditing||pathPoint<0||locked;
   $('path-extend').setAttribute('aria-pressed',String(pathAdding));
   $('path-remove').disabled=!pathEditing||paths.length<=1||locked;
+  // A disabled path action says why (rule 9); locked (a load, a stroke or a drag under way) passes in a moment and needs no reason.
+  const pathWhy=(id,reason,title)=>{$(id).title=$(id).disabled&&!locked&&pathEditing?reason:title;};
+  pathWhy('path-add',pointAt===activePath.length-1?'The last point has nothing after it: select an earlier point':'Select a point first','Insert a point after the selected one');
+  pathWhy('path-delete',pathPoint<0?'Select a point first':'A path keeps at least one point','Delete the selected point');
+  pathWhy('path-extend','Select a point to extend or branch from','Draw on from the selected point; from a middle point it branches');
+  pathWhy('path-remove','This is the shape’s only path: delete the shape instead','Delete the selected path');
   if(pathEditing){$('shape-path-list').replaceChildren(...paths.map((path,i)=>{const b=document.createElement('button');b.textContent=`Path ${i+1} · ${path.length} points`;b.setAttribute('aria-pressed',String(i===pathIndex));b.disabled=locked;b.onclick=()=>{pathIndex=i;pathPoint=-1;pathAdding=false;updateControls();schedule();};return b;}));}
   for(const id of ['rotate-left','rotate-right','scale-down','scale-up'])$(id).disabled=!nodes[selected]?.points||locked;
   $('view-clay').setAttribute('aria-pressed',String(!$('view-passability').matches('[aria-pressed=true]')&&$('clay').checked));
@@ -548,11 +554,19 @@ function drawShapePreview() {
   if(selected>=0&&mapCanvas){const b=nodeBounds(nodes[selected]),v=mapCanvas.view(),pad=32;const x0=clamp((b.x0*spacing-v.x)*v.scale-pad,0,canvas.width),x1=clamp((b.x1*spacing-v.x)*v.scale+pad,0,canvas.width),y0=clamp((b.y0*spacing-v.y-180)*v.scale-pad,0,canvas.height),y1=clamp((b.y1*spacing-v.y+100)*v.scale+pad,0,canvas.height);if(x1>x0&&y1>y0){sx=x0;sy=y0;sw=x1-x0;sh=y1-y0;}}
   const ratio=Math.min(cv.width/sw,cv.height/sh),w=sw*ratio,h=sh*ratio;g.drawImage(canvas,sx,sy,sw,sh,(cv.width-w)/2,(cv.height-h)/2,w,h);
 }
+// A dashed height line across a curve editor, its label clear of the end knot and set beside any label on a line too close to share
+// a row with (sea, plain and elevation are often a few units apart).
+function heightRule(g,L) {
+  const placed=[];
+  return (y,color,label) => { g.strokeStyle=color; g.setLineDash([3,3]); g.beginPath(); g.moveTo(L.xL,y); g.lineTo(L.xR,y); g.stroke(); g.setLineDash([]);
+    if (!label) return; let x=L.xL+7; for (const p of placed) if (Math.abs(p.y-y)<10) x=Math.max(x,p.x1+6);
+    g.fillStyle=color; g.textAlign='left'; g.fillText(label,x,y-2); placed.push({y,x1:x+g.measureText(label).width}); };
+}
 function drawSection() {
   fitCanvas($('section-preview')); fitCanvas($('along-preview'));
   const cv=$('section-preview'),g=cv.getContext('2d'),c=curveContext(),L=sectionLayout(c),{ys,back}=sectionPreview(c.kind,c.q),n=ys.length-1;
   g.clearRect(0,0,L.W,L.H); g.font='9px system-ui';
-  const rule=(y,color,label) => { g.strokeStyle=color; g.setLineDash([3,3]); g.beginPath(); g.moveTo(L.xL,y); g.lineTo(L.xR,y); g.stroke(); g.setLineDash([]); if (label) { g.fillStyle=color; g.textAlign='left'; g.fillText(label,L.xL+2,y-2); } };
+  const rule=heightRule(g,L);
   if (c.land && L.ground) { rule(L.yH(0),'#8b9b87','ground'); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E>0?'+':''}${L.E}`); }
   else if (c.land) { rule(L.yH(L.sea),'#6aa7c4',`sea ${L.sea}`); rule(L.yH(L.plain),'#8b9b87',`plain ${L.plain}`); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E}`); }
   else { rule(L.yv(0),'#465344'); rule(L.yv(1),'#465344'); }
@@ -576,7 +590,7 @@ function drawSection() {
   // The controls round the canvas.
   const form=$('curve-form'),choices=LANDFORM_FORMS; if (form.dataset.kind!==c.kind) { form.replaceChildren(new Option('The shape\'s own',''),...choices.map(([id,label]) => new Option(label,id))); form.dataset.kind=c.kind; }
   form.value=choices.some(([id]) => id===c.q.curve?.form)?c.q.curve.form:''; $('curve-reset').disabled=!c.q.curve?.knots;
-  $('curve-link').hidden=$('curve-mirror').hidden=!c.land; $('curve-link').setAttribute('aria-pressed',String(sidesLinked(c))); $('curve-link').textContent=sidesLinked(c)?'Sides linked':'Link sides'; $('curve-mirror').disabled=sidesLinked(c);
+  $('curve-link').hidden=$('curve-mirror').hidden=!c.land; $('curve-link').setAttribute('aria-pressed',String(sidesLinked(c))); $('curve-link').textContent=sidesLinked(c)?'Sides linked':'Link sides'; $('curve-mirror').disabled=sidesLinked(c); $('curve-mirror').title=sidesLinked(c)?'The sides are linked: unlink them to mirror the section':'Flip the section left to right';
   $('along-block').hidden=!c.land;
   const facing=Math.round(c.q.facing||0),toward=FACING_CHOICES.find(f => f[0]===(facing||3))[1];
   $('curve-lean').textContent=`Lean ${(Math.round(L.ratio*100)/100).toFixed(2)} : 1 toward ${toward.toLowerCase()}`;
@@ -593,7 +607,7 @@ function alongLayout(c) {
 function drawAlong(c) {
   const cv=$('along-preview'),g=cv.getContext('2d'),L=alongLayout(c),knots=alongKnots(c.q),f=knotCurve(knots);
   g.clearRect(0,0,L.W,L.H); g.font='9px system-ui';
-  const rule=(y,color,label) => { g.strokeStyle=color; g.setLineDash([3,3]); g.beginPath(); g.moveTo(L.xL,y); g.lineTo(L.xR,y); g.stroke(); g.setLineDash([]); g.fillStyle=color; g.textAlign='left'; g.fillText(label,L.xL+2,y-2); };
+  const rule=heightRule(g,L);
   if (L.ground) { rule(L.yH(0),'#8b9b87','ground'); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E>0?'+':''}${L.E}`); }
   else { rule(L.yH(L.sea),'#6aa7c4',`sea ${L.sea}`); rule(L.yH(L.plain),'#8b9b87',`plain ${L.plain}`); rule(L.yH(L.E),'#e8f2d8',`elevation ${L.E}`); }
   const node=L.ground?null:selectedLandform(),N=48;
@@ -1026,7 +1040,7 @@ function pickHost() {
     },
     // Select: the shape selected and the Select tool in hand. Shape settings: the shape selected and its card shown, Pick still in hand.
     selectShape:i => { if (!nodes[i]) return; document.querySelector('[data-tool="move"]').click(); selectNode(i); },
-    shapeSettings:i => { if (!nodes[i]) return; selectNode(i); $('tab-tool').click(); $('brush-panel').scrollIntoView({block:'nearest',behavior:'smooth'}); },
+    shapeSettings:i => { if (!nodes[i]) return; selectNode(i); $('tab-tool').click(); bringIntoView($('brush-panel'),false); },
     rock:slot => {
       if (slot!==0 && !mapRocks.some(r => r.slot===slot)) return null;
       const m=rockMaterialOf(slot);
@@ -1043,7 +1057,7 @@ function pickHost() {
       if(commit){checkpoint(true);materialEditor?.refresh();}
     },
     editMaterial:(slot,button) => materialEditor?.open(slot,button),
-    openSurface:(at,read) => { surfacePanel?.show(at,read); openWorldSection('wsec-surface'); $('surface-inspect-result').scrollIntoView({block:'nearest',behavior:'smooth'}); },
+    openSurface:(at,read) => { surfacePanel?.show(at,read); openWorldSection('wsec-surface'); bringIntoView($('surface-inspect-result'),false); },
     // World › Surface's detail, once open, follows each new pick, so it never describes another pixel than the card.
     read:(at,read) => { if (!$('surface-inspect-result').hidden) surfacePanel?.show(at,read); },
     openColors:() => { openWorldHome('water'); document.querySelector('[data-world-color=shallowTone]').querySelector('input[type=color][aria-label^="Shallow water"]')?.focus({preventScroll:true}); },
@@ -1586,7 +1600,7 @@ function copyShapes() {
   shapeClipboard={nodes:cloneNodes(group.map(i => nodes[i])),pastes:0};
   status(group.length>1?`Copied ${group.length} shapes.`:`Copied ${shapeName(group[0])}.`); return true;
 }
-function pasteShapes() {
+function pasteShapes(verb='Pasted') {
   if (!shapeClipboard || stroke || moving || loading || !ready) return false;
   const copies=cloneNodes(shapeClipboard.nodes),step=32*(shapeClipboard.pastes+1);
   const m=fitToMap(copies.flatMap(n => n.points),[1,0,0,1,step,step]);
@@ -1596,10 +1610,10 @@ function pasteShapes() {
   const first=nodes.length; nodes.push(...copies);
   evaluate(first,copies.reduce((r,n) => unionRect(r,nodeBounds(n)),null));
   checkpoint(); pathEditing=false; alsoSelected=copies.slice(1).map((_,k) => first+1+k); selectNode(first,true);
-  status(copies.length>1?`Pasted ${copies.length} shapes.`:`Pasted ${shapeName(first)}.`);
+  status(copies.length>1?`${verb} ${copies.length} shapes.`:`${verb} ${shapeName(first)}.`);
   renderLayers(); updateControls(); schedule(); queueWeather(); return true;
 }
-function duplicateShapes() { return copyShapes() && pasteShapes(); }
+function duplicateShapes() { return copyShapes() && pasteShapes('Duplicated'); }
 function pickNode(p) {
   let best=-1,bestScore=Infinity;
   nodes.forEach((n,i) => { const d=nodeDistance(n,p),reach=Math.max(24,(n.params?.radius||40)); if (d<reach && d/reach<=bestScore) { bestScore=d/reach; best=i; } });
@@ -1624,6 +1638,7 @@ function selectNode(i,keepOthers=false) {
   renderLayers(); updateControls(); schedule(false);
   if (another && n?.kind==='landform' && n.params) followCardRock();
   if (n) status(alsoSelected.length?`${selectedShapes().length} shapes selected. Drag one to move them together; Shift-click adds or removes.`:`Selected ${shapeName(i)}. Drag to transform or edit its settings.`);
+  else if (/^Selected |^\d+ shapes selected\. /.test($('status').textContent)) status('');   // the selection message goes with the selection
 }
 // Shift-click on the map or in the Shapes list. Answers whether the shape is now selected.
 function toggleShape(i) {
@@ -2192,11 +2207,15 @@ $('blank').addEventListener('click',() => { if (stroke) return; applySeedControl
 const mapFileName=() => ($('map-name').value.trim().replace(/[^\w-]+/g,'_').replace(/^_+|_+$/g,'')||'map')+'.json';
 $('save').addEventListener('click',() => { if (!stroke) download(new Blob([JSON.stringify(sketch())],{type:'application/json'}),mapFileName()); });
 $('load').addEventListener('click',() => { if (!stroke) $('file').click(); });
+// With no map open yet, a file picker closed without a file, or a file that fails to load, goes back to the picker: there is still
+// nowhere to save a map drawn. (From the first picker, the picker is already back behind the file chooser.)
+const backToPicker=() => { if (needsPicker() && !leavingForWorld && !$('new-map-dialog').open) openNewMap(true); };
+$('file').addEventListener('cancel',backToPicker);
 $('file').addEventListener('change',async () => {
   const file=$('file').files[0]; $('file').value=''; if (!file || stroke) return;
   loading=true; $('editor').disabled=true;
   try { if (file.size>64*1024*1024) throw new Error('This sculpt sketch is too large to load.'); await loadSketchFile(JSON.parse(await file.text())); } catch (err) { error(err.message); }
-  finally { loading=false; $('editor').disabled=false; updateControls(); }
+  finally { loading=false; $('editor').disabled=false; updateControls(); backToPicker(); }
 });
 // Share link: the save, gzipped the same way every time, goes to the save-link service; the link is this page with ?map=<id>. Opening such a
 // link adds the map to the visitor's Maps as a new map (boot, openSharedLink); their own maps stay as they were.
@@ -2273,6 +2292,8 @@ window.addEventListener('keydown',event => {
     if (act && !stroke && !moving && !mapFeatures?.active && !picking && act()) { event.preventDefault(); return; }
   }
   if ((event.key==='Delete' || event.key==='Backspace') && pathEditing && pathPoint>=0 && selected>=0 && !stroke && !moving) {event.preventDefault();$('path-delete').click();return;}
+  // In Edit path, Delete acts on points: with none picked (a missed click on a small handle) it does not fall through to deleting the shape.
+  if ((event.key==='Delete' || event.key==='Backspace') && pathEditing && pathPoint<0 && selected>=0 && !stroke && !moving && !event.metaKey && !event.ctrlKey) {event.preventDefault();status('Pick a point to delete it. To delete the shape, leave Edit path (P) first.');return;}
   if(event.key==='Escape'&&!moving&&!stroke){event.preventDefault();if(!editorUI.exitFocus()){if(picking)setPicking(false);else if(pathAdding){pathAdding=false;updateControls();schedule();}else if(drawMode==='add'){drawMode='select';updateControls();schedule();}else if(pathEditing)setPathMode(false);else selectNode(-1);}return;}
   const arrow={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[event.key];
   if(arrow&&tool==='move'&&selected>=0&&event.target===overlay&&!event.metaKey&&!event.ctrlKey&&!stroke&&!moving){
@@ -2451,7 +2472,7 @@ function resetWorld(){
   buildWorldPanel();syncRockChoices();syncRocks();syncRockPanel();syncWorldControls();surfacePanel?.refresh();updateControls();status('Reset world settings to '+baseWorldConfig.biome+'.');
 }
 for(const id of ['wsec-world','tab-world'])$(id).addEventListener('click',()=>requestAnimationFrame(syncWorldHome));
-function openWorldHome(card){openWorldSection('wsec-world');syncWorldHome();const el=$('world-home-'+card);el?.scrollIntoView({block:'start'});el?.querySelector('button,input,select')?.focus({preventScroll:true});}
+function openWorldHome(card){openWorldSection('wsec-world');syncWorldHome();const el=$('world-home-'+card);if(el)bringIntoView(el,'start');el?.querySelector('button,input,select')?.focus({preventScroll:true});}
 let worldHomeSummary='';
 // viewOnly: a pan or zoom changes only which rock types are in view, not the count of changes (which rebuilds the world's kit).
 function syncWorldHome(viewOnly=false){
@@ -3064,6 +3085,9 @@ function openNewMap(first=false, dimensionsFromMap=null) {
   $('new-map-open').onclick=()=>{if(!ready)return;dialog.close();$('load').click();};
   $('new-map-width').oninput=$('new-map-height').oninput=dimensions;dimensions();
   dialog.oncancel=e=>{if(first)e.preventDefault();};$('new-map-cancel').onclick=()=>dialog.close();
+  // The first picker cannot be dismissed: Chrome lets Escape close a modal dialog despite preventDefault when nothing was clicked
+  // first, and a map drawn then has no saved map to go into (saveWorking), so it was lost on reload. It comes back at once.
+  dialog.onclose=()=>{if(first&&needsPicker())setTimeout(()=>{if(needsPicker()&&!keepSaved&&!leavingForWorld&&!dialog.open)dialog.showModal();});};
   // Create: the map open now stays in Maps (saved first); the tab reloads on a new map of its own.
   $('new-map-form').onsubmit=async e=>{e.preventDefault();if(!e.target.reportValidity())return;
     clearTimeout(autosaveTimer);if(!await leaveMap()){$('new-map-error').textContent='Your current map could not be saved in this browser. Save it as a file before starting a new map.';return;}

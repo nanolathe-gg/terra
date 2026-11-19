@@ -53,7 +53,11 @@ export function mountMapExport(api) {
   // TNT numbers tile pictures with 16 bits, so a map keeps at most 65,536 distinct 32x32 tiles; the exporter merges the most alike tiles of a map with more.
   const TILE_LIMIT=65536,tileSlots=() => map?(map.unitsX*16+1)*(map.unitsY*16+4):0;
   const tileNote=() => tileSlots()>TILE_LIMIT?` This map has ${tileSlots().toLocaleString('en-US')} tile slots. If more than ${TILE_LIMIT.toLocaleString('en-US')} of them differ, the export merges the most alike tiles.`:'';
-  const update=() => { $('map-export').disabled=Boolean(UNSUPPORTED) || busy || !map || !catalogue?.worlds?.[config.biomeId]?.climate || !api.ready(); };
+  // A disabled export says why (rule 9), in its tooltip: the panel's state line keeps the map's own text.
+  let exportTitle;
+  const update=() => { const b=$('map-export');exportTitle??=b.title;
+    const why=UNSUPPORTED || (busy?'An export is already running.':!map?'Open or create a map to export it.':!catalogue?'Loading the world catalog…':!catalogue.worlds?.[config.biomeId]?.climate?'This world has no export settings yet.':!api.ready()?'Waiting for the terrain to finish updating…':'');
+    b.disabled=Boolean(why); b.title=why||exportTitle; };
   const readCatalogue=config.exportCatalog?Promise.resolve(config.exportCatalog):fetch('config/catalog.json').then(async r => { const data=await r.json(); if (!r.ok) throw new Error(data.error||'Catalog unavailable'); return data; });
   readCatalogue.then(data => { catalogue=data; if (UNSUPPORTED) { $('map-export-state').textContent=UNSUPPORTED; return update(); } const w=data.worlds[config.biomeId]; if (!map && Number.isInteger(w?.defaultSeaLevel)) $('map-sea').value=w.defaultSeaLevel; if (!loadedSettings) setSettings(w?.climate); $('map-export-state').textContent=w?.climate?`OTA planet: ${w.planet}. Climate: medians from its installed maps.${tileNote()}`:'Export disabled: '+(w?.disabledReason||'no retail planet was established for this world.'); update(); }).catch(err => { $('map-export-state').textContent=err.message; });
   setSettings(defaults());
