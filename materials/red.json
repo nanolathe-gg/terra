@@ -1094,7 +1094,9 @@
 
     "darkknob",
 
-    "rubble"
+    "rubble",
+
+    "softface"
 
    ],
 
@@ -1137,6 +1139,20 @@
       "crackDark": 0.8,
 
       "rockCrown": 0.5
+
+     }
+
+    },
+
+    "softface": {
+
+     "label": "Soft face",
+
+     "knobs": {
+
+      "faceRock": 0,
+
+      "rockFaceFrom": 0.5
 
      }
 
