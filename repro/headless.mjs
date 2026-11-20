@@ -110,7 +110,10 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   const worldColumn = {column: config.column}, columnOverride = copyColumn(scene.column);
   let materials = withWorldMaterials(scene.materials, config), materialKey = '[]';   // the map's materials (sculpt.js mapMaterials): the scene's, else the world's
   let rocks = copyRocks(scene.rocks) ?? worldRocks(config), rockKey = '[]';   // the map's rock presets (sculpt.js mapRocks): the scene's, else the world's
-  if (!scene.rocks) ({rocks, materials} = giveRockMaterials(rocks, materials, rocks.map(r => r.slot), config));   // sculpt.js loadSketch: the world's rock types bring their rock materials
+  if (!scene.rocks) {   // sculpt.js loadSketch: the world's rock types bring their rock materials
+    const given = giveRockMaterials(rocks, materials, rocks.map(r => r.slot), config); ({rocks, materials} = given);
+    if (given.missed.length) console.warn(`headless: no room for the rock material of ${given.missed.join(', ')}; ${given.missed.length > 1 ? 'they show' : 'it shows'} the world's rock material (sculpt.js says the same)`);
+  }
   const tools = copyMapTools(scene.tools) ?? [];   // the map's own tools (sculpt.js mapTools), which its strokes may name
   if (columnOverride) config.column = columnOverride;
   const catalog = await json('config/catalog.json');

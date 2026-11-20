@@ -102,7 +102,8 @@ for (const [k, v] of new URLSearchParams(query)) {
 // The map lane: each window's scene.
 const UNDULATION = new Set(['undulation', 'undulationScale', 'undulationCover', 'undulationArt']);   // the map's ground node (sculpt-knobs.js UNDULATION)
 const [{SHAPE_FIELDS, LANDFORM_KEYS, SECTION_KEYS}, {worldSlots}] = await Promise.all([import('../sculpt-scene.js'), import('./match_world.mjs')]);
-const {config, rocks, materials} = await worldSlots(world, configs);
+const {config, rocks, materials, missed} = await worldSlots(world, configs);
+if (missed.length) warnings.push(`world.rock: no room in the map's materials for the rock material of ${missed.join(', ')}; ${missed.length > 1 ? 'they show' : 'it shows'} the world's rock material (REFERENCE.md, "Rock slots")`);
 const {toolDefaults, DRAWN_KINDS} = await import('../sculpt-scene.js');
 const cardKeys = new Set([...SHAPE_FIELDS.map(f => f[0]), ...LANDFORM_KEYS, ...SECTION_KEYS, 'curve', 'along', 'seed', 'preset']);
 const defaultsOf = kind => { try { return toolDefaults(config, kind); } catch { return {}; } };
