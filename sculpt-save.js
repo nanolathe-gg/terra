@@ -1,5 +1,5 @@
 import {worldKit,storedWorldKit,instantiateWorldKit,sameKitData} from './sculpt-world-kit.js';
-import {withWorldMaterials,worldOwnMaterials,worldKept,keptWorldMaterials} from './sculpt-materials.js';
+import {withWorldMaterials,worldOwnMaterials,worldKept,keptWorldMaterials,LIBRARY,MAP_ROLES} from './sculpt-materials.js';
 // The map carries its effective world settings whole: every row's value (defaults and URL overrides included), its colors, its world
 // materials and its surface layers. Keep browser/session parameters out of the recipe; removed controls are dropped on load.
 import {KNOBS} from './sculpt-knobs.js';
@@ -9,19 +9,34 @@ import {copySurface,withSurfaceMaterials} from './sculpt-material-model.js';
 
 // The tables of a world's data the renderer reads as they are (not rows): its material constants, water colors and placement thresholds.
 // The map keeps them with its world settings, so retuning a built-in world's table never changes a saved map either. Only a key the
-// world's data still has, holding a value of the same kind, is read back (a removed constant is dropped, AGENTS.md rule 7).
+// world's data still has, holding a value of the same kind, is applied (a removed constant is dropped, AGENTS.md rule 7). The filter runs
+// when the tables are applied, after a borrowed beach has put its numbers in (sculpt-scene.js borrowBeach), so a lent beach's numbers are kept too.
 export const ENGINE_TABLES=['material','water','placement'];
 const plain=v => v&&typeof v==='object'&&!Array.isArray(v);
 const sameKind=(a,b) => typeof a===typeof b&&Array.isArray(a)===Array.isArray(b)&&(a===null)===(b===null);
 export const engineTables=config => Object.fromEntries(ENGINE_TABLES.filter(k => plain(config[k])).map(k => [k,structuredClone(config[k])]));
-export function copyEngineTables(value,config) {
+export function copyEngineTables(value) {
   if (!plain(value)) return null;
   const out={};
-  for (const k of ENGINE_TABLES) if (plain(value[k])&&plain(config[k])) out[k]=Object.fromEntries(Object.entries(value[k]).filter(([key,v]) => Object.hasOwn(config[k],key)&&sameKind(v,config[k][key])&&JSON.stringify(v).length<=4096).map(([key,v]) => [key,structuredClone(v)]));
+  for (const k of ENGINE_TABLES) if (plain(value[k])) out[k]=Object.fromEntries(Object.entries(value[k]).filter(([,v]) => v!==undefined&&JSON.stringify(v).length<=4096).map(([key,v]) => [key,structuredClone(v)]));
   return out;
 }
-// A map's engine tables over the served ones: keys the data gained since the map was saved keep the data's value.
-export function applyEngineTables(config,engine) { for (const [k,table] of Object.entries(engine||{})) if (plain(config[k])&&plain(table)) config[k]={...config[k],...structuredClone(table)}; return config; }
+// A map's engine tables over the served ones, key by key and one level into a nested block (placement.rock): a key the data gained since the
+// map was saved keeps the data's value, and one it lost, or one of another kind, is dropped.
+const mergeKnown=(into,from,depth=0) => { const out={...into}; for (const [k,v] of Object.entries(from)) { if (!Object.hasOwn(into,k)||!sameKind(v,into[k])) continue; out[k]=depth<1&&plain(v)&&plain(into[k])?mergeKnown(into[k],v,depth+1):structuredClone(v); } return out; };
+export function applyEngineTables(config,engine) { for (const k of ENGINE_TABLES) if (plain(config[k])&&plain(engine?.[k])) config[k]=mergeKnown(config[k],engine[k]); return config; }
+// The world's role map (world.materials: the library material each surface role starts from, and the extra ones its tools lay) and the
+// optional stages it gives (a beach, the mineral margins' fringe and body; internal/site/config.go). The map keeps it, so a role a built-in
+// world gains or drops later reaches no saved map. A borrowed beach (config.beachBorrowed) is the lender's, chosen by beachFrom: not kept.
+const ROLE_STAGES=['beach','fringe','body'];
+export function worldRoles(config) { const {beach:_,...rest}=config.materials||{}; return structuredClone(config.beachBorrowed?rest:config.materials||{}); }
+export function copyRoles(value) {
+  if (!plain(value)) return null;
+  const out={};
+  for (const [k,v] of Object.entries(value)) if (k==='extra') { if (Array.isArray(v)) out.extra=v.filter(x => typeof x==='string'&&LIBRARY[x]); } else if (typeof v==='string'&&LIBRARY[v]) out[k]=v;
+  return out;
+}
+export function applyRoles(config,roles) { if (!plain(roles)) return config; config.materials=structuredClone(roles); config.layers=['slopeGrass','rock',...ROLE_STAGES.filter(k => roles[k])]; return config; }
 // Apply look's seven cards (owner, 2026-11-19): what of another world or map a map can take. A World row belongs to the card of the World
 // section it sits in (sculpt-ui.js WORLD_HOMES, passed as `home`); a setting that is no row (a shape tool's default) belongs to Tools.
 export const LOOK_CARDS=[['ground','Ground'],['water','Water'],['rocks','Rock types'],['surface','Surface layers'],['light','Light & weather'],['tools','Tools'],['features','Features']];
@@ -36,13 +51,17 @@ export function lookCard(key,home,{row=true}={}) {
 // The card a world material belongs to, by its world key (sculpt-materials.js worldKey): a role's surface, or a surface layer's.
 const ROLE_CARDS={worldGround:'ground',worldSlope:'ground',worldWater:'water',worldBeach:'water',worldRock:'rocks',worldDebris:'rocks',worldCrystal:'rocks',worldHigh:'surface',worldFringe:'surface',worldBody:'surface'};
 export const roleCard=key => ROLE_CARDS[key]??(typeof key==='string'&&key.startsWith('layer:')?'surface':null);
+// The card of a role in the world's role map (worldRoles) by its name there: a surface role's, the extra materials its tools lay (Tools), and
+// the materials only surface layers draw (soil, snow, moss: Surface layers).
+const ROLE_NAME_KEYS={ground:'worldGround',water:'worldWater',...Object.fromEntries(MAP_ROLES.map(([key,name]) => [name,key]))};
+export const roleNameCard=name => name==='extra'?'tools':ROLE_CARDS[ROLE_NAME_KEYS[name]]??'surface';
 export const worldKeys=config => new Set([...Object.keys(config.defaults||{}),...Object.keys(config.engineDefaults||{}),...KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)),'beachFrom','sandEdge','fill','relief','palette','sun']);
 export function savedWorld(config,settings,world) {
   const knobs={};
   for(const key of worldKeys(config)){const value=settings.get(key)??world.knobs?.[key]??config.defaults?.[key]??config.engineDefaults?.[key];if(value!==undefined&&value!==null)knobs[key]=String(value);}
   // The map saves its world whole (owner, 2026-11-19), its surface layers included, so retuning the built-in world never changes it.
   const surface=world.surface??config.surface;
-  return {...storedWorldKit(config,world),materials:worldKept(withWorldMaterials(world.materials,config)),name:world.name||config.biome,base:config.biomeId,colors:worldHexColors(config,settings,world.colors||{}),knobs,...(surface?{surface:copySurface(surface)}:{}),engine:engineTables(config)};
+  return {...storedWorldKit(config,world),materials:worldKept(withWorldMaterials(world.materials,config)),name:world.name||config.biome,base:config.biomeId,colors:worldHexColors(config,settings,world.colors||{}),knobs,...(surface?{surface:copySurface(surface)}:{}),engine:engineTables(config),roles:worldRoles(config)};
 }
 // A number written as text or a number: "abc", "NaN", "1e999" and "" are not.
 const finiteText=v => String(v).trim()!=='' && Number.isFinite(Number(v));
@@ -68,9 +87,9 @@ export function copySavedWorld(value,config) {
     colors[key]=key==='shallowTone'&&v?[...v]:v;
   }
   const surface=value.surface===undefined?null:copySurface(value.surface);
-  const engine=copyEngineTables(value.engine,config);
-  const result={...storedWorldKit(config,value),materials:worldKept(withWorldMaterials(value.materials,config)),name:value.name.slice(0,120),base:value.base,colors,knobs,...(value.featureSet?{featureSet:normalizeSet(value.featureSet,config)}:{}),...(surface?{surface}:{}),...(engine?{engine}:{})};
-  if(value.tools!==undefined||value.rocks!==undefined)instantiateWorldKit({...config,surface:surface??config.surface,worldMaterials:keptWorldMaterials(result.materials,config)},result);
+  const engine=copyEngineTables(value.engine),roles=copyRoles(value.roles),cfg=roles?applyRoles({...config},roles):config;   // the map's roles decide its world materials
+  const result={...storedWorldKit(cfg,value),materials:worldKept(withWorldMaterials(value.materials,cfg)),name:value.name.slice(0,120),base:value.base,colors,knobs,...(value.featureSet?{featureSet:normalizeSet(value.featureSet,config)}:{}),...(surface?{surface}:{}),...(engine?{engine}:{}),...(roles?{roles}:{})};
+  if(value.tools!==undefined||value.rocks!==undefined)instantiateWorldKit({...cfg,surface:surface??config.surface,worldMaterials:keptWorldMaterials(result.materials,cfg)},result);
   return result;
 }
 

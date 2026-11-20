@@ -309,7 +309,7 @@ export const DEFAULT_SEED=2701;
 export function borrowBeach(config,settings) {
   const lender=config.beachSources?.[settings.get('beachFrom')];
   if (!lender || config.layers.includes('beach')) return config;
-  config.layers=[...config.layers,'beach']; config.material={...config.material,...lender.material}; config.beachTable=lender.table;
+  config.layers=[...config.layers,'beach']; config.material={...config.material,...lender.material}; config.beachTable=lender.table; config.beachBorrowed=true;
   if (lender.beachMaterial) config.materials={...config.materials,beach:lender.beachMaterial};   // its sand is the lender's beach material (the map's beach role)
   return config;
 }

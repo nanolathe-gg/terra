@@ -1,5 +1,5 @@
 import {requestAdapter} from './sculpt-webgpu.js';
-import {savedWorld,worldOverrideCount,copySavedWorld,worldKeys,applyEngineTables,copyEngineTables,storedWorldMap,LOOK_CARDS,lookCard,roleCard} from './sculpt-save.js';
+import {savedWorld,worldOverrideCount,copySavedWorld,worldKeys,applyEngineTables,copyEngineTables,storedWorldMap,LOOK_CARDS,lookCard,roleCard,roleNameCard,worldRoles,copyRoles,applyRoles} from './sculpt-save.js';
 import {normalizeSet} from './sculpt-feature-set.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mapGeometry,mountMapCanvas,validMapSize} from './sculpt-map.js';
@@ -2425,9 +2425,10 @@ function showWorldError(){if(embeddedWorldError)status(`The map’s world settin
 const knownWorldKnobs=(knobs,base)=>{const known=worldKeys(base);return Object.fromEntries(Object.entries(knobs||{}).filter(([key])=>known.has(key)));};
 // Reset and history share one persistence boundary: intermediate material/surface restores never become saved defaults.
 function configureStoredWorld(world,beach=world.knobs?.beachFrom){
-  for(const key of ['defaults','engineDefaults','layers','material','water','placement','materials','beachTable','featureSet']){
+  for(const key of ['defaults','engineDefaults','layers','material','water','placement','materials','beachTable','beachBorrowed','featureSet']){
     if(baseWorldConfig[key]===undefined)delete config[key];else config[key]=structuredClone(baseWorldConfig[key]);
   }
+  applyRoles(config,world.roles);
   const knobs=knownWorldKnobs(world.knobs,baseWorldConfig);config.defaults={...config.defaults,...knobs};
   refreshWorldTools(world);
   for(const key of Object.keys(config.engineDefaults||{}))if(knobs[key]!==undefined)config.engineDefaults[key]=knobs[key];
@@ -2468,7 +2469,7 @@ function composeLook(B,cards) {
   for (const key of new Set([...Object.keys(BW.colors||{}),...Object.keys(R.colors)])) { const card=lookCard(key,''); if (!card||!cards.has(card)) continue; if (BW.colors&&Object.hasOwn(BW.colors,key)) R.colors[key]=BW.colors[key]; else delete R.colors[key]; }
   let surface=cur.surface;
   if (cards.has('surface')&&BW.surface) { surface=withSurfaceMaterials(copySurface(BW.surface),baseSurface); R.surface=surface; }
-  if (all) { R.name=BW.name||config.biomes?.[B.biome]||R.name; if (sameBase) { const engine=copyEngineTables(BW.engine,baseWorldConfig); if (engine) R.engine=engine; else delete R.engine; } }
+  if (all) { R.name=BW.name||config.biomes?.[B.biome]||R.name; if (sameBase) { const engine=copyEngineTables(BW.engine); if (engine) R.engine=engine; else delete R.engine; } }
   // World materials of the checked cards: the source's graph into the slot that holds the role here, or a new slot.
   const source=copyMaterials(B.materials)??copyMaterials(BW.materials)??[];let mats=structuredClone(mapMaterials);
   for (const m of source) {
@@ -3260,7 +3261,7 @@ async function boot() {
     const restoring=pending??automatic;let embedded=null;try{embedded=copySavedWorld(restoring?.worldSettings,config);}catch(err){embeddedWorldError=err.message;}
     worlds={};
     // The map's world settings are its own (owner, 2026-11-19): they are this page's world, whatever the built-in world holds now.
-    if(embedded){worlds[config.biomeId]={...embedded};for(const [key,value]of Object.entries(embedded.knobs))experiment.set(key,value);}
+    if(embedded){worlds[config.biomeId]={...embedded};for(const [key,value]of Object.entries(embedded.knobs))experiment.set(key,value);applyRoles(config,embedded.roles);}
     // H12b: the editor always works on a map; an address without a size opens the default 4x4 one.
     if (!experiment.has('mapX') && !experiment.has('mapY')) {
       // An address without a size reopens the tab's map at its size and sea level.

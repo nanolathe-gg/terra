@@ -79,8 +79,23 @@ test('engine tables travel with the map; a key the world no longer has, or a val
   const {engineTables,copyEngineTables,applyEngineTables} = await import('../sculpt-save.js');
   const base={material:{rockSlope:1.1,wetBand:13,rockMeanRGB:[1,2,3]},water:{shallowRGB:[9,9,9]}};
   assert.deepEqual(engineTables(base),base);
-  assert.deepEqual(copyEngineTables({material:{rockSlope:.7,gone:1,wetBand:'x',rockMeanRGB:[4,5,6]},water:{shallowRGB:[1,1,1]},other:{}},base),{material:{rockSlope:.7,rockMeanRGB:[4,5,6]},water:{shallowRGB:[1,1,1]}});
-  const live=structuredClone(base);applyEngineTables(live,{material:{rockSlope:.7}});assert.deepEqual(live.material,{rockSlope:.7,wetBand:13,rockMeanRGB:[1,2,3]},'a key the map lacks keeps the data\'s value');
+  const saved=copyEngineTables({material:{rockSlope:.7,gone:1,wetBand:'x',rockMeanRGB:[4,5,6]},water:{shallowRGB:[1,1,1]},other:{}});
+  assert.deepEqual(Object.keys(saved),['material','water'],'only the engine tables are read');
+  const live=structuredClone(base);applyEngineTables(live,saved);
+  assert.deepEqual(live,{material:{rockSlope:.7,wetBand:13,rockMeanRGB:[4,5,6]},water:{shallowRGB:[1,1,1]}},'a key the world lost, or a value of another kind, is dropped when applied');
+  const lacks=structuredClone(base);applyEngineTables(lacks,{material:{rockSlope:.7}});assert.deepEqual(lacks.material,{rockSlope:.7,wetBand:13,rockMeanRGB:[1,2,3]},'a key the map lacks keeps the data\'s value');
+  const nested={placement:{rock:{slope:.5,tap:.2},route:{from:1,to:2}}};applyEngineTables(nested,{placement:{rock:{slope:.3},route:{from:4,to:5}}});
+  assert.deepEqual(nested.placement,{rock:{slope:.3,tap:.2},route:{from:4,to:5}},'a nested block keeps a key the data gained since');
+});
+
+test('the role map travels with the map: a role the world gains later reaches no saved map; a borrowed beach is not kept', async () => {
+  const {worldRoles,copyRoles,applyRoles} = await import('../sculpt-save.js');
+  const roles={ground:'green-ground',water:'green-water',rock:'green-rock',extra:['green-groundgrain','no-such-material']};
+  assert.deepEqual(copyRoles({...roles,high:'no-such-material'}),{...roles,extra:['green-groundgrain']},'unknown library keys are dropped');
+  const live={materials:{...roles,high:'green-moss',beach:'green-sand'},layers:['slopeGrass','rock','beach']};
+  applyRoles(live,copyRoles(roles));assert.equal(live.materials.high,undefined);assert.deepEqual(live.layers,['slopeGrass','rock']);
+  assert.equal(worldRoles({materials:{...roles,beach:'green-sand'},beachBorrowed:true}).beach,undefined);
+  assert.equal(worldRoles({materials:{...roles,beach:'green-sand'}}).beach,'green-sand');
 });
 
 test('a stored world becomes a map: changed materials (no slot, marked with what they replace), rows, colors and surface', async () => {
