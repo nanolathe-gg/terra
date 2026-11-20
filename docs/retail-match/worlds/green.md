@@ -4,12 +4,12 @@
 
 `repro/scenes/green-<n>.json`; retail data in `$R/repro-r7/green-<n>/`.
 
-| Window | Retail map | What it tests | Before round 1 | After round 5's port | After round 6's port |
+| Window | Retail map | What it tests | Before round 1 | After round 6's port | After round 7's port |
 | --- | --- | --- | --- | --- | --- |
-| green-1 | pc games' evad river delta | broken hills (rock type `evad`) on a rolling plain by the sea | shape .22, look .10 | shape .22, look .08 | shape .13, look .07 |
+| green-1 | pc games' evad river delta | broken hills (rock type `evad`) on a rolling plain by the sea | shape .22, look .10 | shape .13, look .07 | shape .135, look .067 |
 | green-2 | great divide | long gentle grass slopes, a ridge | shape .16, look .20 | shape .16, look .19 | shape .16, look .19 |
-| green-3 | the barrier reef | islands (rock type `reefstone`) and reef shallows | shape .08, look .09 | shape .08, look .11 | shape .08, look .09 |
-| green-4 | the pass | a rocky massif with grass in its folds (rock type `passrock`) | shape .63, look .23 | shape .63, look .24 | shape .37, look .24 |
+| green-3 | the barrier reef | islands (rock type `reefstone`) and reef shallows | shape .08, look .09 | shape .08, look .09 | shape .08, look .09 |
+| green-4 | the pass | a rocky massif with grass in its folds (rock type `passrock`) | shape .63, look .23 | shape .37, look .24 | shape .37, look .24 |
 | green-5 | plains and passes | a terraced ridge on a rolling plain (`hill` strokes with Steps, rock `ridgestone`) | shape .18, look .70 | shape .12, look .34 | shape .12, look .34 |
 | green-6 | wretched ridges | two ridges of dark blocky rock (rock `ridgeblock`) | shape .24, look .10 | shape .18, look .08 | shape .18, look .08 |
 | green-7 | two continents | open water and coast: **held out** | shape .19, look .12 | shape .19, look .12 | shape .19, look .12 |
@@ -24,7 +24,8 @@ foot, boulders in the shallows. Those moved green-2 .17 to .19, its gentle
 lines 0.46x to 0.28x retail, and green-3, green-4 and green-5 by .01.
 Green-1's port shows in its `flat:edges`, not its look); shape .23, look
 .17 after round 5's port (measured 2026-11-19); shape .18, look .17 after
-round 6's port (measured 2026-11-19). One render of all seven windows each.
+round 6's port (measured 2026-11-19); shape .18, look .17 after round 7's
+port (green-1 alone moved; measured 2026-11-19). One render of all seven windows each.
 
 ### Which rock each window's strokes use
 
@@ -88,94 +89,75 @@ These notes are by eye, from the base crops in
 - No rock coasts on Green. Shores are a natural sand-grass edge.
 - Hills must stay grassy. Rock on a hill is cracks and patches, not a cap.
 
-## Start here (round 7)
+## Start here (round 8)
 
-Round 6 (branch `match-green-7`, 94 of 300 trials, run by a background
-agent that ran out of working memory; report in
-`$R/match/terraform-wt-match-green-7/green/REPORT.md`, notes in `NOTES.md`
+Round 7 (branch `match-green-8`, 42 of 300 trials, a background agent that
+stopped early to keep room for its report; report in
+`$R/match/terraform-wt-match-green-8/green/REPORT.md`, notes in `NOTES.md`
 beside it) was reviewed and partly ported to main on 2026-11-19. Earlier
-rounds' starts are in git history (this section's earlier versions).
+rounds' starts are in git history.
 
-- **Ported:**
-  - Green-4's nine landform cards on the lfMountain section, gullies 50,
-    cracks 20, with a new rock type `passrock` (slot 7: faceRock .55,
-    faceGrass .8, material `green-passrock`). Shape .63 to .37 (measured);
-    by eye a rock-and-grass mosaic like retail's instead of grassy mesas
-    between gray bands.
-  - Green-3's land strokes on a smooth rock type `reefstone` (slot 8),
-    cracks 20; its water strokes keep `evad`. Look .106 to .094 (round 6's
-    trial-023).
-  - Green-1's rolling plain, `undulation=10` with its lump paint at 30.
-    Shape .22 to .13, look unchanged (.08). The review then set its
-    `undulationArt` to 0 (.3 drew an even pale dimple texture over the
-    whole plain): look .080 to .068 (port trial-005).
-- **Not ported:**
-  - Green-5's `green-groundlumps` (its speck grass with lit 5 px relief).
-    Look .339 to .332, but its 8 px texture and tone spread move away from
-    retail (1.57 against 1.45; 16.2 against 13.9), and by eye it is coarser
-    and brighter than retail's fine, even plain. Round 5's mottle was held
-    for the same reason.
-  - Green-1's `green-shelfbed` (light streaks on the shelf). Its brightest
-    1% matched retail's 154.5 but the look did not move (.0800 to .0801),
-    and at 1x the streaks barely show. It cost a material slot.
+- **Ported:** green-1 paints Relaxation: less (channel 19, the erosion-rate
+  override) at 60 along its coastal plain, clear of the hills. Measured
+  without the tufts layer below (port trials 001 against 000): look .0681
+  to .0673, shape .128 to .135, shore:dark cleared. By eye the plain's lit
+  creases are fewer and fainter.
+- **Not ported:** a world surface layer of grass tufts on gentle grades
+  (round 7's fd575509, amount .4, slope .03-.1). Every window's look fell a
+  little (mean .1701 to .1663, held-out .1207 to .1183), but at 1x it is
+  close to invisible: a faint 1-2 px grain on green-1, a slightly darker
+  speckle on green-5 (trial-027 and trial-041 gentle crops). It also pushes
+  green-3's and green-7's clean grades away from retail (gentle edges
+  .0012 to .0039 and .0003 to .0032, retail .0005 and .0003). Retail's
+  10-20 px lit lumps are still missing.
 
-The harness now names the material each window's `groundPreset` lays
-(REFERENCE.md, section 7) and warns when a stroke's ground slot lays a role
-or surface-layer material: a new surface layer's material takes a slot
-ahead of `world.materials.extra` and moves every later one (round 6's
-trial-032 turned green-5's plain into sand). The brief tells an agent that
-cannot write REPORT.md to put the report in its final message.
+The harness now lists every paint channel (REFERENCE.md, section 7, "Paint
+channels") and names each window's paint strokes by channel. PLAYBOOK.md's
+map lane covers painted styles and overrides (channels 8-25), with round 7's
+cautions.
 
-The largest findings at the start of round 7 (measured, the port's base
-render, `$R/match/terraform-wt-port-green-r6/green/trial-000`):
+Checked in the review:
+- **Green-1's creases** are Time cutting the rolling undulation: Time is
+  seeded from the game height with the undulation (engine-feed.wgsl
+  `seedMain`), and its change is added to the art before the art subtracts
+  the undulation it hides (lines 169-172). Round 7's proposal (the art takes
+  Time's change in the undulation at the `undulationArt` share) is engine
+  work for the owner, not a round.
+- **Palette 169 on every plain** (10-12% against retail's under 3%): a
+  material's palette list limits only its unlit colors; the output stage
+  (engine-output.wgsl) reduces the lit color to the whole palette, by the
+  owner's design (TERRAIN_ENGINE.md decision 25). Round 7's proposal stands
+  as a question for the owner.
 
-- green-1 `gentle:edges` 0.08x and `gentle:band32` 2.49x; `shelf:edges`
-  0.19x and `shelf:light` 134 against 154; `slope:share` 21% against 14%.
-- green-2 `gentle:lines` 0.28x and `slope:share` 50% against 39%.
-- green-3 `gentle:band32` 2.72x and `shore:edges` 0.40x.
-- green-4 `steep:lines` 1.81x and `steep:light` 123 against 114: bright
-  diagonal striations across the faces that retail lacks (by eye, the
-  port's green-4 steep crop). Its shape gap is now steepness: slope over 2
-  on 15% of cells against retail's 22%.
-- green-5 `gentle:edges` 0.11x, `flat:edges` 0.24x, `slope:lines` 0.21x.
-- green-6 `steep:light` 107 against 123.
+Data gains are shrinking: the mean look went .174 to .170 over rounds 6
+and 7, and most of round 7's findings were engine limits. **The shape lane
+has the clearest gaps left; start there:**
 
-Leads:
+1. **Green-5's west limb** is steeper and narrower than retail's: retail's
+   contours spread over about 180 px, ours over about 80 px (round 7,
+   trial-000 `scenes/green-5/layout.png`). Move or widen its strokes.
+2. **Green-4's massifs** are less steep than retail's (slope over 2 on 15%
+   of cells against 22%), and its middle massif is narrower (round 6).
+3. **Green-2's slope share** is 50% against retail's 39% (its fixture is
+   too sloped); a concave back section fixed the shape but moved the hatch
+   out of the gentle class (round 6's 046). Try the strokes' width and
+   spacing instead.
+4. **Green-4's clumps and striations:** a clump material with retail's
+   clump mean and no bright tail, built as its own graph (not a `like`
+   recolor), is untried. Every brighter clump ground so far raised the
+   brightest 1% and the thin lines (round 7's 013-015).
+5. **Gentle-grade lumps differ about 20x between maps** (retail gentle
+   edges: green-5 .0274, green-1 .0103, green-3 .0005, green-7 .0003), so
+   they are a map choice, not a world layer. A lit-relief ground painted on
+   one map's grades reaches them (round 6's 057 and 092) but also its plain.
+6. **Untried:** `erosionRain` above 1; green-6's caps (round 5's trial-047,
+   faceShade .6); green-3's shore rings (its shore is 1% of the window);
+   green-1's shelf streaks.
 
-1. **Green-1's creases.** Its rolling heights are lit, so the plain shows
-   long dark creases that retail's flat-drawn art does not (by eye, the
-   port's green-1 flat crop). `undulationArt` 0 leaves them (port
-   trial-001), so they come from lighting the heights, not the art share.
-   Look for a control that softens light on low relief (relief and light
-   settings in REFERENCE.md), or say what is missing.
-2. **Green-4's striations and clumps.** passrock's faces carry bright
-   diagonal streaks. Round 6's diagnostics (095/096) showed a card's own
-   ground reaches the face grass: `green-ledgegrass` (like green-ground
-   #5a9c2c) matched retail's clump color (39,93,23 against 38,92,17) but
-   lines rose to 4.9x. Try it with passrock's joints and scratches lower.
-   Its shape gap is the next shape step: retail's massifs are steeper, and
-   its middle massif is wider.
-3. **The two-tone moss rock is closed.** Without the `color` key (round 6's
-   049, 075) clumps read as a green tint, not discrete clumps: `rockGrain`
-   keeps a third of a material's hue around its mean. A face's discrete
-   green comes from faceRock and faceGrass, which passrock uses.
-4. **Gentle-grade lumps (round 6's first proposal).** Confirmed in the
-   code: a surface layer's material relief only shifts the layer's edge
-   (engine-frag.wgsl, the rule's `lift`); only a painted ground's relief is
-   lit (`groundHeightFor` reads the painted slot). A painted relief ground
-   reaches grades but also the plain (round 6's 057, 092).
-5. **Gentle-grade hatch (its second proposal).** A contour line's strength
-   is the rock type's `banding`, scaled by Banding paint, times the slope
-   gate, and `bandLevel` is that gate on near-level ground. Green-2 already
-   paints Banding more (channel 12, amount 100), yet a small world
-   `bandLevel` barely moves its gentle lines: .28x retail to .33x at .3
-   and .22x at .6 (port trials 003/004). The data cannot reach it; the
-   proposal (a per-map or per-rock `bandLevel`) holds.
-6. **Riser lines** on green-5 hold for a fourth round.
-7. **Untried:** green-3's shore rings (shore edges .40x); the plain's
-   palette mix (retail's two main entries are 168 at 39% and 72 at 22%;
-   ours puts 13% on 169, which retail uses for 1%); green-6's caps
-   (round 5's trial-047, faceShade .6, improved its look and was dropped).
+Engine proposals carried for the owner: Time's cut at the art share (above);
+a material's palette on level ground (above); vegetation overrides that
+spare rock (round 7); `bandLevel` per rock type (rounds 6-7); riser lines on
+stroke terraces (four rounds).
 
 ## Pilot notes (2026-11-18)
 

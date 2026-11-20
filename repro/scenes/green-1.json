@@ -7,4 +7,5 @@
   ["paint", [[470, 40], [640, 60]], {"card": {"diameter": 170, "amount": 30, "paintChannel": 16}}],
   ["paint", [[780, 60], [900, 150]], {"card": {"diameter": 160, "amount": 30, "paintChannel": 16}}],
   ["paint", [[740, 250], [860, 300]], {"card": {"diameter": 130, "amount": 30, "paintChannel": 16}}],
-  ["paint", [[80, 225], [150, 230]], {"card": {"diameter": 100, "amount": 30, "paintChannel": 16}}]]}
+  ["paint", [[80, 225], [150, 230]], {"card": {"diameter": 100, "amount": 30, "paintChannel": 16}}],
+  ["paint", [[60, -60], [100, 560], [300, 700], [600, 900], [900, 1060]], {"card": {"diameter": 300, "amount": 60, "paintChannel": 19}}]]}

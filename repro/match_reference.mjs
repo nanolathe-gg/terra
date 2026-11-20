@@ -152,6 +152,15 @@ row([-1, 'ground beneath (keeps what is there)', '', '']);
 for (const m of materials) row([m.worldGround ? `${m.slot} (choose as 0)` : m.slot, m.name, m.source ? `\`${m.source}\`` : '', materialUse(m)]);
 L.push('', 'To give a map another ground, add its material to `world.materials.extra` (a list of textures.json keys); it takes the next free slot.',
   'A `landform` or `paint` stroke lays it with `groundPreset`; a paint stroke with a large `diameter` covers a plain, for example\n  `["paint", [[60, 300], [380, 320]], {"card": {"diameter": 300, "amount": 100, "groundPreset": 12}}]`.', '');
+L.push('### Paint channels (`paintChannel`)', '', 'A `paint` stroke\'s `paintChannel` says what it paints (sculpt-scene.js); `amount` is its strength, 0 to 100. A map paints these',
+  'where its retail map differs from the world\'s own result: round 7 painted Relaxation: less on green-1\'s coastal plain to calm Time\'s creases.',
+  'They act on everything under the brush: Vegetation: more also greens a ridge\'s rock (round 7\'s trial-033), so keep the stroke clear of what it should not change.', '');
+head(['channel', 'paints', 'kind']);
+row([26, 'a material (`groundPreset`, section above)', 'ground']);
+for (const [n, label] of scene.MASK_CHOICES) row([n, label, 'mask']);
+for (const [n, label] of scene.LUMP_CHOICES) row([n, label, 'ground relief']);
+for (const [n, label] of scene.STYLE_CHOICES) row([n, label, n >= 18 ? 'override of a Time or surface result, signed' : 'style, scales the world\'s own value']);
+L.push('');
 L.push('### What each window\'s scene sets now', '', 'A scene stroke starts from the world\'s numbers for the shape it names (`world.shapes.<kind>`, for example',
   '`world.shapes.hill` for a `hill` stroke), then its `card` on top: a preset key moves the windows whose strokes name that kind and leave',
   'that key out of their card. A world\'s own shapes (those with a `from`, such as a massif) are never named by a scene, so editing one moves no',
@@ -162,7 +171,7 @@ for (const f of readdirSync(join(repo, 'repro', 'scenes')).filter(f => new RegEx
   L.push(`- **${f.replace('.json', '')}** (${sc.source?.map ?? 'unknown map'}): query \`${sc.query || ''}\`; ${strokes.length} strokes` +
     (sc.rocks ? '; its own rock list' : '') + (sc.materials ? '; its own material list' : ''));
   const kinds = new Map();
-  for (const [kind, , opt] of strokes) { const c = opt?.card ?? {}; const g = materials.find(m => m.slot === c.groundPreset && c.groundPreset > 0); const k = `${kind}, rock ${c.rockPreset ?? 'unset (-1)'}, ground ${c.groundPreset ?? (kind === 'paint' ? 'unset (0)' : 'unset (-1)')}${g ? ` (\`${g.source ?? g.name}\`)` : ''}`; kinds.set(k, (kinds.get(k) ?? 0) + 1); }
+  for (const [kind, , opt] of strokes) { const c = opt?.card ?? {}; const g = materials.find(m => m.slot === c.groundPreset && c.groundPreset > 0); const ch = kind === 'paint' ? `, channel ${c.paintChannel ?? (c.groundPreset !== undefined ? 26 : 1)}` : ''; const k = `${kind}${ch}, rock ${c.rockPreset ?? 'unset (-1)'}, ground ${c.groundPreset ?? (kind === 'paint' ? 'unset (0)' : 'unset (-1)')}${g ? ` (\`${g.source ?? g.name}\`)` : ''}`; kinds.set(k, (kinds.get(k) ?? 0) + 1); }
   for (const [k, n] of kinds) L.push(`  - ${n} x ${k}`);
 }
 L.push('');
