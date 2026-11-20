@@ -125,6 +125,9 @@ for (const [k, v] of new URLSearchParams(query)) {
 const UNDULATION = new Set(['undulation', 'undulationScale', 'undulationCover', 'undulationArt']);   // the map's ground node (sculpt-knobs.js UNDULATION)
 // A map's own sea level and plain height above it (Map pane; sculpt-map.js configureMap): a low-floored retail map uses the game's 0-255.
 const MAP_HEIGHTS = new Set(['sea', 'plain']);
+// A map's own water: its depths, bed and damp band (red-2's river stays light to depth 24 where red-3's sea darkens from depth 8). A map
+// holds its world's settings whole (owner, 2026-11-19); this short list is what a map maker sets per map, so the rest stays one world answer.
+const MAP_WATER = new Set(['shallowDepth', 'deepDepth', 'bedTint', 'bedBright', 'bedContrast', 'bedCracks', 'wetBand']);
 const [{SHAPE_FIELDS, LANDFORM_KEYS, SECTION_KEYS}, {worldSlots, materialUse}] = await Promise.all([import('../sculpt-scene.js'), import('./match_world.mjs')]);
 const {config, rocks, materials, missed} = await worldSlots(world, configs);
 if (missed.length) warnings.push(`world.rock: no room in the map's materials for the rock material of ${missed.join(', ')}; ${missed.length > 1 ? 'they show' : 'it shows'} the world's rock material (REFERENCE.md, "Rock slots")`);
@@ -144,7 +147,7 @@ for (const f of scenes) {
     if (!pinned.has(k)) pinned.set(k, []); pinned.get(k).push(`${f.replace('.json', '')} ${v}`);
     if (MAP_HEIGHTS.has(k)) { if (!(Number.isInteger(Number(v)) && Number(v) >= 0 && Number(v) <= 255)) errors.push(`${at} query ${k}=${v}: a whole number 0-255.`); continue; }
     if (!known.has(k)) { errors.push(`${at} query ${k}: not a setting the page reads.`); continue; }
-    if (!UNDULATION.has(k) && !had.has(k)) errors.push(`${at} query ${k}: a scene's query sets only the map's own ground relief (${[...UNDULATION].join(', ')}). ${k} is the world's: set it in world.knobDefaults, or give this map a rock type or ground of its own (README.md, "The map lane").`);
+    if (!UNDULATION.has(k) && !MAP_WATER.has(k) && !had.has(k)) errors.push(`${at} query ${k}: a scene's query sets only the map's own ground relief (${[...UNDULATION].join(', ')}), its sea and plain, and its own water (${[...MAP_WATER].join(', ')}). ${k} is the world's: set it in world.knobDefaults, or give this map a rock type or ground of its own (README.md, "The map lane").`);
     const r = ranges.get(k), x = Number(v);
     if (r && Number.isFinite(x) && (x < r[0] || x > r[1])) errors.push(`${at} query ${k}=${v} is outside its range ${r[0]} to ${r[1]}.`);
   }
