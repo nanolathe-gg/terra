@@ -110,11 +110,19 @@ look .115 to .111; held-out green-7 unchanged (.19/.102, holdout-003).
   50-80 on the old wide ridge only scalloped the outline.
 - **Green-2 (three commits):** the ridge runs past the east edge at half
   height and the south erase sits 100 px lower (fixtures, shape .128 to
-  .083), and a Banding more stroke covers the new east grades (gentle:lines
-  cleared). Look .139 to .124.
+  .083), and a Banding more stroke covers the new east grades. Look .139 to
+  .124. In the final state (trial-057/078) gentle:lines shrank 3.0 to 1.0
+  (0.61x) but did not clear; slope lines (2x) and steep lines (0.49x) are
+  back at their base size; flat:edges (retail lines on flat ground) and
+  steep:band32 are new.
 - **Green-5:** Banding more along the escarpment (look .206 to .198,
-  slope:lines 1.9 to 1.2): bands show only where Step breakup removes the
-  shelves, which is round 14's engine finding seen from the map side.
+  slope:lines 1.9 to 1.2; a weak keep: the new lines are a fine regular
+  hatch, not retail's long step lines, and in-band 16 to 13). Why bands miss
+  the terraces (engine-bake.wgsl contourBands): the slope gate rises from
+  .07 to .18 and fades out from .35 to bandFade (.75), so the flat shelves
+  and steep risers both fall outside it; bandFade 1.5 (trial-079) still
+  draws no lines on the risers, where bands 1.3 units apart run closer
+  than a pixel.
 - **Measured, not kept:** faceFill .24 (mean look .115 to .112, green-4 .149
   to .136; green-2, 3 and 6 slightly worse, so the owner's light stays:
   trial-048); creaseShade .2 (mean worse, green-4 +.024: trial-064);
@@ -127,10 +135,10 @@ Leads:
 1. **Green-4 (look .149, now the second worst):** steep luma 50 against 55
    and brightest 123 against 114 (ours has more shadow and brighter lit
    ledges). Its valley lumps come from heightVary 30 on the long lean back
-   (heightVary 0 removes them, shape +.03: trial-036; varyFoot 0 is far
-   worse: trial-058).
-2. **Green-5 step lines** still wait on the engine (bands skip terraced
-   slopes; trial-077 shows bands only on broken-up stretches).
+   (heightVary 0 removes them, shape +.03: trial-036, pictures in its
+   re-render trial-080; varyFoot 0 is far worse: trial-058).
+2. **Green-5 step lines** still wait on the engine (see above; terraceCalm
+   is 0 and only removes lines).
 3. **Green-6's 32 px contrast** (ours 4.3, retail 6.5): neither faceShade 1
    nor creaseShade moved it; retail's east faces are near black with cast
    shadow.
