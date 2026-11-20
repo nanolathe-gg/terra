@@ -1049,7 +1049,7 @@
         "debrisDepth": 5,
         "looseSize": 7,
         "stoneSort": 0.7,
-        "rockFace": 2,
+        "rockFace": 0.8,
         "faceRock": 1,
         "rockFaceFrom": 0.2,
         "faceRun": 120,
@@ -1105,7 +1105,9 @@
 
       "faceRindTone": -0.3,
 
-      "faceRind": 1
+      "faceRind": 1,
+
+      "rockFace": 2
 
      }
 
