@@ -159,7 +159,13 @@ const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
 // Rounded authored knots preserve a long shoulder and a short exposed face.
 // Zero slope at the crown avoids the knife edge of a skewed power-law dome.
 setFailureHandler(err => error(err?.message??String(err)));
-function error(message='') { $('error').textContent=message; $('error').hidden=!message; }
+// The loading screen (index.html) covers the page until the first terrain picture, and goes in the same task that paints it, so a
+// screenshot after the picture never shows it. Once the editor is ready it takes no clicks. A boot failure shows its message there; an
+// error after ready, or no picture ten seconds after ready, lets it go, so the editor's own error line and progress are seen.
+function loadingStep(text) { $('loading-step').textContent=text; }
+function loadingDone() { $('loading-screen').hidden=true; }
+function loadingFailed(message) { const el=$('loading-screen'); if(el.hidden)return; el.classList.add('failed'); $('loading-error').textContent=message; $('loading-error').hidden=false; }
+function error(message='') { if(message&&ready)loadingDone(); $('error').textContent=message; $('error').hidden=!message; }
 // A load's note about the features it left out (sculpt-features.js) rides along with the load's own message, once.
 let featureNotice='';
 function status(message) { $('status').textContent=featureNotice&&message!==featureNotice?message+' '+featureNotice:message; if(message!==featureNotice)featureNotice=''; }
@@ -1522,7 +1528,7 @@ const sculptRegion={
   select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,selectedShapes,toggleShape,pickAt:pickNode,selectionLabel:shapeName,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); transformSelected(() => [1,0,0,1,dx,dy]); },
   pendingInputs:()=>worldInputQueue.pending,drawOptions:currentDrawOptions,mapData,restoreMapData,mapChanged,checkpoint,ready:() => ready&&!loading,canExport,
-  setBusy:setMapBusy,registerFeatures:handle => { mapFeatures=handle; },registerMetadata:handle => { mapMetadata=handle; },renderProgress,presented:drawShapePreview,onUpdate:fn => { mapUpdate=fn; }
+  setBusy:setMapBusy,registerFeatures:handle => { mapFeatures=handle; },registerMetadata:handle => { mapMetadata=handle; },renderProgress,presented:fresh=>{drawShapePreview();if(fresh)loadingDone();},onUpdate:fn => { mapUpdate=fn; }
 };
 window.sculptRegion=sculptRegion;
 function cloneNodes(list=nodes) { return list.map(n => ({...n,points:n.points?.map(p => ({...p})),paths:clonePaths(n),frame:n.frame?.slice(),params:n.params?{...n.params}:undefined})); }
@@ -3089,7 +3095,7 @@ async function bootMap(pending=null) {
   if(!experiment.has('newMap'))addGroundNode();
   mapCanvas=await mountMapCanvas({config,canvas,overlay,api:sculptRegion,drawOptions:currentDrawOptions});
   if (regionalFields.paged) { pagedCoarseStarted=true; regionalFields.subscribe(() => mapCanvas.schedule()); regionalFields.startCoarse().catch(() => {}); }   // H5b: the overview's coarse lattice fills in the background
-  renderer=mapCanvas.renderer; renderer.onerror=message => error(message); materialUseKey='[]'; syncMaterials();
+  renderer=mapCanvas.renderer; renderer.onerror=message => { error(message); loadingDone(); }; materialUseKey='[]'; syncMaterials();
   // A material's pipeline started or finished compiling (sculpt-material-cache.js): the export says why it waits, and a generated layer is drawn.
   renderer.onmaterials=done=>{ if(done)worldChanged({stage:materialStage??'C',world:false}); if(!renderer.materialsCompiling())materialStage=null; updateControls(); schedule(); };
   // A material's drawn color read back (sculpt-material-cache.js readMeans): the Color pickers show it.
@@ -3118,7 +3124,7 @@ async function bootMap(pending=null) {
     }
   }
   else status('Blank map ready · draw terrain with the existing tools.');
-  ready=true; $('editor').disabled=false; $('world-editor').disabled=false;
+  ready=true; $('editor').disabled=false; $('world-editor').disabled=false; $('loading-screen').classList.add('ready'); loadingStep('Drawing the terrain…'); setTimeout(loadingDone,10000);
   if (resave) saveWorking();
   history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
   if (pending) { try {   // a page that keeps no maps: the one-use handoff (Cache API)
@@ -3280,6 +3286,7 @@ $('new-map').onclick=()=>{if(ready&&!loading&&!stroke&&!moving)openNewMap();};
 async function boot() {
   try {
     await requestAdapter();   // a browser without WebGPU, or an adapter below the engine's limits, gets a plain message before anything loads
+    loadingStep('Reading the world…');
     services=await (await fetch('services.json')).json();   // which server-side services this host has (export, features, saving to a server)
     await chooseMap();
     // The world: the address's (the checks'), else the tab's map's, else the first. A map whose world this server lacks is let go.
@@ -3343,8 +3350,9 @@ async function boot() {
     for (const [id,value] of Object.entries(surfaceSliders(config))) $(id).value=value;
     syncDrawInputs();
     for (const [id,hidden] of Object.entries(surfaceGroupsHidden(config))) $(id).hidden=hidden;
+    loadingStep('Opening the map…');
     await bootMap(pending);
-  } catch (err) { if ($('new-map-dialog').open) $('new-map-dialog').close(); error(err.message); status('The experimental renderer could not start.'); }
+  } catch (err) { if ($('new-map-dialog').open) $('new-map-dialog').close(); error(err.message); loadingFailed(err.message); status('The experimental renderer could not start.'); }
 }
 // Read-only hook for capture tools: the displayed (refined) heights.
 // bakeMs and drawMs resolve to milliseconds from submit to GPU completion;

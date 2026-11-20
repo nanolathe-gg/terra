@@ -506,7 +506,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
     overlays();
   }
   function presented(fresh=true) {
-    api.presented?.();
+    api.presented?.(fresh);   // fresh: a newly drawn tile or block is on screen, not only retained ones repainted
     const now=performance.now();if(lastPresented&&now-lastScroll<300&&now-lastPresented<3000){frameTimes.push(now-lastPresented);if(frameTimes.length>1024)frameTimes.shift();}lastPresented=now;
     // Exercise the refinement working sets before clearing the crash note.
     if(fresh&&!foregroundPending()&&(!api.canExport||api.canExport()))terrainBudget.settled();

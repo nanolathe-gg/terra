@@ -187,3 +187,15 @@ kbd{font:9px system-ui;color:var(--muted);margin-left:4px}
 
 #new-map-worlds button{padding:0;overflow:hidden;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;text-align:left}.new-map-worlds img{display:block;width:100%;height:64px;object-fit:cover;image-rendering:pixelated}.new-map-no-picture{display:flex;align-items:center;justify-content:center;flex:none;height:64px;background:#20292d;border-bottom:1px solid var(--line);color:var(--muted);font-size:10px}
 .new-map-world-name{padding:6px 8px 0;font-size:11px;font-weight:600}.new-map-world-line{padding:1px 8px 7px;font-size:10px;line-height:1.35;color:var(--muted)}#new-map-worlds button[aria-pressed=true] .new-map-world-line{color:#c9dcbf}
+/* The loading screen (index.html) covers the page until the editor's first terrain picture; it stops taking clicks once the editor is ready. */
+.loading-screen{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:16px;background:var(--bg)}
+.loading-screen.ready{pointer-events:none}
+.loading-card{display:grid;justify-items:center;gap:14px;width:min(300px,100%);animation:loading-in .3s ease .15s both}
+.loading-card .brand{font-size:18px;gap:9px}.loading-card .brand-mark{font-size:28px}
+.loading-card p{margin:0;color:var(--muted);text-align:center}
+.loading-bar{width:100%;height:3px;overflow:hidden;border-radius:2px;background:#57745a55}
+.loading-bar:after{content:'';display:block;width:35%;height:100%;background:#b4d589;animation:terrain-progress 1.4s ease-in-out infinite}
+.loading-screen.failed .loading-card{width:min(460px,100%)}.loading-screen.failed .loading-bar,.loading-screen.failed #loading-step{display:none}
+.loading-card .loading-error{background:#442c29;border:1px solid #986253;color:#ffe1d6;padding:12px;border-radius:5px;white-space:pre-wrap;text-align:left;line-height:1.45}
+@keyframes loading-in{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){.loading-card{animation:none}.loading-bar:after{animation-duration:4s}}
