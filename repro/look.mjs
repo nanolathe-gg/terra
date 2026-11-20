@@ -3,7 +3,8 @@
 // - a partial apply from another world (Rock types, Light & weather) changes only those, keeps the map in its world, and one Undo restores it;
 // - a map saved with an edited row, a map tool and a feature set starts a new map with that look (blank, named, nothing to undo);
 // - Apply look from that map's file, Tools only, brings its tool; a whole look from another world forks the map there.
-// - Features from the map's own world bring the built-in feature styles back, placed features staying;
+// - Features from the map's own world bring the built-in feature styles back, placed features staying; no card with Reset every shape
+//   resets every shape to its tool's defaults;
 // - with --old <file> (a map saved by a build that kept tools in the world), Tools from that file bring its world tool.
 //   node repro/look.mjs --server http://127.0.0.1:<yours> --port <cdp> [--out dir] [--old map.json]
 import {chromePath, chromeGpuFlags} from './chrome.mjs';
@@ -72,6 +73,17 @@ try {
   assert.equal(featured.mapData.features.length, 1, 'a placed feature stays');
   await click('#undo'); await sleep(300); await ready(); await ev(`(()=>{const s=sculptDebug.sketch();s.mapData.featureSet=${JSON.stringify(before.mapData.featureSet)};s.mapData.features=[];sculptDebug.loadSketch(s);return true;})()`); await ready();
   report.features = 'Features from the built-in world restore its styles; placed features stay';
+  // Reset shapes (what World › Reset shapes to world defaults did): no card, every shape reset to its tool's defaults; one Undo.
+  const hillOf = x => x.nodes.find(n => n.kind === 'landform');
+  assert.ok(hillOf(await sketch()).edited.includes('elevation'), 'the hill starts with a setting changed by hand');
+  await apply('builtin:green', []); await sleep(800);
+  await ev(`(()=>{document.querySelector('#look-dialog input[name=look-shapes][value=reset]').checked=true;document.querySelector('#look-dialog .look-shapes').dispatchEvent(new Event('change'));return true;})()`);
+  assert.equal(await ev(`document.getElementById('look-apply').disabled`), false, 'no card and Reset every shape can apply');
+  await click('#look-apply'); await sleep(500); await ready();
+  assert.deepEqual(hillOf(await sketch()).edited, [], 'every setting is its tool\'s default again');
+  await click('#undo'); await sleep(300); await ready();
+  assert.ok(hillOf(await sketch()).edited.includes('elevation'), 'one Undo brings the hand edits back');
+  report.resetShapes = 'no card + Reset every shape: the hill back to its tool\'s defaults; one Undo';
   // 2. The map's own look: an edited row, a map tool, a feature set. Save as tool through the shape card.
   await ev(`(()=>{const el=document.getElementById('knob-reliefAmount');el.value='1.1';el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`); await sleep(800);
   const hill = await ev(`sculptDebug.sketch().nodes.findIndex(n=>n.kind==='landform')`);

@@ -95,7 +95,6 @@ export function worldOverrideCount(world,config) {
   n+=changed(kit.tools,baseKit.tools,'id')+changed(kit.rocks,baseKit.rocks,'key');
   return n;
 }
-export const resetWorldOverrides=world=>({name:world.name,base:world.base,colors:{},knobs:{},...(world.openedFrom?{openedFrom:world.openedFrom}:{})});
 
 // A world of the world store earlier builds kept in the browser, as an empty map of `map` (mapGeometry) that holds its look (owner,
 // 2026-11-19: stored worlds are converted once into maps). Its rows, colors, materials, surface layers, feature styles, rock types and

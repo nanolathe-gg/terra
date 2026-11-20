@@ -1,5 +1,5 @@
 import {requestAdapter} from './sculpt-webgpu.js';
-import {savedWorld,worldOverrideCount,resetWorldOverrides,copySavedWorld,worldKeys,applyEngineTables,copyEngineTables,storedWorldMap,LOOK_CARDS,lookCard,roleCard} from './sculpt-save.js';
+import {savedWorld,worldOverrideCount,copySavedWorld,worldKeys,applyEngineTables,copyEngineTables,storedWorldMap,LOOK_CARDS,lookCard,roleCard} from './sculpt-save.js';
 import {normalizeSet} from './sculpt-feature-set.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mapGeometry,mountMapCanvas,validMapSize} from './sculpt-map.js';
@@ -394,7 +394,6 @@ function updateControls() {
   { const id=tool==='move'&&nodes[selected]?.params?strokeTool(nodes[selected],ids):entry; syncToolStyle(id); $('tool-style').value=toolSettings[id]?.preset||'custom';
     $('tool-look-control').hidden=!toolById(id); if (toolById(id)) $('tool-look').value=id; }
   setToolHelp(toolById(entry)?.card?`Draw a landform with the settings, curves and rock of ${toolLabel(entry)}, a tool saved ${mapOwnsTool(toolById(entry))?'in this map':'in this world'}. Change any setting below.`:toolHelpLine(entry)||'',true);
-  { const can=ready && resettable(); $('reset-strokes').disabled=!can; $('reset-strokes').title=can?'':'Draw a shape first: there is nothing to reset.'; }
   $('undo').disabled=!ready || loading || Boolean(stroke||moving) || historyIndex<=0;
   $('redo').disabled=!ready || loading || Boolean(stroke||moving) || historyIndex>=history.length-1;
   syncHistoryNames();
@@ -1933,16 +1932,6 @@ function carryNodes(list,own=mapTools,tables) {
   if (g.amplitude>0) out.unshift({kind:'ground',...g,seed:ground?.seed??(seed^0x9e37)});
   return out;
 }
-// Reset every stroke's settings to this world's defaults for its tool: the same defaults a carry gives an unedited setting. Marks of hand edits
-// are the differences from these defaults, so none remain. One undo step.
-const resettable=() => nodes.some(n => n.points && nodeDefaults(n));
-$('reset-strokes').onclick=() => {
-  if (stroke || moving || loading || !ready || !resettable()) return;
-  cancelWeather();
-  nodes=nodes.map(n => { const base=n.points?nodeDefaults(n):null; if(!base)return n; const {kept,...rest}=n,m={...rest,params:{...base,...(n.params.river?{river:n.params.river}:{})}}; migrateRiverNode(m); return m; });   // reset, a stroke that fell back follows the world again
-  selected=-1;alsoSelected=[]; pathPoint=-1; pathAdding=false; evaluate(0); regionalFields.changed(); checkpoint(); queueWeather(); schedule();
-  status('Reset every stroke to this world\'s defaults.');
-};
 // Saves the map `delay` ms after the last call. A committed change (checkpoint: a stroke's end, a move, a card change) passes 0: the save runs
 // in the next task, after the change's own draw is scheduled, so a reload right after it keeps it (FLOWS #6). Continuous changes (slider
 // drags) keep the 450 ms wait, so a drag saves once at its end. Commits that come faster than 200 ms apart (a held arrow key nudging a
@@ -2446,32 +2435,6 @@ function configureStoredWorld(world,beach=world.knobs?.beachFrom){
   if(world.featureSet)config.featureSet=structuredClone(world.featureSet);
   const settings=new Map(beach?[['beachFrom',beach]]:[]);borrowBeach(config,settings);applyEngineTables(config,world.engine);renderer.layers=new Set(config.layers);
 }
-function resetWorld(){
-  worldInputQueue.flush();const reset={...resetWorldOverrides(activeWorld()),name:baseWorldConfig.biome};
-  const base=worldMaterials(baseWorldConfig);let next=mapMaterials;
-    for(const m of next.filter(worldKey)){
-      const key=worldKey(m),source=base.find(b=>worldKey(b)===key);
-      if(source)next=setMaterial(next,m.slot,source).map(x=>x.slot===m.slot?{...x,name:source.name}:x);
-      else next=next.map(x=>{if(x.slot!==m.slot)return x;const own={...x};delete own[key.startsWith('layer:')?'worldLayer':key];return own;});
-    }
-  try{for(const source of base){const key=worldKey(source);if(!key||next.some(m=>worldKey(m)===key))continue;const added=addMaterial(next,source,source.name);next=added.materials.map(m=>m.slot===added.slot?{...m,[key.startsWith('layer:')?'worldLayer':key]:key.startsWith('layer:')?key.slice(6):true}:m);}}
-  catch(err){status('Reset needs room for the built-in materials: '+err.message);return;}
-  {
-    configureStoredWorld(reset);worlds[worldId]=reset;nodes=keepStrokeTools(nodes,toolIds());refreshWorldTools();
-    const defaults=Object.fromEntries(KNOBS.flatMap(([,rows])=>rows.map(([key,,,,,value])=>[key,value])));
-    for(const key of worldKeys(baseWorldConfig)){
-      const value=baseWorldConfig.defaults?.[key]??baseWorldConfig.engineDefaults?.[key]??defaults[key];
-      if(value===undefined){experiment.delete(key);renderer.variant.delete(key);}else if(key==='beachFrom'){experiment.set(key,String(value));}else applyKnob({key,value:String(value),settings:experiment,renderer,nodes,seed,sync:false});
-      const input=$('knob-'+key);if(input&&value!==undefined){input.value=String(value);input.closest('[data-knob]').querySelector('output').textContent=String(value);}
-    }
-    restoreMaterials(next);setSurfaceList(structuredClone(baseSurface),false);
-    worldChanged(renderer.setColors(worldColors(),currentDrawOptions()));cancelWeather();evaluate(0);queueWeather();
-    // The world now draws as the built-in one, so the address names none of its settings (a reload gives the same defaults).
-    const url=new URL(location.href);for(const key of worldKeys(baseWorldConfig))url.searchParams.delete(key);window.history.replaceState(null,'',url);
-    worlds[worldId]=reset;checkpoint();
-  }
-  buildWorldPanel();syncRockChoices();syncRocks();syncRockPanel();syncWorldControls();surfacePanel?.refresh();updateControls();status('Reset world settings to '+baseWorldConfig.biome+'.');
-}
 // ---- Apply look and New map with this look (owner, 2026-11-19). A look is a save: a built-in world's (builtInLook) or a map's. ----
 const ALL_CARDS=LOOK_CARDS.map(([card])=>card),KNOB_KEYS=new Set(KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)));
 // A built-in world's look as a save would hold it: its rows' defaults, colors, materials, surface, tables, rock types, column and features.
@@ -2538,7 +2501,13 @@ function composeLook(B,cards) {
     tools=(copyMapTools(B.tools)??[]).map(t=>({...t,card:{...t.card,...(t.card.rockPreset!==undefined?{rockPreset:rockSlot(t.card.rockPreset)}:{}),...(t.card.groundPreset>0?{groundPreset:bring(t.card.groundPreset)}:{})}}));
   }
   const mapDataNext=structuredClone(mapData());   // the map's own as it is now (a new map's name is set after its first history step)
-  if (cards.has('features')) mapDataNext.featureSet=normalizeSet(B.mapData?.featureSet,config);
+  if (cards.has('features')) {
+    // The source's feature styles; a placed feature whose style it has none for at that place (a variant address is recipe id x 16,
+    // sculpt-feature-set.js) keeps its own, so no placed feature is lost.
+    const next=normalizeSet(B.mapData?.featureSet,config),own=mapDataNext.featureSet;
+    for (const p of mapDataNext.features??[]) { const list=next[p.kind]?.recipes,id=Math.floor((p.v??0)/16); if (!list||list.some(r=>r.id===id)) continue; const keep=own?.[p.kind]?.recipes?.find(r=>r.id===id); if (keep) list.push(structuredClone(keep)); }
+    mapDataNext.featureSet=normalizeSet(next,config);
+  }
   copyRocks(rocks);mats=assertKitMaterials(mats);   // room for every rock type and material, or nothing changes
   const knobs={};for (const [,rows] of KNOBS) for (const [key] of rows) { if (key==='beachFrom'||ROCK_KEYS.includes(key)) continue; const v=R.knobs[key]??baseWorldConfig.defaults?.[key]; if (v!==undefined&&v!==null) knobs[key]=String(v); }
   return {...cur,nodes:nodesNext,column,rock,rocks,materials:mats,surface,tools,mapData:mapDataNext,world:{knobs,colors:structuredClone(R.colors),stored:R,beachFrom:R.knobs.beachFrom},terrainKey:++historySerial};
@@ -2585,7 +2554,7 @@ function syncLookNote() {
   $('look-apply').disabled=!B||!cards.size&&$('look-dialog').querySelector('input[name=look-shapes]:checked')?.value!=='reset';
   if (!B) { $('look-note').textContent=$('look-source').value==='file'?'Choose a map file.':'Reading the look…'; return; }
   const replaced=[...(cards.has('rocks')?[`this map’s ${plural(mapRocks.length,'rock type')} become ${from}’s ${(B.rocks??[]).length}`]:[]),...(cards.has('tools')&&(mapTools.length||(B.tools??[]).length)?[`its ${plural(mapTools.length,'saved tool')} become ${from}’s ${(B.tools??[]).length}`]:[])];
-  $('look-note').textContent=[other&&all?`${config.biomes?.[base]||base} is another world: this makes a copy of your map in it with this look. The original stays in Maps.`:other?`Only the checked parts come from ${config.biomes?.[base]||base}; the map stays in ${config.biome}.`:'One Undo puts the map back as it was.',
+  $('look-note').textContent=[other&&all?`${config.biomes?.[base]||base} is another world: this makes a copy of your map in it with this look. The original stays in Maps.`:other?`Only the checked parts come from ${config.biomes?.[base]||base}; the map stays in ${config.biome}.`:`${$('look-source').value==='builtin:'+config.biomeId?`Returns the checked parts to ${config.biome}’s own. `:''}One Undo puts the map back as it was.`,
     replaced.length?`Replaces: ${replaced.join('; ')}.`:''].filter(Boolean).join(' ');
 }
 async function openLookDialog() {
@@ -2647,9 +2616,6 @@ function buildWorldPanel() {
   for(const b of document.querySelectorAll('[data-world-card]'))b.onclick=()=>openWorldHome(b.dataset.worldCard);
   for(const b of document.querySelectorAll('[data-world-section]'))b.onclick=()=>openWorldSection('wsec-'+b.dataset.worldSection);
   $('world-home-layer-add').onclick=()=>{openWorldSection('wsec-surface');$('surface-add').click();};
-  const select=$('biome-select');
-  select.replaceChildren(...Object.entries(config.biomes||{}).map(([id,name]) => new Option(name,id,false,config.biomeId===id)));
-  select.onchange=() => goToWorld(select.value);
   for(const home of document.querySelectorAll('[data-world-color]'))home.replaceChildren();
   for (const [key,label] of colorRows(config,experiment)) {
     const rows=document.querySelector(`[data-world-color="${key}"]`);
@@ -2674,7 +2640,6 @@ function buildWorldPanel() {
     $('beach-from').value=config.beachSources[experiment.get('beachFrom')]?experiment.get('beachFrom'):'';
     $('beach-from').onchange=() => setKnob('beachFrom',$('beach-from').value);
   }
-  $('world-reset').onclick=resetWorld;
 }
 
 // Crack styles set several crack knobs at once; each stays editable.

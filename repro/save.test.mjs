@@ -1,7 +1,7 @@
 import {normalizeSet} from '../sculpt-feature-set.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {savedWorld,worldOverrideCount,resetWorldOverrides,copySavedWorld} from '../sculpt-save.js';
+import {savedWorld,worldOverrideCount,copySavedWorld} from '../sculpt-save.js';
 
 const config={biomeId:'green',biome:'Green Planet',defaults:{rainErode:0,faceWear:.2},engineDefaults:{groundFine:1},colors:{slope:'#123456',sky:'#ffffff'},materials:{ground:'green-ground',water:'green-water'}};
 test('older maps remain loadable; removed controls are dropped and invalid embedded settings are rejected',()=>{
@@ -29,8 +29,6 @@ test('World home counts stored differences from pristine data and Reset preserve
   assert.equal(worldOverrideCount({...world,knobs:{},colors:{},surface:base.surface},base),0,'a copied normalized default feature set is not an override');
   Object.values(world.featureSet)[0].recipes[0].name='Custom feature';
   assert.equal(worldOverrideCount(world,base),4);
-  assert.deepEqual(resetWorldOverrides(world),{name:'Custom',base:'green',colors:{},knobs:{}});
-  assert.equal(world.knobs.faceWear,'.5','Reset does not mutate its undo source');
 });
 
 test('a saved world\'s numbers are checked as the server sends its defaults, as text; a word keeps its text',()=>{

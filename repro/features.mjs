@@ -199,8 +199,12 @@ try {
   assert.deepEqual(await placements(),beforeReorder.features);
   await ev('(async()=>{sculptCanvas.zoom(1);const v=document.getElementById("viewport");v.scrollLeft=180;v.scrollTop=100;v.dispatchEvent(new Event("scroll"));await sculptCanvas.idle();return true;})()'); await settled(); await shot('mixed-recipes.png');
   const saved=await ev('sculptCanvas.features.serialize()');
-  await set('#biome-select','moon'); await sleep(500); await ready();
+  // Another world through Apply look (owner, 2026-11-19): a whole look from Moon forks the map there; Features only from the map left in
+  // Green, in this browser's maps, brings the map's own feature styles back.
+  const look=async(pick,cards)=>{await press('#world-apply');await sleep(300);await ev(`(async()=>{const s=document.getElementById('look-source');const o=[...s.options].find(${pick});s.value=o.value;s.dispatchEvent(new Event('change'));for(const b of document.querySelectorAll('#look-cards input'))b.checked=${cards?`${JSON.stringify(cards)}.includes(b.value)`:'true'};document.getElementById('look-cards').dispatchEvent(new Event('change'));for(let i=0;i<80&&document.getElementById('look-apply').disabled;i++)await new Promise(r=>setTimeout(r,100));document.getElementById('look-apply').click();return true;})()`);};
+  await look(`o=>o.value==='builtin:moon'`); await sleep(1500); await ready(`sculptDebug.biome==='moon'`);
   assert.equal(await ev('sculptRegion.sketch().biome'),'moon');
+  await look(`o=>o.value.startsWith('map:')&&o.text.includes('Green Planet')`,['features']); await sleep(800); await ready();
   assert.deepEqual(await ev('sculptCanvas.features.serialize().featureSet'),saved.featureSet);
   assert.deepEqual(await placements(),saved.features);
   await ev('(async()=>{sculptCanvas.zoom(1);const v=document.getElementById("viewport");v.scrollLeft=180;v.scrollTop=100;v.dispatchEvent(new Event("scroll"));await sculptCanvas.idle();return true;})()'); await settled(); await shot('mixed-recipes-moon.png');
