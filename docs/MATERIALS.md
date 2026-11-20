@@ -29,13 +29,12 @@ controls; node settings are the author's tools.
 - **The library** (`materials/textures.json`) holds the shipped materials by
   key. A world names its two in its table: `world.materials: {ground, water}`
   in `materials/<world>.json`.
-- **The world owns its ground and its water** (owner, 2026-11-14). They are
-  world settings like its sliders: where you change one, the world keeps it
-  in this browser and every map drawn in that world shows it. One the world
-  never changed stays the library's, so a library revision reaches it.
-  "Restore built-in settings" returns both to the library's. What the world
-  keeps is marked with the library material it replaces, so a library
-  material keeps its own edit.
+- **The map owns its ground and its water** (owner, 2026-11-19, replacing
+  the world-owned materials of 2026-11-14). They are world settings like its
+  sliders, and like every world setting they are saved with the map, whole:
+  a revision of the library never changes a map already made. A new map
+  starts from the built-in world's (the library's). World › Reset returns
+  both to the library's.
 - **A map** holds up to fifteen materials in slots 1 to 15: the world's two,
   the materials for the surfaces its world names, its rock types' rock
   materials, and its own for landforms and the Paint brush (a stroke's Ground
@@ -45,12 +44,10 @@ controls; node settings are the author's tools.
   map opened in a world takes that world's two, in the slots the map already
   gave those roles; its own materials stay.
 - **Saves, undo and share links** carry the map's list, and the world
-  settings a save embeds carry the world's two. Opening a save whose world
-  draws as this browser's changes nothing in the world; one whose world
-  differs (sliders, colors, surface or kept materials) opens as a world of
-  its own, named for the map, and leaves yours unchanged. World › Use for my
-  <world> adopts it and keeps the one it replaces as "<world> before <map>".
-- **A world of your own** (World, New) and a world file carry the two.
+  settings a save embeds carry the world's two. Opening a save opens it with
+  its own world settings; nothing is kept in the browser apart from the map.
+  Another map's look starts a new map from that map (Map › New map with
+  this look) or comes in through World › Apply look from…
 - **Highland ground.** A world may also name a highland material
   (`world.materials.high`): a new map adds it with the role *highland
   ground*, and level raised ground takes it in place of the world's ground

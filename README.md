@@ -177,10 +177,11 @@ corner heights. Field, weather and upload reservations share the page budget.
 save-link service (`maps` in `services.json`: `/api/maps` here, the Worker in `deploy/worker/` for the
 static build) and shows `?map=<id>`. Opening such a link keeps your own map in one "previous map"
 slot and offers to restore it. The working copy autosaves in the browser. **Save** writes one self-contained map
-JSON with the biome and variant, effective world colors and controls, terrain
-strokes, tools, rock columns, features, starts and map settings. Send that file
-to another editor user on the same version; **Load** restores its world settings
-before rendering, without a separate world import. Undo history and generated
+JSON with the biome, every world setting (colors, controls, materials, surface
+layers, rock column), terrain strokes, tools, rock types, features, starts and map
+settings. A map is its own world: retuning a built-in world never changes it.
+Send that file to another editor user on the same version; **Load** restores its
+world settings before rendering. There is no separate world file. Undo history and generated
 render caches are session state and are not included.
 
 Export streams one tile-aligned PNG at a time to the exporter's worker. It
