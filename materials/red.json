@@ -987,7 +987,7 @@
         "crackDark": 0.6,
         "crackWidth": 0.5,
         "banding": 0.6,
-        "reliefAmount": 0.2,
+        "reliefAmount": 0.8,
         "slopeTexture": 0.4,
         "faceSteep": 1,
         "crackSpacing": 28,
