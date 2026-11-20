@@ -878,7 +878,9 @@
 
     "ridgeblock",
 
-    "passrock"
+    "passrock",
+
+    "reefstone"
 
    ],
 
@@ -999,6 +1001,21 @@
      "knobs": {
       "faceRock": 0.55,
       "faceGrass": 0.8
+     }
+    },
+
+    "reefstone": {
+     "label": "Smooth reef",
+     "knobs": {
+      "rockFace": 1.2,
+      "faceRock": 0.5,
+      "faceGrass": 0.8,
+      "faceLayers": 0.4,
+      "crackMajor": 0.3,
+      "faceWear": 0.15,
+      "faceBlockSize": 14,
+      "faceJoint": 0.05,
+      "faceShade": 0.8
      }
     }
 
