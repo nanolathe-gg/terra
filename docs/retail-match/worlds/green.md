@@ -4,13 +4,13 @@
 
 `repro/scenes/green-<n>.json`; retail data in `$R/repro-r7/green-<n>/`.
 
-| Window | Retail map | What it tests | Before round 1 | After round 10's port | After round 11's port |
+| Window | Retail map | What it tests | Before round 1 | After round 11's port | After round 12's port |
 | --- | --- | --- | --- | --- | --- |
-| green-1 | pc games' evad river delta | broken hills (rock type `evad`) on a rolling plain by the sea | shape .22, look .10 | shape .135, look .054 | shape .135, look .054 |
-| green-2 | great divide | long gentle grass slopes, a ridge | shape .16, look .20 | shape .128, look .159 | shape .128, look .159 |
-| green-3 | the barrier reef | islands (rock type `reefstone`) and reef shallows | shape .08, look .09 | shape .08, look .091 | shape .08, look .091 |
-| green-4 | the pass | a rocky massif with grass in its folds (rock type `passrock`) | shape .63, look .23 | shape .39, look .174 | shape .39, look .169 |
-| green-5 | plains and passes | a terraced ridge on a rolling plain (`hill` strokes with Steps, rock `ridgestone`) | shape .18, look .70 | shape .126, look .209 | shape .126, look .209 |
+| green-1 | pc games' evad river delta | broken hills (rock type `evad`) on a rolling plain by the sea | shape .22, look .10 | shape .135, look .054 | shape .146, look .054 |
+| green-2 | great divide | long gentle grass slopes, a ridge | shape .16, look .20 | shape .128, look .159 | shape .128, look .139 |
+| green-3 | the barrier reef | islands (rock type `reefstone`) and reef shallows | shape .08, look .09 | shape .08, look .091 | shape .08, look .071 |
+| green-4 | the pass | a rocky massif with grass in its folds (rock type `passrock`) | shape .63, look .23 | shape .39, look .169 | shape .146, look .201 |
+| green-5 | plains and passes | a terraced ridge on a rolling plain (`hill` strokes with Steps, rock `ridgestone`) | shape .18, look .70 | shape .126, look .209 | shape .12, look .206 |
 | green-6 | wretched ridges | two ridges of dark blocky rock (rock `ridgeblock`) | shape .24, look .10 | shape .18, look .083 | shape .18, look .083 |
 | green-7 | two continents | open water and coast: **held out** | shape .19, look .12 | shape .19, look .102 | shape .19, look .102 |
 
@@ -43,7 +43,8 @@ A rock type changes only the windows whose strokes use its slot (PLAYBOOK.md,
 | green-4 | 7 | `passrock` (round 6; material `green-passrock`; faceBed 8, blocks 6, no gloss since round 11), with ground `green-clump` (slot 15) |
 | green-5 | 5 | `ridgestone` (Terraced greenstone, round 2; stepCrease 1 and deeper cracks, 2026-11-19) |
 | green-6 | 6 | `ridgeblock` (Blocky ridge, round 3; material `green-darkrock`) |
-| green-2, green-7 | none set (0) | the world's own rock (the rock keys in `knobDefaults`) |
+| green-2 | 9 (ridge stroke) | `divide` (round 12: bandLevel 2, bandFill 1) |
+| green-7 | none set (0) | the world's own rock (the rock keys in `knobDefaults`) |
 
 Re-check with `grep -o '"rockPreset": [-0-9]*' repro/scenes/green-<n>.json`
 after any shape-lane edit.
@@ -93,54 +94,44 @@ These notes are by eye, from the base crops in
 - No rock coasts on Green. Shores are a natural sand-grass edge.
 - Hills must stay grassy. Rock on a hill is cracks and patches, not a cap.
 
-## Start here (round 12)
+## Start here (round 13)
 
-Round 11 (branch `match-green-12`, 51 of 300 trials; report in
-`$R/match/terraform-wt-match-green-12/green/REPORT.md`) was reviewed and
-ported on 2026-11-20. Its keep: green-4's cards lay `green-clump` (round
-10's clump graph, extra slot 15) on passrock with thicker beds, small blocks
-and no gloss. Look .174 to .169; steep:color and steep:edges cleared; by eye
-vivid flat clumps in a mosaic of small gray blocks, like retail's pass. The
-validator now reports a JSON key written twice in one object (round 11's
-trial-039 was shadowed by one).
+Round 12 (branch `match-green-13`, 64 of 300 trials; report in
+`$R/match/terraform-wt-match-green-13/green/REPORT.md`) was reviewed and
+ported whole on 2026-11-20 (its base was main; the port renders
+byte-identical to its trial-057). Mean shape .175 to .134, look .129 to
+.126; held-out green-7 not reached (.192/.102).
 
-For the owner's eye: `bandJag` .4 (round 11's trial-043) brings green-2's
-slope hatch closer by eye (mean look .128 to .125, held-out unchanged) but
-was held by the keep rule (slope lines rose to 2.3x retail).
-
-New engine levers (landed 2026-11-20, after round 11):
-
-- **Steps up to 12** on profile steps (were 8).
-- **`bandLevel` per rock type**, and **`bandFill`** (0-1): extra contour
-  lines at half and a quarter of the spacing where near-level bands run far
-  apart. On green-2, bandLevel 2 with fill 1 draws wiggly lines across the
-  gentle grade (by eye; gentle lines .00037 to .00044, retail .0018).
-- **A map's own `sea` and `plain`** in a scene's query (green-4: retail's
-  floor is about 1; at sea 0, plain 1 its strokes must be rescaled to fit
-  under 255).
-- **A scene's own `surface` list** (copy the world's whole, change amounts;
-  green-3 with gentlelumps at 0: look .091 to .070). See the brief's keep
-  rule.
-- **Time erodes the shape the art shows**: a map that hides its roll
-  (undulationArt below 1) no longer gets creases cut along it. Green-1's
-  Relaxation: less paint may now be unneeded; green-1, 3 and 5 moved a
-  little (re-measure them at the base).
+- **Green-4 on its own floor:** sea 0 (plain 9, Green's own), elevations
+  x0.8, four steps, a steeper wall foot. Shape .391 to .146; the flat class
+  now matches retail; 0.1% of cells above 255. By eye the massifs rise off a
+  level floor like retail's. **Its look rose .169 to .201:** the rock reads
+  as larger solid green patches with pale lit ledge streaks, where retail is
+  a fine mosaic of small clumps on darker rock. That is lead 1.
+- **Green-2's ridge** on a rock type `divide` (slot 9: bandLevel 2, bandFill
+  1): look .159 to .139; wiggly lines on its gentle grade by eye, at 0.24x
+  retail's count (under the one-third rule; ported for the look and the eye).
+- **Green-3's own surface list** without gentle lumps: look .096 to .071.
+- **evad** with fewer minor and hairline cracks (crackMinor .2, crackHairline
+  .1): green-1 .063 to .054; by eye a few long cracks cross its grass as in
+  retail. Its steep luma rose 62 to 66 (retail 56). evad is shared with the
+  Broken hill tool, which was not viewed.
 
 Leads:
 
-1. **Gentle-grade contour lines** stay out of reach of data (round 11's
-   001-007, 022-024, 037-038, 048). Untried: a surface-layer rule drawing a
-   lined material, and a lined ground painted on green-2.
-2. **The shelf's streaks** show through the bed tint only compressed (the
-   tint's light ratio is clamped to .25-2 and raised to bedContrast) and
-   under the dense dark specks: try a thinned-speck copy of green-shoal with
-   large streaks.
-3. **Green-6's lit vertical ribs:** shine sharpness (round 11's 008-012)
-   brightens the whole face; the ribs are relief down the fall line.
-4. **Green-4** still clamps 8.7% of its cells above 255.
-
-Engine proposals carried for the owner are listed with the overnight work
-(rounds 8-11).
+1. **Green-4's rock mosaic after the lowering:** smaller clumps, fewer pale
+   ledge streaks, darker rock with black east shadows.
+2. **Green-1's Relaxation: less paint** still matters: without it, dark Time
+   pits return on its coast (round 12's 017; shape .146 to .123). Find what
+   draws the pits.
+3. **Gentle contour lines:** a surface-layer rule drawing a lined material is
+   still untried; near-level bands draw on level plains as much as on grades
+   (round 12's 015, 027-029).
+4. **A land-only floor near the sea:** at plain 1-4 green-4's floor draws
+   water specks or the low-ground tone (round 12's 001-004); the roll fades
+   within 8 units of the sea (engine-shape.wgsl groundLifted).
+5. Green-5's slope lines, green-6's ribs, the shelf's streaks: no material or
+   layer try yet.
 
 ## Pilot notes (2026-11-18)
 
