@@ -416,7 +416,9 @@ def read_repro(d):
     data = json.loads((d / 'ours-heights.json').read_text())
     g = int(data['grid'])
     opic = np.asarray(Image.open(d / 'ours.png').convert('RGB'))
-    oh = np.asarray(data['heights'], np.float64).reshape(g, g) - float(data.get('sea', 0.0))
+    # The game keeps one byte a cell: the export clamps heights to 0-255 (engine-feed.wgsl), so score what a map can hold. Round 8 raised
+    # green-4's strokes past 255 on 14% of its cells and the unclamped heights scored as a shape gain.
+    oh = np.clip(np.asarray(data['heights'], np.float64).reshape(g, g), 0.0, 255.0) - float(data.get('sea', 0.0))
     target = max(2, round(opic.shape[0] / 16))
     oh = resample_heights(oh, target)
     oplain = float(data.get('base', WORLD_BASE.get(d.name.split('-', 1)[0], 24)))   # a variant's windows (green-modern-1) sit on their world's base

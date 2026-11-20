@@ -287,13 +287,19 @@ def crop_pair(rpic, opic, at, size, label, path):
     out.save(path)
 
 
+# Share of our height cells above the game's 255 that earns a warning.
+OVER_WARN = 0.02
+
+
 def window(d, out, crop):
     crop_meta = json.loads((d / 'crop.json').read_text())
     rh = np.load(d / 'heights.npy').astype(np.float64)
     rplain = float(crop_meta.get('plain', 0.0))
     data = json.loads((d / 'ours-heights.json').read_text())
     g = int(data['grid'])
-    oh = np.asarray(data['heights'], np.float64).reshape(g, g) - float(data.get('sea', 0.0))
+    raw = np.asarray(data['heights'], np.float64).reshape(g, g)
+    over = float((raw > 255.5).mean())
+    oh = np.clip(raw, 0.0, 255.0) - float(data.get('sea', 0.0))   # the game's byte a cell (repro/stats.py)
     opic_size = Image.open(d / 'ours.png').size[0]
     oh = resample_heights(oh, max(2, round(opic_size / 16)))
     oplain = float(data.get('base', WORLD_BASE.get(d.name.split('-', 1)[0], 24)))
@@ -301,6 +307,8 @@ def window(d, out, crop):
     opic, om, odrop = side(d / 'ours.png', oh, oplain)
     warn = [f'{who} {n}: unmixing dropped {x:.0%} of its pixels as the other side of the waterline (land and water colors alike?)'
             for who, dropped in (('retail', rdrop), ('ours', odrop)) for n, x in dropped.items() if x > UNMIX_WARN]
+    if over > OVER_WARN:
+        warn.append(f'ours: {over:.0%} of the height cells are above 255, the game\'s top height; the export clamps them, and the scores read them clamped. Lower the strokes (round 8)')
     rmaps, omaps = texture_maps(rpic), texture_maps(opic)
     result = {'classes': {}, 'findings': [], 'crops': {}, 'warnings': warn}
     found = []
