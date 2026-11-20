@@ -287,13 +287,13 @@ moved, class by class, beside retail's value.
 | `*:dark` (ours darker) or `*:light` (ours brighter) | whatever the trial last added: specks, flecks, dither or a material's Gradient ends | the palette list the material reduces to |
 | `flat:edges` too many (regular dimples) | the map's `undulationArt` (art only, the heights keep rolling), `undulation`, `undulationScale` (section 6) | ground material's broad Noise |
 | `slope:color`, `slope:luma` | slope material; `hillLight` | `slopeTexture`, `faceFill`, `creaseShade` |
-| `slope:lines` too few | `banding`, `bandSoftness` (contour hatch), `slopeMarks`, `wrinkles` | the map lane: the window's strokes with Steps and a rock type of their own (section 6) |
+| `slope:lines` too few | `banding`, `bandSoftness` (contour hatch), `slopeMarks`, `wrinkles`; on terraced ground a rock type's `stepCrease` (a dark line at each step foot on raised ground; green-5's ridgestone carries 1) | the map lane: the window's strokes with Steps and a rock type of their own (section 6) |
 | One window's slopes or rock unlike the others' | the map lane: a rock type for that map, its strokes' Steps, `cracks`, `gullies` | a ground of its own |
 | `slope:edges` too many | `reliefAmount`, `worms`, `gentleRelief` | the slope material's fine Noise |
 | `steep:color` grayer, or greener than retail | rock material (the rock type's `material`, else the world's `rock`): its mean color is the face's color, and its own hue variation shows at only a third (`rockGrain`). A material's `color` key recolors its whole graph and palette to that color: drop or change it in a copy of a rock material, or the copy draws the old rock's color (round 5's moss rock did); `faceGrass`; surface rock rule | `faceTone`, `faceRindTone` |
 | `steep:luma` | `faceShade`, `shadeDepth`, `ambient`, `lightCap` | rock material Gradient |
 | `steep:edges` too many (busy faces) | rock type: `rockFace` (depth), `faceBlockSize` up, `faceJoint` down, `faceSecondary` down | `faceWear`, `faceMass` |
-| `steep:lines` too few (retail's dark cracks) | rock type: `crackSeverity`, `crackMajor`, `crackNetwork`, `crackDark`; `faceScratch`, `faceCrease` | `layerCrease`, `creaseShade` |
+| `steep:lines` too few (retail's dark cracks) | rock type: `crackSeverity`, `crackMajor`, `crackNetwork`, `crackDark`; `faceScratch`, `faceCrease`; `stepCrease` where the face is stepped | `layerCrease` (banks only), `creaseShade` |
 | `steep:band8` too low | rock type: `faceBed`, `faceLedge`, `faceLamina`, `faceTone` | rock material pattern |
 | `shore:color`, `shore:luma` | beach (a `beach` role material, `beachWidth`), `lowReach`, `lowGrain`, `shoreEdge` | `wetSwath`, `wetGround`, `crispShore`, a surface layer on `toWater` |
 | `deep:color`, `deep:luma` | water material; `deepDepth` | colors |
