@@ -127,6 +127,10 @@ A rock type may name its own rock material.
   - The validator runs the editor's own material check, so it reports a
     broken connection before anything renders.
 
+A material's palette list names entries of `materials/palette.json`'s
+`indexed` list (256 entries, the game's index order), not its `colours`
+(242): round 10's first clump material named the wrong colors.
+
 ### 4. Surface layers (`world.surface`)
 
 **Use for:** where a material shows: rock only on the steepest faces, moss

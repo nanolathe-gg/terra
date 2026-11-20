@@ -4,15 +4,15 @@
 
 `repro/scenes/green-<n>.json`; retail data in `$R/repro-r7/green-<n>/`.
 
-| Window | Retail map | What it tests | Before round 1 | After round 8's port (heights clamped) | After round 9's port |
+| Window | Retail map | What it tests | Before round 1 | After round 9's port | After round 10's port |
 | --- | --- | --- | --- | --- | --- |
-| green-1 | pc games' evad river delta | broken hills (rock type `evad`) on a rolling plain by the sea | shape .22, look .10 | shape .135, look .067 | shape .135, look .054 |
-| green-2 | great divide | long gentle grass slopes, a ridge | shape .16, look .20 | shape .16, look .19 | shape .16, look .185 |
-| green-3 | the barrier reef | islands (rock type `reefstone`) and reef shallows | shape .08, look .09 | shape .08, look .09 | shape .08, look .091 |
-| green-4 | the pass | a rocky massif with grass in its folds (rock type `passrock`) | shape .63, look .23 | shape .39, look .19 | shape .39, look .174 |
-| green-5 | plains and passes | a terraced ridge on a rolling plain (`hill` strokes with Steps, rock `ridgestone`) | shape .18, look .70 | shape .16, look .24 | shape .126, look .209 |
-| green-6 | wretched ridges | two ridges of dark blocky rock (rock `ridgeblock`) | shape .24, look .10 | shape .18, look .08 | shape .18, look .083 |
-| green-7 | two continents | open water and coast: **held out** | shape .19, look .12 | shape .19, look .12 | shape .19, look .102 |
+| green-1 | pc games' evad river delta | broken hills (rock type `evad`) on a rolling plain by the sea | shape .22, look .10 | shape .135, look .054 | shape .135, look .054 |
+| green-2 | great divide | long gentle grass slopes, a ridge | shape .16, look .20 | shape .16, look .185 | shape .128, look .159 |
+| green-3 | the barrier reef | islands (rock type `reefstone`) and reef shallows | shape .08, look .09 | shape .08, look .091 | shape .08, look .091 |
+| green-4 | the pass | a rocky massif with grass in its folds (rock type `passrock`) | shape .63, look .23 | shape .39, look .174 | shape .39, look .174 |
+| green-5 | plains and passes | a terraced ridge on a rolling plain (`hill` strokes with Steps, rock `ridgestone`) | shape .18, look .70 | shape .126, look .209 | shape .126, look .209 |
+| green-6 | wretched ridges | two ridges of dark blocky rock (rock `ridgeblock`) | shape .24, look .10 | shape .18, look .083 | shape .18, look .083 |
+| green-7 | two continents | open water and coast: **held out** | shape .19, look .12 | shape .19, look .102 | shape .19, look .102 |
 
 Earlier columns are in git history.
 
@@ -28,7 +28,8 @@ round 6's port (measured 2026-11-19); shape .18, look .17 after round 7's
 port (green-1 alone moved; measured 2026-11-19). From round 8 the shape score
 reads our heights clamped to the game's 0-255, which re-based the means to
 shape .20, look .16 (main 889ac369, with stepCrease); shape .18, look .14
-after round 8's port; shape .18, look .133 after round 9's (held-out .102). One render of all seven windows each.
+after round 8's port; shape .18, look .133 after round 9's (held-out .102); shape .174, look .128
+after round 10's. One render of all seven windows each.
 
 ### Which rock each window's strokes use
 
@@ -92,57 +93,52 @@ These notes are by eye, from the base crops in
 - No rock coasts on Green. Shores are a natural sand-grass edge.
 - Hills must stay grassy. Rock on a hill is cracks and patches, not a cap.
 
-## Start here (round 10)
+## Start here (round 11)
 
-Round 9 (branch `match-green-10`, 50 of 300 trials; report in
-`$R/match/terraform-wt-match-green-10/green/REPORT.md`) was reviewed and
-ported whole to main on 2026-11-20. Its base was main as it stands, so its
-trials hold as measured; the port's tip renders byte-identical to its
-trial-049.
+Round 10 (branch `match-green-11`, 51 of 300 trials; report in
+`$R/match/terraform-wt-match-green-11/green/REPORT.md`) was reviewed and
+ported on 2026-11-20. Its one keep: green-2's ridge stroke takes a concave
+back section (y = x^2). Shape .161 to .128, look .185 to .159; the north
+flank's profile error against retail halves (18.6 to 9.8 units). By eye
+the flank is gentler and lighter like retail's, but loses the dark hatch
+retail draws on it (gentle lines .0004 to 0, retail .0018). Round 8 had
+dropped the same curve for that loss; shape comes first.
 
-- **Ported:**
-  - green-5's hills at elevation 252, so its plateau fits under 255 (cells
-    above 255 30% to 0%): shape .155 to .126, look .242 to .231.
-  - A world surface layer `gentlelumps` (slope .03-.1, inland) drawing
-    `green-lumps`, green ground with a 14 px billow lit through a Light
-    node, shade x0.5-1.5. Green-1 .067 to .054, green-5 .231 to .209;
-    green-3 rose until its map art change below.
-  - green-3's `undulationArt` .2: look .119 to .096; its plain's broad lit
-    streaks are gone.
-  - A world layer `shoalspecks` (aboveSea -30 to -1) drawing `green-shoal`:
-    dark 1 px specks and light flecks on the shallow bed. Green-3 .096 to
-    .078, held-out green-7 .118 to .104, green-1 .055 to .060. By eye the
-    shelves are now textured like retail's, but denser and more even, as
-    static rather than retail's diagonal streaks and sparse dark dashes.
-  - Mean look .144 to .133; held-out .121 to .102.
-- Green-groundgrain moved to slot 14 (two new layer materials sit ahead of
-  the extras); green-5's paint follows.
+The harness now explains that profile steps stop at 8 (shoreline steps take
+12) and warns when a stroke asks for more; round 10 spent two trials on
+Steps 12 and 16, which render as 8. The playbook notes that a material's
+palette list names `palette.json`'s `indexed` entries.
 
 Leads:
 
-1. **The shelf's character:** retail's shelf carries diagonal light streaks
-   and sparse dark dashes; ours is now even static. Try `green-shoal`'s
-   pattern (a stretched noise for streaks, sparser darks) and green-1's
-   shelf light (134 against 154).
-2. **Green-4** still has 9% of its cells above 255, and capping its peaks
-   cost .08-.10 shape in round 9 (003-007): retail's floor is about 1, ours
-   is the plain. Leave its heights; work on its look: the clump graph
-   (untried for three rounds) and its striations.
-3. **Green-2** (look .185, the second worst): its hatch and its slope
-   share. bandLevel .3 moved its gentle lines under a third (round 9's
-   044).
-4. **Green-5** (look .209, the worst): slope lines and gentle creases
-   beyond `stepCrease`; its gentle grades keep stronger dark creases than
-   retail (round 9 by eye).
-5. **Green-6's lit faces:** the brightest 1% moves only with the rock's
-   mean (round 9's 037-042): a proposal (a lit-face highlight control).
+1. **Green-4's clumps:** round 10 built `green-clump`, a material of its
+   own laid by green-4's cards (its graph is in
+   `$R/match/terraform-wt-match-green-11/green/trial-011/candidate.diff`,
+   palette entries 168, 170, 172, 166, 167, 173). It cleared steep:color and
+   by eye made the clumps vivid and flat like retail's, at +.003 look, so
+   the map-lane rule held it. Pair it with a rock change that keeps the
+   face's edges, or put it to the owner's eye.
+2. **Gentle-grade contour lines** (green-2 and green-5, gentle lines 0
+   against retail's .0018-.0023): bandLevel up to 1 draws nothing visible.
+   A lined material laid as a map ground, a surface layer, and
+   `bandSoftness` are untried.
+3. **The shelf's streaks:** green-shoal's elongated scatter did not show
+   through the bed tint (round 10's 004/007); find out why before tuning.
+4. **Green-5's ledges:** retail draws a short dark ledge about every 10 px;
+   ours has 8 steps (the cap) with large shadows.
+5. **Green-6's lit faces:** shineRock .7 puts the highlights at retail's 123
+   but lightens the face (round 10's 036); `shineRockSharp` at a modest
+   shineRock is untried.
+6. **Per-map ground grain:** world-wide grain, warmth and dither changes help
+   green-1 and green-3 and hurt green-2 (round 10's 038-050).
 
 Engine proposals carried for the owner: a map's own plain and sea height
-(rounds 8-9); a lit-face highlight control (round 9); per-map surface layer
-amounts (round 9; maps now hold their world settings in the editor, but a
-scene cannot carry them); Time's cut at the art share; a material's palette
-on level ground; vegetation overrides that spare rock; `bandLevel` per rock
-type; a hatch spacing floor on gentle grades.
+(rounds 8-10); a lit-face highlight control (rounds 9-10); per-map surface
+layer amounts and ground grain (rounds 9-10); more than 8 profile steps, or
+a step spacing in height units (round 10; today's limit is a documented
+design); Time's cut at the art share; a material's palette on level ground;
+vegetation overrides that spare rock; `bandLevel` per rock type; a hatch
+spacing floor on gentle grades.
 
 ## Pilot notes (2026-11-18)
 
