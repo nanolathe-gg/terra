@@ -908,7 +908,7 @@
   "rockSlope": 0.96,
   "rockFeather": 0.48,
   "rockCurvature": 0.28,
-  "wetBand": 13,
+  "wetBand": 4,
   "shallowDepth": 2,
   "deepDepth": 42,
   "grassDetail": 1.0,
