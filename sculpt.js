@@ -2052,7 +2052,8 @@ async function loadSketchFile(s,commit=true) {
     leaveFor(tabMapId,{...next,pendingSketch:token});
     return false;
   }
-  loadSketch(s); if(commit)checkpoint(); status('Loaded the saved terrain.'); schedule(); queueWeather();return true;
+  loadSketch(s); if(commit){checkpoint();mapCanvas?.zoom(1,{x:config.map.width/2,y:config.map.height/2});}   // an opened map starts at 100%, centered
+  status('Loaded the saved terrain.'); schedule(); queueWeather();return true;
 }
 const groundDefaults=() => groundDefaultsIn(experiment);
 function addGroundNode() {
@@ -3128,8 +3129,8 @@ async function bootMap(pending=null) {
   } catch (err) { error('The handed-over terrain could not be loaded: '+err.message); } }
   $('levels').textContent=`Dry base ${config.baseHeight} · sea ${config.seaLevel} · heights ${MIN_HEIGHT}…${MAX_HEIGHT}`;
   updateControls(); resize(); schedule(); queueWeather();
-  // A new map opens at Fit, to see all of it; a world switch where the artist was (restorePlace); every other load at 1x, centered on the map.
-  if (!restorePlace()) $(experiment.has('newMap')?'fit':'one').click();
+  // A new or loaded map opens at 100%, centered on the map (owner, 2026-11-20); a world switch where the artist was (restorePlace).
+  if (!restorePlace()) $('one').click();
   if (forkNote) status(forkNote);   // after the restored selection's own line
   if (worldsNote) status(worldsNote);
   if (shareError) error(shareError);
