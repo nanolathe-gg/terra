@@ -988,6 +988,7 @@
         "crackWidth": 0.5,
         "banding": 0.6,
         "reliefAmount": 0.8,
+        "plainRelief": 0.2,
         "slopeTexture": 0.4,
         "faceSteep": 1,
         "crackSpacing": 28,
