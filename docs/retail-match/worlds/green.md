@@ -94,52 +94,41 @@ These notes are by eye, from the base crops in
 - No rock coasts on Green. Shores are a natural sand-grass edge.
 - Hills must stay grassy. Rock on a hill is cracks and patches, not a cap.
 
-## Start here (round 14)
+## Start here (round 15)
 
-Round 13 (branch `match-green-14`, 48 of 300 trials; report in
-`$R/match/terraform-wt-match-green-14/green/REPORT.md`) was reviewed and
-ported on 2026-11-20. Mean shape .134, look .126 to .125; held-out green-7
-unchanged (.192/.102).
+Round 14 (branch `match-green-15`, 62 of 300 trials; report in
+`$R/match/terraform-wt-match-green-15/green/REPORT.md`) was reviewed and
+ported on 2026-11-20. Mean shape .1341 to .1302, look .1251 to .1149;
+held-out green-7 unchanged (.192/.102).
 
-- **Green-4's ground as clumps on gray rock:** `green-clump` mixes its green
-  with dark grays through a 3.5 px Clumps noise and a sharp Levels edge
-  (palette + grays 90-94); passrock faceRock .55 to .45. Look .201 to .198,
-  steep:lines cleared. By eye (trial-012 steep crop) the solid green slabs
-  break into clumps through the rock, as retail's do. Cost: steep luma 50 to
-  47 (retail 55); the pale ledge streaks and retail's black east shadows remain.
-- **Green-1's coastal pits come from the ground roll, not Time:** they stay
-  with erosion=0 (its 023) and go at undulation 5 (024, shape .169). The
-  Relaxation: less paint stays. The round's guess, `groundLifted`'s height
-  fade (sea+1..sea+8), is ruled out: with the fade removed, green-1 without
-  its paint renders byte-identical (reviewer's throwaway edit, 2026-11-20;
-  a 3x roll in the same file changed 6.8% of pixels, so it was loaded).
-- **Green-5's slope risers are out of reach of data:** every kind of lever
-  was tried (rock 031-034, map 030/035, material and layer 036-038, 048);
-  slope lines stay .0018 against .0045. A layer's material relief is unlit,
-  so lined materials read as smudges (proposal: lit micro-terraces).
+- **Green-4's massifs lean west:** all nine strokes lean 180, facing 9,
+  with an even front section and the old mountain section on the back.
+  Look .198 to .149, shape .146 to .123. By eye (trial-059 pair) long lit
+  west slopes and short dark east faces, as retail's. Cost: a few small dark
+  lumps on the valley floor.
+- **Green-1's calmer shelf:** its own surface list (shoal specks 1 to .4)
+  and query bedContrast .8: look .054 to .041, shelf:light cleared. Green-1
+  now holds its own copy of the world's surface list.
+- **Measured:** green-5's lines are ridgestone's own marks: on the divide
+  rock its slope lines fall to .00018 (058), and band darkness 1 doubles
+  green-2's lines but leaves green-5's unmoved (026). Landform strokes
+  ignore the landform preset's `roughness` (027 renders as the base).
+- **World wetBand** 5 or 24 hurts every window (051/052): Green's plains sit
+  close above the sea.
 
 Leads:
 
-1. **Green-4's brightness without line noise:** its largest look term is the
-   mean brightness (54 against 62). Every brighter material or rock raised
-   lines more than it gained (009, 010, 014). Steps 0 shortens the pale
-   streaks (004, look .16) but loses the shape; try Steps 2-3 with ledge
-   15-30, and a rock material copy without the brightest grays.
-2. **Green-6's ribbed faces:** gullies 100 with gullySize 70 follow retail's
-   spurs (040: shape .182 to .149) but the face texture costs look .083 to
-   .118. Try a ridgeblock material with vertical streaks, then both together.
-3. **Green-1's shelf:** green-3's shelf already matches, so the gap is
-   green-1's; try a rock type for green-1's water strokes, as green-3's
-   reefstone.
-4. **Gentle crinkle** (green-5's gentle grade, green-2's lines): a layer
-   material that bakes its relief through a Light node, instead of dark lines.
-5. Shape presets and the contour-line levers were not reached.
-6. **New since round 13** (harness and editor, 2026-11-20): a scene may set
-   its map's own water (`shallowDepth`, `deepDepth`, `bedTint`, `bedBright`,
-   `bedContrast`, `bedCracks`, `wetBand`; green-1's shelf is the candidate);
-   the damp band `wetBand` is a World control; `faceScratch` is the lever
-   for green-6's down-slope ribs; one metric counts at most 3 family band
-   widths in a score.
+1. **Green-6's faces:** try round 14's green-4 idea (green-6's ridges lean
+   300: an even front section), and `spurCount` for its lobed foot.
+   faceScratch at its maximum gives only faint 1-2 px grooves (proposal:
+   deeper, rounded grooves).
+2. **Green-4:** the pale ledge streaks are lit ledge tops, not material
+   grain (055); the valley-floor lumps from the lean.
+3. **Green-1's shelf lumps:** a map may now set `bedRelief` and `bedFlat`
+   in its query (harness, 2026-11-20).
+4. **Green-5's step lines** wait on an engine look at why bands skip
+   terraced slopes and why riser lines are dark only facing away from the
+   sun (engine-bake.wgsl ~1334; proposal).
 
 ## Pilot notes (2026-11-18)
 
