@@ -1,5 +1,5 @@
 import {requestAdapter} from './sculpt-webgpu.js';
-import {savedWorld,worldOverrideCount,resetWorldOverrides,copySavedWorld,worldKeys,applyEngineTables} from './sculpt-save.js';
+import {savedWorld,worldOverrideCount,resetWorldOverrides,copySavedWorld,worldKeys,applyEngineTables,LOOK_CARDS,lookCard,roleCard} from './sculpt-save.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mapGeometry,mountMapCanvas,validMapSize} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,worldHome,mountColumnPanel} from './sculpt-ui.js';
@@ -1781,22 +1781,27 @@ function commitCard() {
 }
 function moveHistory(delta) {
   const next=historyIndex+delta; if (!ready || loading || stroke || moving || mapFeatures?.busy || next<0 || next>=history.length) return;
-  const saved=history[next].world?.stored;worldStoreTransaction++;
-  try{
-  if(saved)configureStoredWorld(saved,history[next].world.beachFrom);
-  if(history[next].rock)setRockSettings(history[next].rock);
-  if(history[next].world)restoreWorldState(history[next].world);
-  if(history[next].rocks&&JSON.stringify(history[next].rocks)!==JSON.stringify(mapRocks))restoreRocks(history[next].rocks);
-  // Materials first: the surface then finds its copies bound as they were and changes none.
-  if(history[next].materials&&JSON.stringify(history[next].materials)!==JSON.stringify(mapMaterials))restoreMaterials(history[next].materials);
-  if(history[next].surface&&JSON.stringify(history[next].surface)!==JSON.stringify(config.surface)){setSurfaceList(structuredClone(history[next].surface),JSON.stringify(history[next].surface)!==JSON.stringify(baseSurface));saveWorlds();surfacePanel?.refresh();}
-  if(history[next].tools&&JSON.stringify(history[next].tools)!==JSON.stringify(mapTools))restoreMapTools(history[next].tools);
   const named=history[delta<0?historyIndex:next].name,said=named?`${delta<0?'Undid':'Redid'} ${named}.`:delta<0?'Undid the last change.':'Restored the change.';
-  if (history[next].terrainKey===history[historyIndex].terrainKey) { historyIndex=next; restoreMapData(history[next].mapData); updateControls(); persistLater(); schedule(false); pickCard?.refresh(); status(said); return; }
-  cancelWeather(); nodes=cloneNodes(history[next].nodes); selected=-1;alsoSelected=[];pathAdding=false;drawMode='select';pathPoint=-1;pathIndex=0; refinementSeed=history[next].refinementSeed; historyIndex=next; restoreMapData(history[next].mapData);
-  if (JSON.stringify(history[next].column)!==JSON.stringify(columnOverride)) { restoreColumn(history[next].column); syncColumnPanel(); }
-  evaluate(0); renderLayers(); updateControls(); persistLater(); status(said); schedule(); queueWeather(); pickCard?.refresh();
-  }finally{if(saved)worlds[worldId]=structuredClone(saved);refreshWorldTools();worldStoreDirty=false;worldStoreTransaction--;saveWorlds();const change=worldChanged(renderer.setColors(worldColors(),currentDrawOptions()));if(change.timeChanged)queueWeather();buildWorldPanel();syncWorldControls();updateControls();}
+  restoreEntry(history[next],{terrain:history[next].terrainKey!==history[historyIndex].terrainKey,said,index:next});
+}
+// Puts the editor in a history step's state (moveHistory), or in one Apply look composed (applyLook): the world, its rock rows, the rock
+// types, materials, surface layers and tools, then (`terrain`) the shapes and the rock column. `index`: the history step it is.
+function restoreEntry(e,{terrain=true,said='',index=historyIndex}={}) {
+  const saved=e.world?.stored;worldStoreTransaction++;
+  try{
+  if(saved)configureStoredWorld(saved,e.world.beachFrom);
+  if(e.rock)setRockSettings(e.rock);
+  if(e.world)restoreWorldState(e.world);
+  if(e.rocks&&JSON.stringify(e.rocks)!==JSON.stringify(mapRocks))restoreRocks(e.rocks);
+  // Materials first: the surface then finds its copies bound as they were and changes none.
+  if(e.materials&&JSON.stringify(e.materials)!==JSON.stringify(mapMaterials))restoreMaterials(e.materials);
+  if(e.surface&&JSON.stringify(e.surface)!==JSON.stringify(config.surface)){setSurfaceList(structuredClone(e.surface),JSON.stringify(e.surface)!==JSON.stringify(baseSurface));surfacePanel?.refresh();}
+  if(e.tools&&JSON.stringify(e.tools)!==JSON.stringify(mapTools))restoreMapTools(e.tools);
+  if (!terrain) { historyIndex=index; restoreMapData(e.mapData); updateControls(); persistLater(); schedule(false); pickCard?.refresh(); if(said)status(said); return; }
+  cancelWeather(); nodes=cloneNodes(e.nodes); selected=-1;alsoSelected=[];pathAdding=false;drawMode='select';pathPoint=-1;pathIndex=0; refinementSeed=e.refinementSeed; historyIndex=index; restoreMapData(e.mapData);
+  if (JSON.stringify(e.column)!==JSON.stringify(columnOverride)) { restoreColumn(e.column); syncColumnPanel(); }
+  evaluate(0); renderLayers(); updateControls(); persistLater(); if(said)status(said); schedule(); queueWeather(); pickCard?.refresh();
+  }finally{if(saved)worlds[worldId]=structuredClone(saved);refreshWorldTools();worldStoreDirty=false;worldStoreTransaction--;const change=worldChanged(renderer.setColors(worldColors(),currentDrawOptions()));if(change.timeChanged)queueWeather();buildWorldPanel();syncWorldControls();updateControls();}
 }
 
 function clearRendererWeather() { regionalWeather=null; if (gpuWeather) gpuWeather.mapsOn=false; }
@@ -2499,6 +2504,139 @@ function resetWorld(){
   }finally{worldStoreDirty=false;worldStoreTransaction--;saveWorlds();}
   buildWorldPanel();syncRockChoices();syncRocks();syncRockPanel();syncWorldControls();surfacePanel?.refresh();updateControls();status('Reset world settings to '+baseWorldConfig.biome+'.');
 }
+// ---- Apply look and New map with this look (owner, 2026-11-19). A look is a save: a built-in world's (builtInLook) or a map's. ----
+const ALL_CARDS=LOOK_CARDS.map(([card])=>card),KNOB_KEYS=new Set(KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)));
+// A built-in world's look as a save would hold it: its rows' defaults, colors, materials, surface, tables, rock types, column and features.
+async function builtInLook(id) {
+  let cfg;
+  if (id===config.biomeId) cfg=structuredClone(baseWorldConfig);
+  else { const response=await fetch(configUrl(id)); if (!response.ok) throw Error(`${config.biomes?.[id]||id} could not be read.`); cfg=applyWorldRock(await response.json()); cfg.services=services; }
+  const settings=new Map(Object.entries({...(cfg.defaults||{}),...(cfg.engineDefaults||{})}).map(([k,v])=>[k,String(v)]));
+  const kit=instantiateWorldKit(cfg,{},{builtIn:true});
+  return {format:'nanolathe-terrain-sculpt',version:6,biome:cfg.biomeId,worldSettings:savedWorld(cfg,settings,{name:cfg.biome,colors:{},knobs:{},materials:kit.materials}),
+    rocks:kit.rocks,materials:kit.materials,column:cfg.column??null,rock:Object.fromEntries(ROCK_KEYS.map(k=>[k,Number(cfg.defaults?.[k])])),tools:[],toolSettings:{},mapData:{featureSet:cfg.featureSet}};
+}
+const cardOfKey=key=>lookCard(key,worldHome(key),{row:KNOB_KEYS.has(key)});
+const keyFieldsOf=key=>key.startsWith('layer:')?{worldLayer:key.slice(6)}:{[key]:true};
+// The state the map would be in with `cards` of look B: a history step (checkpoint's fields) built from the current one. Throws, changing
+// nothing, when the map has no room (15 rock types, the material budget). Shapes keep their places; a shape on a rock type the new list
+// lacks takes the world's rock.
+function composeLook(B,cards) {
+  const cur=history[historyIndex],BW=B.worldSettings||{},R=structuredClone(activeWorld());R.knobs??={};R.colors??={};
+  const sameBase=B.biome===config.biomeId,all=ALL_CARDS.every(c=>cards.has(c));
+  for (const key of worldKeys(baseWorldConfig)) { const card=cardOfKey(key); if (!card||!cards.has(card)) continue; const v=BW.knobs?.[key]; if (v===undefined) delete R.knobs[key]; else R.knobs[key]=String(v); }
+  for (const key of new Set([...Object.keys(BW.colors||{}),...Object.keys(R.colors)])) { const card=cardOfKey(key); if (!card||!cards.has(card)) continue; if (BW.colors&&Object.hasOwn(BW.colors,key)) R.colors[key]=BW.colors[key]; else delete R.colors[key]; }
+  let surface=cur.surface;
+  if (cards.has('surface')&&BW.surface) { surface=withSurfaceMaterials(copySurface(BW.surface),baseSurface); R.surface=surface; }
+  if (all) { R.name=BW.name||config.biomes?.[B.biome]||R.name; if (sameBase) { if (BW.engine) R.engine=structuredClone(BW.engine); else delete R.engine; } }
+  // World materials of the checked cards: the source's graph into the slot that holds the role here, or a new slot.
+  const source=copyMaterials(B.materials)??copyMaterials(BW.materials)??[];let mats=structuredClone(mapMaterials);
+  for (const m of source) {
+    const key=worldKey(m); if (!key||!cards.has(roleCard(key))) continue;
+    const at=mats.find(x=>worldKey(x)===key),graph=copyMaterial(m);
+    if (at) mats=mats.map(x=>x.slot===at.slot?{...x,...graph,name:m.name}:x);
+    else { const added=addMaterial(mats,graph,m.name); mats=added.materials.map(x=>x.slot===added.slot?{...x,...keyFieldsOf(key)}:x); }
+  }
+  const same=(a,b)=>a.name===b.name&&JSON.stringify(copyMaterial(a))===JSON.stringify(copyMaterial(b));
+  const bring=slot=>{   // a source material slot as this map's: a world material by its role, a map material by its graph (added if new)
+    const m=source.find(x=>x.slot===slot); if (!m) return 0;
+    const key=worldKey(m); if (key) return mats.find(x=>worldKey(x)===key)?.slot??0;
+    const held=mats.find(x=>!worldKey(x)&&same(x,m)); if (held) return held.slot;
+    const added=addMaterial(mats,copyMaterial(m),m.name); mats=added.materials; return added.slot;
+  };
+  let rocks=structuredClone(mapRocks),column=cur.column,rock=cur.rock,nodesNext=markEdited(cloneNodes(cur.nodes),n=>nodeDefaults(n));
+  const srcRocks=(copyRocks(B.rocks)??[]).map(({worldKey:_,...r})=>r);
+  const matchRock=(r,list)=>r&&(list.find(x=>r.key&&x.key===r.key)??list.find(x=>x.name===r.name));
+  if (cards.has('rocks')) {
+    const old=rocks;
+    rocks=srcRocks.map(r=>{const {material,...rest}=r,slot=material>0?bring(material):0;return {...rest,...(slot>0?{material:slot}:{})};});
+    nodesNext=nodesNext.map(n=>{const p=n.params;if(!(p?.rockPreset>0))return n;const hit=matchRock(old.find(r=>r.slot===p.rockPreset),rocks);return {...n,params:{...p,rockPreset:hit?.slot??0}};});
+    column=B.column&&!sameColumn(copyColumn(B.column),defaultColumn)?copyColumn(B.column):null;rock=copyRockSettings(B.rock)??rock;
+    mats=dropRockMaterials(mats,old.map(r=>r.material).filter(m=>m>0&&!rocks.some(r=>r.material===m)),{rocks,nodes:nodesNext,config,keep:toolLays});
+  }
+  let tools=structuredClone(mapTools);
+  if (cards.has('tools')) {
+    const rockSlot=slot=>slot>0?matchRock(srcRocks.find(r=>r.slot===slot),rocks)?.slot??0:slot;
+    tools=(copyMapTools(B.tools)??[]).map(t=>({...t,card:{...t.card,...(t.card.rockPreset!==undefined?{rockPreset:rockSlot(t.card.rockPreset)}:{}),...(t.card.groundPreset>0?{groundPreset:bring(t.card.groundPreset)}:{})}}));
+  }
+  const mapDataNext=structuredClone(mapData());   // the map's own as it is now (a new map's name is set after its first history step)
+  if (cards.has('features')&&B.mapData?.featureSet) mapDataNext.featureSet=structuredClone(B.mapData.featureSet);
+  copyRocks(rocks);mats=assertKitMaterials(mats);   // room for every rock type and material, or nothing changes
+  const knobs={};for (const [,rows] of KNOBS) for (const [key] of rows) { if (key==='beachFrom'||ROCK_KEYS.includes(key)) continue; const v=R.knobs[key]??baseWorldConfig.defaults?.[key]; if (v!==undefined&&v!==null) knobs[key]=String(v); }
+  return {...cur,nodes:nodesNext,column,rock,rocks,materials:mats,surface,tools,mapData:mapDataNext,world:{knobs,colors:structuredClone(R.colors),stored:R,beachFrom:R.knobs.beachFrom},terrainKey:++historySerial};
+}
+// Applies `cards` of look B to this map in place (one undo step): the composed state, then the shapes. With Tools taken, a shape's settings
+// its artist did not change take the new tools' defaults (`reset`: all of them). `baseline`: a new map's first state, with nothing to undo.
+function applyLook(B,cards,{reset=false,baseline=false}={}) {
+  worldInputQueue.flush();
+  const target=composeLook(B,cards),marked=target.nodes;
+  restoreEntry(target,{terrain:true});
+  if (cards.has('tools')||reset) {
+    const ids=toolIds(),carried=reset?null:carryStrokes(marked.filter(n=>n.kind!=='ground'),ids,n=>nodeDefaults(n));let k=0;
+    nodes=marked.map(n=>{if(n.kind==='ground')return n;if(!reset)return carried[k++];const base=n.points?nodeDefaults(n):null;const {edited:_,kept:__,...rest}=n;if(!base)return rest;const m={...rest,params:{...base,...(n.params.river?{river:n.params.river}:{})}};migrateRiverNode(m);return m;});
+    nodes=keepStrokeRocks(keepStrokeMaterials(nodes,mapMaterials),mapRocks);
+  } else nodes=nodes.map(({edited:_,...n})=>n);
+  cancelWeather();evaluate(0);regionalFields?.changed?.();
+  if (baseline) { history=[];historyIndex=-1;checkpoint(); }   // a new map starts here: nothing before it to undo
+  else { checkpoint(); history[historyIndex].name='applying a look'; syncHistoryNames(); }
+  queueWeather();schedule();buildWorldPanel();syncRockChoices();syncRockPanel();syncWorldControls();surfacePanel?.refresh();updateControls();
+}
+// A look waiting for this page (a new map from a look, or a look from another world after its fork): applied once the map is in.
+async function applyPendingLook() {
+  const token=experiment.get('lookFrom');if(!token)return;
+  const B=await takePendingSketch(token),cards=new Set((experiment.get('lookCards')||ALL_CARDS.join(',')).split(',').filter(c=>ALL_CARDS.includes(c)));
+  if (!B) { error('The look to apply could not be read; the map is as it was.'); return; }
+  try { applyLook(B,cards,{reset:experiment.get('lookShapes')==='reset',baseline:experiment.has('newMap')}); await saveWorking(); status(experiment.has('newMap')?`Started a new map with the look of ${B.mapData?.name||B.worldSettings?.name||'that map'}.`:`Applied the look of ${B.mapData?.name||B.worldSettings?.name||'that map'}.`); }
+  catch (err) { error('The look could not be applied: '+err.message); }
+}
+// World › Apply look from…: a built-in world, one of this browser's maps, or a map file; the cards to take; what the shapes do.
+let lookFile=null;
+async function lookSource() {
+  const value=$('look-source').value;
+  if (value.startsWith('builtin:')) return builtInLook(value.slice(8));
+  if (value.startsWith('map:')) { const s=await mapStore.get(value.slice(4)); if (!s) throw Error('That map is no longer in this browser.'); return s; }
+  if (value==='file') { if (!lookFile) throw Error('Choose a map file first.'); return lookFile; }
+  throw Error('Choose where the look comes from.');
+}
+function lookBase() { const v=$('look-source').value; return v.startsWith('builtin:')?v.slice(8):v.startsWith('map:')?lookMaps.get(v.slice(4))?.biome:v==='file'?lookFile?.biome:''; }
+let lookMaps=new Map();
+function syncLookNote() {
+  const base=lookBase(),cards=[...$('look-cards').querySelectorAll('input:checked')].map(b=>b.value),all=cards.length===ALL_CARDS.length,other=base&&base!==config.biomeId;
+  $('look-apply').disabled=!cards.length&&$('look-dialog').querySelector('input[name=look-shapes]:checked')?.value!=='reset'||!base;
+  $('look-note').textContent=!base?($('look-source').value==='file'?'Choose a map file.':''):other&&all?`${config.biomes?.[base]||base} is another world: this makes a copy of your map in it with this look. The original stays in Maps.`
+    :other?`Only the checked parts come from ${config.biomes?.[base]||base}; the map stays in ${config.biome}.`:'One Undo puts the map back as it was.';
+}
+async function openLookDialog() {
+  if (!ready||loading||stroke||moving) return;
+  const select=$('look-source'),worldsGroup=document.createElement('optgroup'),mapsGroup=document.createElement('optgroup');
+  worldsGroup.label='Worlds';worldsGroup.append(...Object.entries(config.biomes||{}).map(([id,name])=>new Option(name,'builtin:'+id,false,id===config.biomeId)));
+  mapsGroup.label='Your maps';lookMaps=new Map();
+  try { for (const m of byRecent(mapStore?await mapStore.list():[])) if (m.id!==tabMapId) { lookMaps.set(m.id,m); mapsGroup.append(new Option(`${m.name} · ${config.biomes?.[m.biome]||m.biome}`,'map:'+m.id)); } } catch (_) {}
+  select.replaceChildren(worldsGroup,...(mapsGroup.children.length?[mapsGroup]:[]),new Option('A map file…','file'));
+  lookFile=null;for (const b of $('look-cards').querySelectorAll('input')) b.checked=true;$('look-dialog').querySelector('input[name=look-shapes][value=keep]').checked=true;
+  syncLookNote();$('look-dialog').showModal();
+}
+$('world-apply').onclick=openLookDialog;
+$('look-source').onchange=()=>{ if ($('look-source').value==='file') $('look-file').click(); syncLookNote(); };
+$('look-file').onchange=async()=>{ const file=$('look-file').files[0];$('look-file').value='';if(!file)return;
+  try { const s=JSON.parse(await file.text()); if (s?.format!=='nanolathe-terrain-sculpt'||typeof s.biome!=='string'||!(s.biome in (config.biomes||{}))) throw Error('Not a map file for a world this editor has.'); lookFile=s; } catch (err) { lookFile=null; $('look-note').textContent=err.message; return; }
+  syncLookNote(); };
+$('look-cards').onchange=syncLookNote;$('look-dialog').querySelector('.look-shapes').onchange=syncLookNote;
+$('look-cancel').onclick=()=>$('look-dialog').close();
+$('look-form').onsubmit=async e=>{
+  e.preventDefault();const cards=new Set([...$('look-cards').querySelectorAll('input:checked')].map(b=>b.value)),reset=$('look-dialog').querySelector('input[name=look-shapes]:checked')?.value==='reset';
+  let B;try{B=await lookSource();}catch(err){$('look-note').textContent=err.message;return;}
+  if (B.biome!==config.biomeId&&ALL_CARDS.every(c=>cards.has(c))) {   // another world, whole: the map forks there (goToWorld) and takes the look on arrival
+    const token=Math.random().toString(36).slice(2)+Date.now().toString(36);
+    try{await stashPendingSketch(token,B);}catch(err){$('look-note').textContent='The look could not be handed to the other world: '+err.message;return;}
+    $('look-dialog').close();goToWorld(B.biome,{lookFrom:token,lookShapes:reset?'reset':''});return;
+  }
+  try{applyLook(B,cards,{reset});$('look-dialog').close();status(`Applied ${[...cards].map(c=>LOOK_CARDS.find(([k])=>k===c)[1]).join(', ')||'the shapes\' defaults'} from ${B.mapData?.name||B.worldSettings?.name||'that map'}. One Undo puts them back.`);}
+  catch(err){$('look-note').textContent='Nothing changed: '+err.message;}
+};
+// Map › New map with this look: Maps' New map, starting from this map's look (its world settings, materials, rock types, tools and
+// feature styles) instead of a built-in world's. The map open now stays in Maps.
+$('new-map-look').onclick=()=>{if(ready&&!loading&&!stroke&&!moving)openNewMap(false,null,true);};
 for(const id of ['wsec-world','tab-world'])$(id).addEventListener('click',()=>requestAnimationFrame(syncWorldHome));
 function openWorldHome(card){openWorldSection('wsec-world');syncWorldHome();const el=$('world-home-'+card);if(el)bringIntoView(el,'start');el?.querySelector('button,input,select')?.focus({preventScroll:true});}
 let worldHomeSummary='';
@@ -3002,8 +3140,9 @@ async function bootMap(pending=null) {
   if (!restorePlace()) $(experiment.has('newMap')?'fit':'one').click();
   if (forkNote) status(forkNote);   // after the restored selection's own line
   if (shareError) error(shareError);
-  $('new-map').disabled=false;
+  $('new-map').disabled=$('new-map-look').disabled=false;
   if(experiment.has('newMap')){$('map-name').value=experiment.get('mapName')||'Untitled map';$('map-name').dispatchEvent(new Event('input'));saveWorking();}
+  await applyPendingLook();   // a new map from a look, or a look from another world after its fork
   if(needsPicker()&&!$('new-map-dialog').open)openNewMap(true);
   // The handoff is used: a refresh reopens the tab's map as it is now saved.
   writeTab(sessionStore,{map:tabMapId});
@@ -3037,12 +3176,15 @@ async function chooseMap() {
 }
 const localStorageOrNull=() => { try { return localStorage; } catch (_) { return null; } };
 function newMapReady() { $('new-map-open').disabled=!ready; }
-function openNewMap(first=false, dimensionsFromMap=null) {
+function openNewMap(first=false, dimensionsFromMap=null, look=false) {
   const dialog=$('new-map-dialog'); let picked=config.biomeId;   // a built-in world's id
-  $('new-map-title').textContent=first&&!mapsNote?'Start a map':'Maps';
+  $('new-map-title').textContent=look?'New map with this look':first&&!mapsNote?'Start a map':'Maps';
+  // With this map's look (Map › New map with this look) the world cards and the saved maps give way to a line naming the look.
+  $('new-map-worlds').hidden=$('new-map-pick').hidden=look;$('new-map-look-note').hidden=!look;
+  if(look)$('new-map-look-note').textContent=`Starts blank with the look of “${String(mapData()?.name||'this map').slice(0,60)}”: its world settings, materials, rock types, tools and feature styles (${activeWorld().name}). This map stays in Your maps.`;
   $('new-map-cancel').hidden=first;$('new-map-previous').hidden=first||!tabMapId;
   $('new-map-error').textContent='';
-  savedMapsList();
+  if(look)$('new-map-saved').hidden=true;else savedMapsList();
   // The cards: the built-in worlds, each with its picture and its line (site.json). Another map's look starts from that map (Map › New map
   // with this look), opened from its file or link.
   const choices=() => Object.entries(config.biomes||{}).map(([id,name]) => ({id,name,line:config.biomeDescriptions?.[id]||'',picture:`ui-previews/world-${id}.png`}));
@@ -3074,7 +3216,9 @@ function openNewMap(first=false, dimensionsFromMap=null) {
   // Create: the map open now stays in Maps (saved first); the tab reloads on a new map of its own.
   $('new-map-form').onsubmit=async e=>{e.preventDefault();if(!e.target.reportValidity())return;
     clearTimeout(autosaveTimer);if(!await leaveMap()){$('new-map-error').textContent='Your current map could not be saved in this browser. Save it as a file before starting a new map.';return;}
-    const next={biome:picked,mapName:$('new-map-name').value.trim()||'Untitled map',mapX:$('new-map-width').value,mapY:$('new-map-height').value,newMap:1,...(Number.isInteger(dimensionsFromMap?.sea)?{sea:dimensionsFromMap.sea}:{})};
+    let lookToken='';
+    if(look){lookToken=Math.random().toString(36).slice(2)+Date.now().toString(36);try{await stashPendingSketch(lookToken,sketch());}catch(err){$('new-map-error').textContent='This map’s look could not be handed to the new map ('+err.message+').';return;}}
+    const next={biome:look?config.biomeId:picked,...(look?{lookFrom:lookToken}:{}),mapName:$('new-map-name').value.trim()||'Untitled map',mapX:$('new-map-width').value,mapY:$('new-map-height').value,newMap:1,...(Number.isInteger(dimensionsFromMap?.sea)?{sea:dimensionsFromMap.sea}:{})};
     if(leaveFor(mapStore?newMapId():null,next))keepSaved=true;
   };
   dialog.showModal();

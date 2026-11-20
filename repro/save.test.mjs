@@ -66,3 +66,22 @@ test('a saved world\'s numbers are checked as the server sends its defaults, as 
   const kept=copySavedWorld({...value,knobs:{...value.knobs,rainErode:'.5',groundFine:2,undulation:'-1.5',material:'smooth'}},served).knobs;
   assert.deepEqual([kept.rainErode,kept.groundFine,kept.undulation,kept.material],['.5','2','-1.5','smooth']);
 });
+
+test('Apply look: every setting, color and world material belongs to one card', async () => {
+  const {lookCard, roleCard, LOOK_CARDS} = await import('../sculpt-save.js');
+  const {KNOBS} = await import('../sculpt-knobs.js');
+  const {MAP_ROLES} = await import('../sculpt-materials.js');
+  const fs = await import('node:fs');
+  // The homes as sculpt-ui.js holds them (it touches the page, so it is read as text here).
+  const src = fs.readFileSync(new URL('../sculpt-ui.js', import.meta.url), 'utf8'), i = src.indexOf('export const WORLD_HOMES={'), j = src.indexOf('};', i);
+  const {ROCK_HEADLINES} = await import('../sculpt-rock-presets.js');
+  const homes = new Function('ROCK_HEADLINES', 'return ' + src.slice(i + 'export const WORLD_HOMES='.length, j + 1))(ROCK_HEADLINES);
+  const homeOf = new Map(Object.entries(homes).flatMap(([home, keys]) => keys.split(' ').map(k => [k, home])));
+  const cards = new Set(LOOK_CARDS.map(([c]) => c));
+  for (const [, rows] of KNOBS) for (const [key] of rows) assert.ok(cards.has(lookCard(key, homeOf.get(key))), `the row ${key} belongs to a card`);
+  for (const key of ['shallowTone', 'sun', 'sky', 'absorb', 'beachFrom', 'sandEdge']) assert.ok(cards.has(lookCard(key, '')), key);
+  assert.equal(lookCard('palette', ''), null);
+  assert.equal(lookCard('elevation', '', {row: false}), 'tools', 'a shape tool default is the Tools card\'s');
+  for (const key of ['worldGround', 'worldWater', ...MAP_ROLES.map(([r]) => r), 'layer:green-snow']) assert.ok(cards.has(roleCard(key)), key);
+  assert.equal(roleCard(null), null);
+});

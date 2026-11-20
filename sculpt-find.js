@@ -114,6 +114,7 @@ export const ACTIONS = [
   ['new-map', 'run'], ['tab-map', 'run', 'Map'], ['load', 'run'], ['save', 'run'], ['open-export', 'run'], ['map-export', 'go'], ['export', 'go'],
   ['share-link', 'go'], ['open-graphics', 'run', 'View'], ['view-rendered', 'run'], ['view-clay', 'run'], ['view-passability', 'run'], ['focus-canvas', 'run', 'Focus'], ['fit', 'run'],
   ['zoom-in', 'run', 'Zoom in'], ['zoom-out', 'run', 'Zoom out'], ['materials-toolbar', 'run'], ['tab-objects', 'run', 'Shapes'],
+  ['new-map-look', 'run'], ['world-apply', 'run'],
 ];
 
 function ownText(el) {

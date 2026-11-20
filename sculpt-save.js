@@ -22,6 +22,20 @@ export function copyEngineTables(value,config) {
 }
 // A map's engine tables over the served ones: keys the data gained since the map was saved keep the data's value.
 export function applyEngineTables(config,engine) { for (const [k,table] of Object.entries(engine||{})) if (plain(config[k])&&plain(table)) config[k]={...config[k],...structuredClone(table)}; return config; }
+// Apply look's seven cards (owner, 2026-11-19): what of another world or map a map can take. A World row belongs to the card of the World
+// section it sits in (sculpt-ui.js WORLD_HOMES, passed as `home`); a setting that is no row (a shape tool's default) belongs to Tools.
+export const LOOK_CARDS=[['ground','Ground'],['water','Water'],['rocks','Rock types'],['surface','Surface layers'],['light','Light & weather'],['tools','Tools'],['features','Features']];
+const HOME_CARDS=[[/^(World\/Ground|Ground\/)/,'ground'],[/^(World\/Water|Water & shores\/)/,'water'],[/^(Rock types|Cliffs & stones)\//,'rocks'],[/^(Surface|Vegetation|Sand)\//,'surface'],[/^(World\/Light & weather|Light & shine\/|Rain & erosion\/)/,'light']];
+const KEY_CARDS={beachFrom:'water',sandEdge:'surface',erosion:'light',erosionAge:'light',talusAngle:'light',shallowTone:'water',sun:'light',sky:'light',absorb:'rocks'};
+const NOT_LOOK=new Set(['palette','fill','relief']);   // view switches and diagnostics, not a look
+export function lookCard(key,home,{row=true}={}) {
+  if (KEY_CARDS[key]) return KEY_CARDS[key];
+  if (NOT_LOOK.has(key)) return null;
+  return row?HOME_CARDS.find(([re]) => re.test(home||''))?.[1]??null:'tools';
+}
+// The card a world material belongs to, by its world key (sculpt-materials.js worldKey): a role's surface, or a surface layer's.
+const ROLE_CARDS={worldGround:'ground',worldSlope:'ground',worldWater:'water',worldBeach:'water',worldRock:'rocks',worldDebris:'rocks',worldCrystal:'rocks',worldHigh:'surface',worldFringe:'surface',worldBody:'surface'};
+export const roleCard=key => ROLE_CARDS[key]??(typeof key==='string'&&key.startsWith('layer:')?'surface':null);
 export const worldKeys=config => new Set([...Object.keys(config.defaults||{}),...Object.keys(config.engineDefaults||{}),...KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)),'beachFrom','sandEdge','fill','relief','palette','sun']);
 export function savedWorld(config,settings,world) {
   const knobs={};
