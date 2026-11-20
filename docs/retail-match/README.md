@@ -270,3 +270,9 @@ main product when the data cannot reach retail. Make each one specific:
 
 Then commit your work on the branch and stop. A reviewer will look at the
 pairs, the log and your report, and decide what to port into the world.
+
+If your tool will not let you write `<out>/REPORT.md` (some agent runners
+refuse report files from a delegated agent), put the whole report in your
+final message instead; the reviewer saves it there. Keep running notes in
+`<out>/NOTES.md` as you go: round 6 ran out of working memory at 94 trials,
+and its notes carried the round.
