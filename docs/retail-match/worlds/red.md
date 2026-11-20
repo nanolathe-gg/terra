@@ -14,11 +14,15 @@ Means of the tuning windows at the base (main 50328b75): shape .27, look .33.
 
 ### Which rock each window's strokes use
 
-No stroke sets `rockPreset`, so every window draws the world's own rock
-(slot 0, the rock keys in `knobDefaults`). `darkknob` (slot 2) and `rubble`
-(slot 3) reach no window until a scene names them. red-2 paints Rock
-(channel 1, amount 80) over its knob; red-3 paints Rock in five strokes.
-Re-check with `grep -o '"rockPreset": [-0-9]*' repro/scenes/red-<n>.json`.
+| Window | Rock slot used | Rock type |
+| --- | --- | --- |
+| red-1 | none set (-1: the world's own rock) | the rock keys in `knobDefaults` (rockFace .8 since round 1) |
+| red-2 | 2 on the knob stroke (round 1); the rest unset | `darkknob` (crust -.3, rockFace 2) |
+| red-3 | none set | the world's own rock |
+
+`rubble` (slot 3) reaches no window. red-2 paints Rock (channel 1, amount
+80) over its knob; red-3 paints Rock in five strokes. Re-check with
+`grep -o '"rockPreset": [-0-9]*' repro/scenes/red-<n>.json`.
 
 ## What Red's retail looks like at 1x
 
@@ -65,12 +69,30 @@ pairs.
   spider, king of the hill and red river.
 - Retail's plain sits at 85 with the sea 5-38 below it.
 
-## Start here
+## Start here (round 2)
 
-1. Shape: red-1's flat share (45% against 19%). Find where retail's gentle
-   cells are in its heights (a plain-wide roll, wide aprons, or byte steps)
-   before moving strokes; the scene's `undulation` is a map setting.
-2. red-2's knob: diameter 300 against retail's 180-220 px foot; its steep
-   share is low.
-3. Then the look: the hard black lines on steep ground, the plain's
-   blotches, the shelf's crack web, the dark shore band.
+Round 1 (branch `match-red`, 88 of 300 trials; report in
+`$R/match/terraform-wt-match-red/red/REPORT.md` or the round's final
+message) took the mean from shape .27, look .33 to shape .14, look .17
+(trial-084); held-out red-3 1.49 to 1.20 (holdout-003). Kept: red-1's
+ground roll, red-2's steeper knob on darkknob, calmer red-rock, a
+shallower world rock face, stronger ground relief, weaker plain bumps,
+Red's own ground `red-plain`, a world surface list with a dry bank by the
+water, and red-1's own wider dry bank.
+
+Leads:
+
+1. **The wet band** (`material.wetBand` 13, outside the match lanes)
+   darkens ground and rock up to 52 units above the sea: red-3's
+   near-black coast and red-2's dark bank. `flatBank` lifts it but also
+   takes the bank's light and shade (round 1, trial-085).
+2. **Relief .8** scores best but puts red-1's steep edges at 6x retail
+   and red-2's bank edges at 3.4x; .5 halves them and costs .026 of mean
+   look (trial-088).
+3. **Red-2's NW upland** (its largest finding): retail's plain is pitted
+   2-8 units with soft polygon cracks. Fissure networks draw thin dark
+   lines the look score punishes; lumps paint lands in the flat class.
+4. **Water by map:** red-2's river stays light to depth 24, red-3's sea
+   darkens from depth 8; the shelf's crack web (`bedCracks`) is absent in
+   retail but removing it costs red-1's ponds.
+5. Red-1's flat share is still 29% against 19%.
