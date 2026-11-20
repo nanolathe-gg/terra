@@ -351,6 +351,7 @@ func (s *Site) configure() error {
 		}
 		knobs["shallowDepth"] = value(material["shallowDepth"], 2)
 		knobs["deepDepth"] = value(material["deepDepth"], 42)
+		knobs["wetBand"] = value(material["wetBand"], 13)
 		knobs = merge(knobs, overrides)
 		c["defaults"] = merge(obj(c["defaults"]), stringsOf(knobs))
 		c["engineDefaults"] = stringsOf(engine)

@@ -191,7 +191,7 @@ export const WORLD_HOMES={
  'Cliffs & stones/Special surfaces':'iceFrost lavaCrust lavaPillow lavaChip lavaVeins lavaCalm lavaDusk iceSoft',
  'Sand/':'sandCrown sand sandLee wind sandDust sandGrass sandLight ripple rippleHeight',
  'Water & shores/Depths & edges':'deepDepth waterSoft crispShore deepEdge stepSoftPx shelfWander shoalRag shoalShoreSoft',
- 'Water & shores/Shore & beach':'coastRamp beachWidth apron shoreEdge bankRock frostGaps frostGapReach frostGapSize frostGapDepth',
+ 'Water & shores/Shore & beach':'coastRamp beachWidth apron shoreEdge bankRock wetBand frostGaps frostGapReach frostGapSize frostGapDepth',
  'Water & shores/Water bed':'bedTint bedBright bedContrast bedRelief bedCracks bedCrackSize bedFlat',
  'Rain & erosion/':'wetSwath wetGround',
  'Light & shine/Sun & shade':'faceFill flatShadow flatOcclusion lightCap shadeDepth sunTilt ambient creaseShade',

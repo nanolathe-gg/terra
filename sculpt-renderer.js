@@ -1015,7 +1015,7 @@ export class TerrainRenderer {
     this.i('uGroundFringe', material.groundFringe === true);
     // A preset can retain coloured veins or dark neutral grain at its edge.
     // The blending algorithm does not choose a biome's material colour.
-    this.f('uWetBand', material.wetBand ?? 13);
+    this.f('uWetBand', variant.has('wetBand') ? Number(variant.get('wetBand')) : material.wetBand ?? 13);   // World control; a world's material table sets its default (config.go)
     // E6: mineralDetail scales the rock art's contrast about its mean (1: as drawn).
     const bed = this.config.water?.riverBedRGB;   // riverfix: a braided bed's gravel, world data (absent: the draw darkens the world's rock)
     this.set('uRiverBed', bed ? [...bed.map(v => v / 255), 1] : [0, 0, 0, 0]);

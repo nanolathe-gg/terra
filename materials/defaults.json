@@ -100,6 +100,7 @@
     "waterSoft": 32,
     "crispShore": 1,
     "bankRock": 0.25,
+    "wetBand": 13,
     "faceStreak": 0,
     "faceStreakFrom": 0.3,
     "bandJag": 0,
