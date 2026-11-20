@@ -901,7 +901,9 @@
 
     "passrock",
 
-    "reefstone"
+    "reefstone",
+
+    "divide"
 
    ],
 
@@ -1042,6 +1044,13 @@
       "faceBlockSize": 14,
       "faceJoint": 0.05,
       "faceShade": 0.8
+     }
+    },
+    "divide": {
+     "label": "Gentle divide",
+     "knobs": {
+      "bandLevel": 2,
+      "bandFill": 1
      }
     }
 
