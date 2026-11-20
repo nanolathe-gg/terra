@@ -943,7 +943,9 @@
       "debrisAmount": 0.6,
       "debrisReach": 60,
       "banding": 1,
-      "crackMajor": 1
+      "crackMajor": 1,
+      "crackSeverity": 1.2,
+      "crackDark": 1
      }
     },
 
