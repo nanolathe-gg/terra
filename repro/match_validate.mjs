@@ -22,8 +22,29 @@ const query = take('--query'), configs = take('--configs'), baseCommit = take('-
 const world = argv[0];
 if (!world) { console.error('usage: node repro/match_validate.mjs <world> [--query \'key=v&key=v\']'); process.exit(2); }
 const errors = [], warnings = [];
+// A key written twice in one object: JSON keeps the last, so an edit above a later copy renders nothing (round 11's trial-039 added a
+// world.shapes.hill that an empty "hill": {} further down shadowed). Returns [key, line] for each.
+function duplicateKeys(text) {
+  const found = [], stack = [];
+  let line = 1, expectKey = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '\n') line++;
+    else if (c === '"') {
+      let j = i + 1; while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+      const str = text.slice(i + 1, j); i = j;
+      if (expectKey && stack.length && stack[stack.length - 1]) { const keys = stack[stack.length - 1]; if (keys.has(str)) found.push([str, line]); keys.add(str); }
+      expectKey = false;
+    } else if (c === '{') { stack.push(new Set()); expectKey = true; }
+    else if (c === '[') { stack.push(null); expectKey = false; }
+    else if (c === '}' || c === ']') { stack.pop(); expectKey = false; }
+    else if (c === ',') expectKey = Boolean(stack.length && stack[stack.length - 1]);
+  }
+  return found;
+}
 function load(file) {
   const text = readFileSync(join(repo, file), 'utf8');
+  for (const [key, line] of duplicateKeys(text)) errors.push(`${file} line ${line}: key "${key}" appears twice in one object; JSON keeps the last, so the earlier one does nothing.`);
   try { return JSON.parse(text); } catch (e) {
     const at = Number(/position (\d+)/.exec(e.message)?.[1]);
     const line = Number.isFinite(at) ? text.slice(0, at).split('\n').length : '?';
