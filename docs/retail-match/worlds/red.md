@@ -17,7 +17,7 @@ Means of the tuning windows at the base (main 50328b75): shape .27, look .33.
 | Window | Rock slot used | Rock type |
 | --- | --- | --- |
 | red-1 | 4 on every stroke (round 2) | `softface` (faceRock 0, rockFaceFrom .5): no rock shown, face construction only from slope .5 |
-| red-2 | 2 on the knob stroke (round 1); the rest unset | `darkknob` (crust -.3, rockFace 2, material `red-knob` since round 2) |
+| red-2 | 2 on the knob stroke (round 1); the rest unset | `darkknob` (crust -.3, rockFace 2, the world's rock material) |
 | red-3 | none set | the world's own rock |
 
 `rubble` (slot 3) reaches no window. red-2 paints Rock (channel 1, amount
@@ -78,8 +78,13 @@ took the mean from shape .14, look .17 (trial-000) to shape .13, look .09
 (holdout-006). Kept: `wetBand` 4 in knobDefaults; red-2's own water
 (deepDepth 100, bedCracks 0); red-1's strokes on a new rock type
 `softface` (slot 4: faceRock 0, rockFaceFrom .5); red-1's plain rolls
-more (undulation 8, cover .75); darkknob draws `red-knob`, a rock
-material of vertical ribs. A world faceRock 0 and then Smooth soil on
+more (undulation 8, cover .75). Held at review: darkknob drawing
+`red-knob`, a rock material of vertical ribs (red-2 .10 to .08, trial-091):
+its waves run straight down the screen on every face of the dome, top and
+east-west flanks included, so the knob reads as a barcode where retail's
+is a fine even texture (`<out>/crops/r2knob4.png`); and it would draw
+those stripes on every Knob and Crescent tool. Its graph is in the round's
+trial-091 candidate.diff. A world faceRock 0 and then Smooth soil on
 red-1 were kept and replaced: Red's real cliffs are fluted rock
 (`$R/agent-biome-match/out/catalog/red/crops/cliff-ashap_plateau.png`),
 and soil made red-1's steep edges 15x retail.
@@ -124,8 +129,12 @@ Leads:
    (trial-099/100). The stroke `cracks` field is live but gated by world
    crackSeverity 0.
 
+9. **The knob's ribs** (held, above): try a finer, fainter texture that
+   does not run one screen direction, or faceScratch (grooves follow the
+   face), and keep the knob's lit top plain.
+
 Reviewer's notes from round 2 still to settle: relief .8 (owner's call),
-and whether red-1's soil choice is right given its denser steep edges.
+and red-1's softface (by eye its crescent and mesa read softer and closer to retail, trial-120 pair).
 
 ## Start here (round 2, done)
 
