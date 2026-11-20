@@ -1526,6 +1526,7 @@
  "desert-triad": {"name": "Gray caprock", "like": "desert-rock", "color": "#918495"},
  "desert-outcrop": {"name": "Dark outcrop", "like": "desert-rock", "color": "#615465"},
  "green-escarpment": {"name": "Dark escarpment", "like": "green-rock", "color": "#504f52"},
+ "green-passrock": {"name": "Pale massif rock", "like": "green-rock", "color": "#898882"},
  "ice-slate": {"name": "Snow and slate", "like": "ice-rock", "color": "#336d8b"},
  "ice-streaked": {"name": "Crystal ice", "like": "ice-rock", "color": "#d4f4ff"},
  "ice-blueice": {"name": "Glacier ice", "like": "ice-rock", "color": "#bedcfc"},

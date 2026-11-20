@@ -876,7 +876,9 @@
 
     "ridgestone",
 
-    "ridgeblock"
+    "ridgeblock",
+
+    "passrock"
 
    ],
 
@@ -988,6 +990,15 @@
       "crackSeverity": 1,
       "crackMajor": 0.6,
       "debrisAmount": 0
+     }
+    },
+
+    "passrock": {
+     "label": "Mossy massif",
+     "material": "green-passrock",
+     "knobs": {
+      "faceRock": 0.55,
+      "faceGrass": 0.8
      }
     }
 
