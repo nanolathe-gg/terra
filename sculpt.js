@@ -2630,7 +2630,7 @@ function syncWorldHome(viewOnly=false){
 }
 function buildWorldPanel() {
   const world=activeWorld();
-  $('world-name').textContent=world.name;$('world-title').textContent=world.name;
+  $('world-name').textContent=world.name;
   for(const b of document.querySelectorAll('[data-world-card]'))b.onclick=()=>openWorldHome(b.dataset.worldCard);
   for(const b of document.querySelectorAll('[data-world-section]'))b.onclick=()=>openWorldSection('wsec-'+b.dataset.worldSection);
   $('world-home-layer-add').onclick=()=>{openWorldSection('wsec-surface');$('surface-add').click();};
@@ -3278,7 +3278,6 @@ async function boot() {
     if(embedded&&Number.isFinite(restoring.baseHeight))config.baseHeight=restoring.baseHeight;
     MIN_HEIGHT=config.seaLevel-90; MAX_HEIGHT=config.seaLevel+300;
     if ((!config.map && config.size!==1024) || !Number.isInteger(config.grid) || config.grid<2 || config.grid>(config.map?16384:1024) || !Number.isFinite(config.baseHeight) || !Number.isFinite(config.seaLevel)) throw new Error('Unsupported sculpt configuration.');
-    $('world-title').textContent=config.biome||'Green Planet';
     // The world: built-in (the biome itself) or a custom one based on it.
     // Its remembered settings come before the biome's own defaults.
     worldId=config.biomeId;
@@ -3294,7 +3293,6 @@ async function boot() {
     const worldKnobs=knownWorldKnobs(worlds[worldId]?.knobs,config);
     config.defaults={...config.defaults,...worldKnobs};
     config.engineDefaults=Object.fromEntries(Object.entries(config.engineDefaults||{}).map(([key,value])=>[key,worldKnobs[key]??value]));
-    if (worlds[worldId]?.name) $('world-title').textContent=worlds[worldId].name;
     addDefaults(experiment,config.defaults);
     borrowBeach(config,experiment);   // a beach another world lends (World, Ground): before the renderer and the panel read the world's layers
     applyEngineTables(config,worlds[worldId]?.engine);   // the map's own copy of the world's tables (sculpt-save.js ENGINE_TABLES)
