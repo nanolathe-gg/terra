@@ -24,7 +24,7 @@ foot, boulders in the shallows. Those moved green-2 .17 to .19, its gentle
 lines 0.46x to 0.28x retail, and green-3, green-4 and green-5 by .01.
 Green-1's port shows in its `flat:edges`, not its look); shape .23, look
 .17 after round 5's port (measured 2026-11-19); shape .18, look .17 after
-round 6's port (measured 2026-11-20). One render of all seven windows each.
+round 6's port (measured 2026-11-19). One render of all seven windows each.
 
 ### Which rock each window's strokes use
 
@@ -93,7 +93,7 @@ These notes are by eye, from the base crops in
 Round 6 (branch `match-green-7`, 94 of 300 trials, run by a background
 agent that ran out of working memory; report in
 `$R/match/terraform-wt-match-green-7/green/REPORT.md`, notes in `NOTES.md`
-beside it) was reviewed and partly ported to main on 2026-11-20. Earlier
+beside it) was reviewed and partly ported to main on 2026-11-19. Earlier
 rounds' starts are in git history (this section's earlier versions).
 
 - **Ported:**
