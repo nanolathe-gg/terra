@@ -4,6 +4,7 @@
 //   node repro/map-snapshot.mjs --server http://127.0.0.1:<yours> --port <cdp> [--out dir]
 // The server must serve THIS worktree (it reloads JSON on request). The files are restored in a finally block; if the run is killed, run
 // `git checkout materials/` before anything else. Prints one JSON line: for each retune whether the save and the pixels stayed the same.
+// Then it pulls a retune in on purpose (Apply look from the map's own world, and Reset) and checks the result draws as its reload does.
 // A retune marked `snapshot: false` (a part the map does not keep) is reported, not failed; a kept part that changes exits 1.
 // Built from data and not kept: the toolbar's built-in buttons and their presets (new shapes only), rock recipes and material starting
 // points (adding only), the feature generator's tables (new features only).
@@ -62,6 +63,19 @@ try {
       results[r.name] = {snapshot: r.snapshot, saveSame: !changed.length, ...(changed.length ? {changed} : {}), pixelsSame: Buffer.from(base.pixels).equals(Buffer.from(now.pixels))};
     } finally { writeFileSync(path, originals.get(path)); }
   }
+  // Pulling a retune in on purpose: with Green's material table and a row retuned, Apply look from Green (every card) and Reset each draw
+  // exactly what a reload of the map then draws (the in-place apply and the load agree), and differ from the map as first saved. Reset runs
+  // on the map Apply look left (its own retuned look), so it checks the in-place path again rather than a second pull.
+  const path = file('green.json'), retuned = JSON.parse(originals.get(path) ?? readFileSync(path, 'utf8')); if (!originals.has(path)) originals.set(path, readFileSync(path, 'utf8'));
+  retuned.material.rockSlope = .7; retuned.material.wetBand = 30; retuned.world.knobDefaults.coastRamp = .2; writeFileSync(path, JSON.stringify(retuned));
+  try {
+    for (const [name, act] of [['Apply look from Green', `(async()=>{document.getElementById('world-apply').click();await new Promise(r=>setTimeout(r,300));const s=document.getElementById('look-source');s.value='builtin:green';s.dispatchEvent(new Event('change'));for(let i=0;i<50&&document.getElementById('look-apply').disabled;i++)await new Promise(r=>setTimeout(r,100));document.getElementById('look-apply').click();return true;})()`], ['Reset', `(()=>{document.getElementById('world-reset').click();return true;})()`]]) {
+      await reopen(); await ev(act); await sleep(500); await ready();
+      const applied = await image(); const reloaded = await reopen();
+      results[name] = {snapshot: true, saveSame: true, pixelsSame: Buffer.from(applied).equals(Buffer.from(reloaded.pixels)), changed: !Buffer.from(applied).equals(Buffer.from(base.pixels))};
+      if (!results[name].changed) results[name].pixelsSame = false;
+    }
+  } finally { writeFileSync(path, originals.get(path)); }
   const failed = Object.entries(results).filter(([, r]) => r.snapshot && !(r.saveSame && r.pixelsSame)).map(([name]) => name);
   console.log(JSON.stringify({results, failed, errors}));
   if (failed.length || errors.length) process.exitCode = 1;

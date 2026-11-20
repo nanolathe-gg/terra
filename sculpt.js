@@ -3115,6 +3115,7 @@ async function bootMap(pending=null) {
   // A new map opens at Fit, to see all of it; a world switch where the artist was (restorePlace); every other load at 1x, centered on the map.
   if (!restorePlace()) $(experiment.has('newMap')?'fit':'one').click();
   if (forkNote) status(forkNote);   // after the restored selection's own line
+  if (worldsNote) status(worldsNote);
   if (shareError) error(shareError);
   $('new-map').disabled=$('new-map-look').disabled=false;
   if(experiment.has('newMap')){$('map-name').value=experiment.get('mapName')||'Untitled map';$('map-name').dispatchEvent(new Event('input'));saveWorking();}
@@ -3134,7 +3135,7 @@ let releaseMap=null,shareError=null;   // lets go of this tab's hold on its map;
 // other tab has it; else none, and the picker asks. The map is held (a Web Lock) for as long as the page lives.
 async function chooseMap() {
   if (!SAVING) return;
-  try { mapStore=openMapStore(); await importLegacyMaps(mapStore,localStorageOrNull()); const made=await convertStoredWorlds(mapStore,localStorageOrNull()); if (made) mapsNote=`${made===1?'Your saved world is now a map':`Your ${made} saved worlds are now maps`}, named after ${made===1?'it':'them'}, in Your maps. To start from one, open it, then Map › New map with this look.`; }
+  try { mapStore=openMapStore(); await importLegacyMaps(mapStore,localStorageOrNull()); const {made,failed}=await convertStoredWorlds(mapStore,localStorageOrNull()); worldsNote=[made?`${made===1?'Your saved world is now a map':`Your ${made} saved worlds are now maps`}, named after ${made===1?'it':'them'}, in Maps. To start from one, open it, then Map › New map with this look.`:'',failed?`${failed===1?'One saved world':`${failed} saved worlds`} could not be turned into ${failed===1?'a map':'maps'} yet; ${failed===1?'it stays':'they stay'} in this browser and the editor tries again next time.`:''].filter(Boolean).join(' '); if (worldsNote) mapsNote=worldsNote; }
   catch (err) { mapStore=null; mapsNote='Saving in this browser is unavailable ('+err.message+'). Use Save to keep your map as a file.'; }
   shareError=await openSharedLink();
   if (!mapStore) return;
@@ -3155,9 +3156,10 @@ const localStorageOrNull=() => { try { return localStorage; } catch (_) { return
 // an empty 4 x 4 map with its look, named for it (sculpt-save.js storedWorldMap). A world a map brought with it (openedFrom) is that map's own
 // look and is not converted. A map's id follows its world's, so two tabs converting at once write the same entries; the store is removed
 // once every world is in.
+let worldsNote='';   // what converting the world store did (Maps' note and the status line)
 async function convertStoredWorlds(store,storage) {
   let stored=null; try { stored=JSON.parse(storage?.getItem(WORLD_STORE)||'null'); } catch (_) {}
-  if (!stored||typeof stored!=='object'||Array.isArray(stored)) { if (stored!==null) try { storage.removeItem(WORLD_STORE); } catch (_) {} return 0; }
+  if (!stored||typeof stored!=='object'||Array.isArray(stored)) { if (stored!==null) try { storage.removeItem(WORLD_STORE); } catch (_) {} return {made:0,failed:0}; }
   const known=new Set((await store.list()).map(m => m.id)),configs=new Map();let made=0,failed=0;
   for (const [id,w] of Object.entries(stored)) {
     if (!w||typeof w!=='object'||w.openedFrom||typeof w.base!=='string') continue;
@@ -3167,11 +3169,11 @@ async function convertStoredWorlds(store,storage) {
       const cfg=configs.get(w.base),builtIn=id in (cfg.biomes||{});
       if (builtIn&&!worldOverrideCount(w,cfg)) continue;   // a built-in world nobody changed
       const s=storedWorldMap({...w,name:builtIn?`${w.name||cfg.biome} (your settings)`:w.name},cfg,mapGeometry(4,4));
-      await store.put(mapId,s,mapMeta(mapId,s));made++;
+      await store.put(mapId,s,mapMeta(mapId,s,made+1));made++;   // dated at the start of time: a tab reopens the map edited last, not these
     } catch (err) { failed++; console.warn(`The saved world “${w.name||id}” could not be turned into a map:`,err.message); }
   }
   if (!failed) try { storage.removeItem(WORLD_STORE); } catch (_) {}
-  return made;
+  return {made,failed};
 }
 function newMapReady() { $('new-map-open').disabled=!ready; }
 function openNewMap(first=false, dimensionsFromMap=null, look=false) {

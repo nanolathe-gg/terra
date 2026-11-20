@@ -102,9 +102,11 @@ export const resetWorldOverrides=world=>({name:world.name,base:world.base,colors
 // tools: the rock types instantiated from its catalog (with their world provenance, which opening the map turns into the map's own, as it
 // turns its tools into map tools: sculpt-world-kit.js mapOwnedKit). `config`: its base world's served config.
 export function storedWorldMap(world,config,map) {
-  const {featureSet,openedFrom:_,...record}=copySavedWorld({...world,colors:world.colors??{},knobs:world.knobs??{}},config);
+  // The store kept only the world materials the artist changed, without slots and marked with the library material each replaces: they are
+  // read as the store's were (keptWorldMaterials), not as a save's list.
+  const {materials:kept,...rest}=world,{featureSet,openedFrom:_,...record}=copySavedWorld({...rest,colors:world.colors??{},knobs:world.knobs??{}},config);
   const surface=record.surface?withSurfaceMaterials(copySurface(record.surface),config.surface):config.surface;
-  const kit=instantiateWorldKit({...config,surface,worldMaterials:keptWorldMaterials(world.materials,config)},record,{builtIn:false});
+  const kit=instantiateWorldKit({...config,surface,worldMaterials:keptWorldMaterials(kept,config)},record,{builtIn:false});
   const size=Math.max(map.width,map.height)+160;
   return {format:'nanolathe-terrain-sculpt',version:6,encoding:'stroke-graph',nodes:[],map,size,grid:size/2,biome:config.biomeId,world:config.biomeId,
     worldSettings:{...record,materials:worldKept(kit.materials)},rocks:kit.rocks,materials:kit.materials,mapData:{name:String(world.name||config.biome).slice(0,128),...(featureSet?{featureSet}:{})}};

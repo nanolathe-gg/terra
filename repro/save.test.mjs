@@ -84,3 +84,15 @@ test('engine tables travel with the map; a key the world no longer has, or a val
   assert.deepEqual(copyEngineTables({material:{rockSlope:.7,gone:1,wetBand:'x',rockMeanRGB:[4,5,6]},water:{shallowRGB:[1,1,1]},other:{}},base),{material:{rockSlope:.7,rockMeanRGB:[4,5,6]},water:{shallowRGB:[1,1,1]}});
   const live=structuredClone(base);applyEngineTables(live,{material:{rockSlope:.7}});assert.deepEqual(live.material,{rockSlope:.7,wetBand:13,rockMeanRGB:[1,2,3]},'a key the map lacks keeps the data\'s value');
 });
+
+test('a stored world becomes a map: changed materials (no slot, marked with what they replace), rows, colors and surface', async () => {
+  const {storedWorldMap} = await import('../sculpt-save.js');
+  const {copyMaterial} = await import('../sculpt-materials.js');
+  const ground = {replaces: 'green-ground', name: 'Green grass', worldGround: true, ...copyMaterial((await import('../sculpt-materials.js')).worldMaterials({...config, materials: {ground: 'green-ground', water: 'green-water'}}).find(m => m.worldGround)), seed: 77};
+  const cfg = {...config, materials: {ground: 'green-ground', water: 'green-water'}, tools: [], surface: []};
+  const s = storedWorldMap({name: 'Mine', base: 'green', colors: {sun: '#ffaa22'}, knobs: {rainErode: '.6'}, materials: [ground]}, cfg, {unitsX: 1, unitsY: 1, width: 544, height: 640});
+  assert.equal(s.size, 800); assert.equal(s.grid, 400); assert.deepEqual(s.nodes, []);
+  assert.equal(s.mapData.name, 'Mine'); assert.equal(s.worldSettings.knobs.rainErode, '.6'); assert.equal(s.worldSettings.colors.sun, '#ffaa22');
+  assert.equal(s.materials.find(m => m.worldGround).seed, 77, 'the changed ground material is the map\'s');
+  assert.equal(s.worldSettings.materials.find(m => m.worldGround).seed, 77);
+});
