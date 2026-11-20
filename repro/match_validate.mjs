@@ -127,6 +127,7 @@ for (const f of scenes) {
     const r = ranges.get(k), x = Number(v);
     if (r && Number.isFinite(x) && (x < r[0] || x > r[1])) errors.push(`${at} query ${k}=${v} is outside its range ${r[0]} to ${r[1]}.`);
   }
+  if (sc.surface !== undefined) { try { (await import('../sculpt-material-model.js')).copySurface(sc.surface); } catch (err) { errors.push(`${at} surface: ${err.message}`); } }
   (sc.strokes ?? []).forEach(([kind, , opt], i) => {
     const c = opt?.card ?? {}, where = `${at} stroke ${i} (${kind})`;
     for (const k of Object.keys(c)) if (!cardKeys.has(k)) warnings.push(`${where}: card key ${k} is not a stroke field (typo?). See section 5 of the reference.`);

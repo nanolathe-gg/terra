@@ -169,7 +169,7 @@ L.push('### What each window\'s scene sets now', '', 'A scene stroke starts from
 for (const f of readdirSync(join(repo, 'repro', 'scenes')).filter(f => new RegExp(`^${world}-[0-9]\\.json$`).test(f)).sort()) {
   const sc = json(`repro/scenes/${f}`), strokes = sc.strokes ?? [];
   L.push(`- **${f.replace('.json', '')}** (${sc.source?.map ?? 'unknown map'}): query \`${sc.query || ''}\`; ${strokes.length} strokes` +
-    (sc.rocks ? '; its own rock list' : '') + (sc.materials ? '; its own material list' : ''));
+    (sc.rocks ? '; its own rock list' : '') + (sc.materials ? '; its own material list' : '') + (sc.surface ? '; its own surface layers' : ''));
   const kinds = new Map();
   for (const [kind, , opt] of strokes) { const c = opt?.card ?? {}; const g = materials.find(m => m.slot === c.groundPreset && c.groundPreset > 0); const ch = kind === 'paint' ? `, channel ${c.paintChannel ?? (c.groundPreset !== undefined ? 26 : 1)}` : ''; const k = `${kind}${ch}, rock ${c.rockPreset ?? 'unset (-1)'}, ground ${c.groundPreset ?? (kind === 'paint' ? 'unset (0)' : 'unset (-1)')}${g ? ` (\`${g.source ?? g.name}\`)` : ''}`; kinds.set(k, (kinds.get(k) ?? 0) + 1); }
   for (const [k, n] of kinds) L.push(`  - ${n} x ${k}`);
