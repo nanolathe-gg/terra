@@ -908,7 +908,7 @@
   "rockSlope": 0.96,
   "rockFeather": 0.48,
   "rockCurvature": 0.28,
-  "wetBand": 4,
+  "wetBand": 13,
   "shallowDepth": 2,
   "deepDepth": 42,
   "grassDetail": 1.0,
@@ -1079,7 +1079,8 @@
         "shineRockScale": 3,
         "sunTilt": 0,
         "bedCracks": 0.55,
-        "bedCrackSize": 42
+        "bedCrackSize": 42,
+        "wetBand": 4
       },
       "engineDefaults": {
         "erosion": 1,
