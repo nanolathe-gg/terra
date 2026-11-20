@@ -75,7 +75,7 @@
    {"id":"step-7","type":"combine","kind":"multiply","name":"Multiply grain","params":{"amount":1,"offset":0},"in":{"a":"step-5","b":"step-6","mask":null},"x":944,"y":0},
    {"id":"lump-n","type":"noise","kind":"billow","name":"Lumps","params":{"size":14,"detail":0.3,"layers":0,"seed":5},"in":{"in":null},"x":236,"y":225},
    {"id":"lump-l","type":"light","name":"Lit lumps","params":{"direction":135,"strength":3},"in":{"in":"lump-n"},"x":472,"y":225},
-   {"id":"lump-g","type":"gradient","name":"Lump shade","params":{"ease":0},"in":{"in":"lump-l"},"stops":[[0,0.6,0.6,0.6],[0.5,1,1,1],[1,1.4,1.4,1.4]],"x":708,"y":225},
+   {"id":"lump-g","type":"gradient","name":"Lump shade","params":{"ease":0},"in":{"in":"lump-l"},"stops":[[0,0.5,0.5,0.5],[0.5,1,1,1],[1,1.5,1.5,1.5]],"x":708,"y":225},
    {"id":"lump-c","type":"combine","kind":"multiply","name":"Shade lumps","params":{"amount":1,"offset":0},"in":{"a":"step-7","b":"lump-g","mask":null},"x":944,"y":225},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"lump-c","height":null,"shine":null},"x":1180,"y":0}
   ],
