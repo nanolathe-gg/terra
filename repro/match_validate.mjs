@@ -127,7 +127,7 @@ const UNDULATION = new Set(['undulation', 'undulationScale', 'undulationCover', 
 const MAP_HEIGHTS = new Set(['sea', 'plain']);
 // A map's own water: its depths, bed and damp band (red-2's river stays light to depth 24 where red-3's sea darkens from depth 8). A map
 // holds its world's settings whole (owner, 2026-11-19); this short list is what a map maker sets per map, so the rest stays one world answer.
-const MAP_WATER = new Set(['shallowDepth', 'deepDepth', 'bedTint', 'bedBright', 'bedContrast', 'bedCracks', 'wetBand']);
+const MAP_WATER = new Set(['shallowDepth', 'deepDepth', 'bedTint', 'bedBright', 'bedContrast', 'bedCracks', 'bedRelief', 'bedFlat', 'wetBand']);
 const [{SHAPE_FIELDS, LANDFORM_KEYS, SECTION_KEYS}, {worldSlots, materialUse}] = await Promise.all([import('../sculpt-scene.js'), import('./match_world.mjs')]);
 const {config, rocks, materials, missed} = await worldSlots(world, configs);
 if (missed.length) warnings.push(`world.rock: no room in the map's materials for the rock material of ${missed.join(', ')}; ${missed.length > 1 ? 'they show' : 'it shows'} the world's rock material (REFERENCE.md, "Rock slots")`);
