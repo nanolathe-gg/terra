@@ -1878,6 +1878,7 @@ export function feedUniform(device, f) {
   fl.forEach((k, i) => dv.setFloat32((10 + i) * 4, f[k] ?? 0, true));
   dv.setUint32(13 * 4, f.tilesWide ?? 0, true);
   dv.setUint32(14 * 4, f.maskStride ?? 7, true);
+  dv.setUint32(15 * 4, f.shownHeights ?? 0, true);   // engine-feed.wgsl FU.shownHeights
   const r=f.invalidRect;[r?.x0??1,r?.y0??1,r?.x1??0,r?.y1??0].forEach((v,i)=>dv.setInt32(64+i*4,v,true));
   device.queue.writeBuffer(buffer, 0, dv.buffer);
   return buffer;
