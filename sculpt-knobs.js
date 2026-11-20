@@ -75,7 +75,7 @@ export const KNOBS = [
   ['Water detail', [['stepSoftPx','Threshold edge softness (px)',1,40,1,1],['shelfWander','Shelf wander (depth units)',0,40,1,0],['bedFlat','Bed lit by its own relief only',0,1,.05,0],['shoalRag','Shallow-to-deep notches (px)',0,16,.5,0],['shoalShoreSoft','Waterline blur (px)',0,12,.5,0]]],
   // Card E10: crust on hills and creases at terrace feet.
   ['Pillow crust', [['lavaCrust','Pillow crust strength',0,1,.05,0],['lavaPillow','Pillow size (px)',16,80,1,34],['lavaChip','Chip size (px)',3,12,.5,5.5],['lavaVeins','Veins hanging down the slope',0,1,.05,0],['lavaCalm','Replace fine relief with crust',0,1,.05,.6],['lavaDusk','Shade away from light',0,2,.05,0]]],
-  ['Terrace creases', [['layerCrease','Dark crease at each step foot, any facing',0,1,.05,0],['shineSlopeGate','Shine only on slopes above (0: everywhere)',0,1.5,.05,0]]],
+  ['Terrace creases', [['layerCrease','Dark crease at each bank step foot (sea to plain), any facing',0,1,.05,0],['stepCrease','Dark crease at each step foot on raised ground, any facing',0,1,.05,0],['shineSlopeGate','Shine only on slopes above (0: everywhere)',0,1.5,.05,0]]],
   // Card E6: where roughness shows, and the body dimmed between glints.
   ['Shine: gate and headroom', [['shineGate','Roughness only on raised ground and slopes',0,1,.05,0],['shineHeadroom','Dim the body between glints (near-white surface)',0,1,.05,0]]],
   ['Surface pits', [['pockmark','Dark pits on raised ground and slopes',0,1,.05,0],['pockSize','Pit spacing (px)',3,12,.5,5]]],

@@ -120,6 +120,7 @@ struct Rock {
     crackBlocks: f32,     // how far blocks step and tilt against each other
     crackMajor: f32,      // share of major cracks
     pockmark: f32,        // dark pits scattered evenly over raised ground and slopes, tops and sides alike (0: none, as before)
+    stepCrease: f32,      // dark crease at the foot of each step on raised ground (a stroke's terraces, a face's ledges), whatever its facing (0: none)
     pockSize: f32,        // pit spacing across the retail glint axis, px
     moonCups: f32,        // lit pits, 2-3 px wide and 4-6 px tall, many on shaded steep faces and few on lit ground (0: none; the pockmark dots are separate)
     moonRibs: f32,        // stringy light and dark strokes down steep faces, shaded by the sun (0: none)

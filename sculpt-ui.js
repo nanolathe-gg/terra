@@ -183,7 +183,7 @@ export const WORLD_HOMES={
  'Rock types/Weathering':'faceCrease faceCreaseSize faceScratchSize faceScratchLength faceScratchAngle faceClast faceClastSize faceDetailPatch runoffScale runoffConcentration runoffCut runoffStain',
  'Rock types/Surface & crust':'shineRock shineRockSharp shineRockRough shineRockScale faceShade faceTone faceFresh faceRind faceRindDepth faceRindTone faceRindWarmth faceRindRough faceMineral faceStrata faceWet',
  'Rock types/Stones & debris':'looseSize stoneSort stoneRound stoneSlab debrisAmount debrisReach debrisDepth',
- 'Rock types/Cracks & bands':'crackSpacing crackMajor crackMinor crackHairline crackBlocks crackWidth crackNetwork crackDark banding',
+ 'Rock types/Cracks & bands':'crackSpacing crackMajor crackMinor crackHairline crackBlocks crackWidth crackNetwork crackDark banding stepCrease',
  'Rock types/Special surfaces':'pockmark pockSize moonCups moonCupSize moonCupDepth cupStretch moonRibs moonRibDepth moonRibDark moonFolds moonFoldSpacing iceCrystal iceCrest iceSnow iceFall iceApron gougeWeb',
  'Cliffs & stones/Where rock shows':'rimReach shoreRock shoreShelf',
  'Cliffs & stones/Loose stones':'looseSupply boulders',

@@ -232,6 +232,7 @@
     "layerCircle": 26,
     "layerJag": 0,
     "layerCrease": 0,
+    "stepCrease": 0,
     "shineSlopeGate": 0,
     "lavaSpread": 0,
     "lavaCircleVary": 0,

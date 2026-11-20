@@ -183,6 +183,6 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedTint','bedBright','bedContrast','bedRelief','bedCracks','shoreEdge',
  'baseBand','desertCapFlat',
  'shelfWander','bedFlat',
- 'lavaCrust','lavaPillow','lavaVeins','layerCrease','pockmark',
+ 'lavaCrust','lavaPillow','lavaVeins','layerCrease','stepCrease','pockmark',
  'moonCups','moonRibs','moonFolds','iceCrystal','gougeWeb','iceCrest','iceSoft','iceSnow','iceFall','iceApron','iceFrost','frostGaps'
 ]);

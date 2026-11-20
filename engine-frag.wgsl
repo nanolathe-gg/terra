@@ -943,11 +943,22 @@ fn layerCreaseTerm(p: vec2f) -> f32 {
     let h = baseHeight(p);
     let bank = smoothstep(u.sea + 0.5, u.sea + 2.0, h) * (1.0 - smoothstep(u.base - 1.5, u.base - 0.3, h));
     if (bank <= 0.0) { return 0.0; }
+    return bank * smoothstep(0.1, 0.5, creaseAround(p) - h) * creaseDash(p);
+}
+// How far the four neighbours 2.5 px round a point stand above the base height there: the foot of a riser has higher ground on one side.
+fn creaseAround(p: vec2f) -> f32 {
     const r = 2.5;
-    let around = 0.25 * (baseHeight(p + vec2f(r, 0.0)) + baseHeight(p - vec2f(r, 0.0)) + baseHeight(p + vec2f(0.0, r)) + baseHeight(p - vec2f(0.0, r)));
-    // G5: retail's step lines fade and break along their length; a noise of ~14 px takes whole stretches out and weakens others.
-    let dash = 1.0 - LAVA_CREASE_VARY * (1.0 - smoothstep(0.36, 0.62, terrainNoise(p * 0.07 + vec2f(19.0, 43.0)).b));
-    return bank * smoothstep(0.1, 0.5, around - h) * dash;
+    return 0.25 * (baseHeight(p + vec2f(r, 0.0)) + baseHeight(p - vec2f(r, 0.0)) + baseHeight(p + vec2f(0.0, r)) + baseHeight(p - vec2f(0.0, r)));
+}
+// G5: retail's step lines fade and break along their length; a noise of ~14 px takes whole stretches out and weakens others.
+fn creaseDash(p: vec2f) -> f32 { return 1.0 - LAVA_CREASE_VARY * (1.0 - smoothstep(0.36, 0.62, terrainNoise(p * 0.07 + vec2f(19.0, 43.0)).b)); }
+// The same crease on raised ground (above the banks): the step feet of a stroke's terraces and a face's ledges, for the rock types that
+// draw them (Green's terraced ridges: a dark line at each riser's foot, whichever way it faces). The banks keep layerCreaseTerm.
+fn stepCreaseTerm(p: vec2f) -> f32 {
+    let h = baseHeight(p);
+    let raised = smoothstep(u.base - 1.5, u.base - 0.3, h);
+    if (raised <= 0.0) { return 0.0; }
+    return raised * smoothstep(0.1, 0.5, creaseAround(p) - h) * creaseDash(p);
 }
 // E10 (Lava): shine only on slopes, so the plain stays matte while the banks and hills glint (the shine model
 // weighs Lava's ground-coloured faces as ground, which is level ground's weight too). Full strength on a slope of
@@ -2125,6 +2136,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         color = surfaceSRGB(surfaceLinear(color)*shine.w+shine.xyz);
     }
     if (u.layerCrease > 0.0) { color *= 1.0 - u.layerCrease * layerCreaseTerm(p); }
+    if (u.rock[rs & rockMask].stepCrease > 0.0) { color *= 1.0 - u.rock[rs & rockMask].stepCrease * stepCreaseTerm(p); }
     if (u.rock[rs & rockMask].pockmark > 0.0 && h > u.sea + 1.0 && landform > 0.0) {
         let pits = pockPits(pixel, u.rock[rs & rockMask].pockSize, u.rock[rs & rockMask].pockmark * mix(0.6, 1.0, turned));
         color *= 1.0 - pits * landform * mix(0.5, 0.92, turned);
