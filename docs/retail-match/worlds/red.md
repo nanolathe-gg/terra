@@ -129,7 +129,12 @@ Leads:
    (trial-099/100). The stroke `cracks` field is live but gated by world
    crackSeverity 0.
 
-9. **The knob's ribs** (held, above): try a finer, fainter texture that
+9. **Relief on red-1's faces:** Relief weaker paint (channel 9) at 100 over
+   the crescent, mesa and basin rims clears steep:edges (5.2x to under 2x)
+   but raises red-1's look .10 to .13 (reviewer's diagnostic, 2026-11-20); at
+   50, steep edges 2x and the same look. So the edge count is not what holds
+   the look; the lit side (108 against 88) and the 32 px patches are.
+10. **The knob's ribs** (held, above): try a finer, fainter texture that
    does not run one screen direction, or faceScratch (grooves follow the
    face), and keep the knob's lit top plain.
 

@@ -120,8 +120,13 @@ Leads:
 
 1. **Green-6's faces:** try round 14's green-4 idea (green-6's ridges lean
    300: an even front section), and `spurCount` for its lobed foot.
-   faceScratch at its maximum gives only faint 1-2 px grooves (proposal:
-   deeper, rounded grooves).
+   faceScratch at its maximum gives only faint 1-2 px grooves. Deeper,
+   rounder grooves were tried and dropped at review: a throwaway edit (4x
+   deeper, broad profile) only changed the face's mottle
+   (`$R/match/terraform-wt-match-green-15/green/eye/groove-deep.png`:
+   retail, faceScratch 6, deep grooves). Retail's ribs are buttresses tens of
+   px wide with deep shadow between them: a shape (spurs, gullies), not
+   face marks.
 2. **Green-4:** the pale ledge streaks are lit ledge tops, not material
    grain (055); the valley-floor lumps from the lean.
 3. **Green-1's shelf lumps:** a map may now set `bedRelief` and `bedFlat`
