@@ -26,8 +26,9 @@ the damp band, cracks and crack walls, boulders, chips, the rock skin, crystals,
 They change how a surface looks where it is; they do not choose a material.
 
 The stack is a **world setting**, like the world's ground and water: each world ships one in
-`materials/<world>.json` (`world.surface`), a world of your own carries its own, and every map in a world
-draws it. Maps do not override it (a map's own materials stay strokes and rock types).
+`materials/<world>.json` (`world.surface`), a new map starts from it, and the map saves its own whole
+(owner, 2026-11-19: everything lives with the map), so a revision of the built-in stack never changes a map
+already made.
 
 ## What the prototype showed (Node, Green)
 
@@ -125,8 +126,8 @@ Each phase lands on its own. Rule 7: a phase becomes every world's behavior or d
    snow above a height, moss in damp shade, scree on steep ground, dry ground on sunny slopes, mud in wet hollows, or a
    blank material layer. Pointing at or focusing a row previews where that layer lies, in magenta over the dimmed map
    (diagnostic view 13). Restore returns to the world's own surface.
-   - The list is a world setting, kept in this browser's world store as the sliders are. Undo, a save's embedded world
-     (only when edited), New world and world files carry it.
+   - The list is a world setting saved with the map (owner, 2026-11-19; it was kept in this browser's world store until
+     then). Undo and a save's embedded world carry it.
    - Branch `surface-layers-2`:
      - Rows are one line (chip, name, what differs from the default, raise and lower) that opens to the settings, under a heading
        per stage, so where a layer may move reads from the list.
@@ -203,8 +204,8 @@ The owner's decisions of 2026-11-16, after testing round 2:
 1. One way: everything is a material, no simple colors; a material has a Color an artist sets in one go, or each step.
 2. The cover classes become possible with materials: an artist may, say, grow flowers around wet ground.
 3. Per-world edges wait for the next full biome tuning round.
-4. Layer and role materials stay with the world.
-5. The surface list is a world setting (confirmed).
+4. Layer and role materials stay with the world. (Superseded 2026-11-19: they are the map's, saved with it.)
+5. The surface list is a world setting (confirmed). (Since 2026-11-19 every world setting is saved with the map.)
 6. Scope of "no simple colors" (asked): the surfaces and the role tints (Colors › Slope cover, Sand, Beach; Rock and Crystal
    too); low ground, strata, vegetation, flowers and shallow water later, one at a time; Sun and Sky stay. If slots run out, the
    material cache may grow to 24 slots.
@@ -222,11 +223,12 @@ Built (each a commit; the measurements are in their messages):
   pixel (row, coverage, in order), its color, its ground, its rock type and how much rock shows, and the facts; the panel lists them
   top first with their materials and what of each shows. The Pick card itself names the shape, rock type and materials there.
 - **Naming**: each row shows its material; the material editor names the layers a copy draws.
-- **World-kept materials**: the world keeps every role material and layer material it changed, as its ground and water.
+- **Map-kept materials**: the map keeps every role material and layer material with its world settings, as its ground and water
+  (owner, 2026-11-19: the map holds everything; docs/MAP_SCOPE_PROPOSAL.md).
 - **A material's Color** (`recolorMaterial`): moves every color step (the gradients and color constants the color is made of,
   not a Multiply's or Add's layer) by one amount, and its palette with it. In the editor's Controls, the World ground and water
   panes and each Surface row.
-- **Shared copies**: a layer binds the world's copy of its library material (its `worldLayer` is the library key), so the three
+- **Shared copies**: a layer binds the map's copy of its library material (its `worldLayer` is the library key), so the three
   snows draw one snow.
 - **Engine surfaces draw materials**: soil, the base band, both mosses, painted snow, sand dust, sand and the ice snows draw the
   world's `@soil`, `@band`, `@moss`, `@snow`, `@sand` (world.materials), library entries that are another graph with the world's

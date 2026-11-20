@@ -1,18 +1,67 @@
-import {worldKit,storedWorldKit,instantiateWorldKit,kitWithin,sameKitData} from './sculpt-world-kit.js';
-import {withWorldMaterials,worldOwnMaterials,worldKept,worldOwnFor,keptWorldMaterials} from './sculpt-materials.js';
-// The map carries its effective world settings, including defaults, URL overrides and the world's ground and water materials.
-// Keep browser/session parameters out of the recipe; removed controls are dropped on load.
+import {worldKit,storedWorldKit,instantiateWorldKit,sameKitData} from './sculpt-world-kit.js';
+import {withWorldMaterials,worldOwnMaterials,worldKept,keptWorldMaterials,LIBRARY,MAP_ROLES} from './sculpt-materials.js';
+// The map carries its effective world settings whole: every row's value (defaults and URL overrides included), its colors, its world
+// materials and its surface layers. Keep browser/session parameters out of the recipe; removed controls are dropped on load.
 import {KNOBS} from './sculpt-knobs.js';
 import {worldHexColors,isTone} from './sculpt-scene.js';
 import {normalizeSet} from './sculpt-feature-set.js';
-import {copySurface} from './sculpt-material-model.js';
+import {copySurface,withSurfaceMaterials} from './sculpt-material-model.js';
 
-export const worldKeys=config => new Set([...Object.keys(config.defaults||{}),...Object.keys(config.engineDefaults||{}),...KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)),'beachFrom','sandEdge','view','fill','relief','palette','sun']);
+// The tables of a world's data the renderer reads as they are (not rows): its material constants, water colors and placement thresholds.
+// The map keeps them with its world settings, so retuning a built-in world's table never changes a saved map either. Only a key the
+// world's data still has, holding a value of the same kind, is applied (a removed constant is dropped, AGENTS.md rule 7). The filter runs
+// when the tables are applied, after a borrowed beach has put its numbers in (sculpt-scene.js borrowBeach), so a lent beach's numbers are kept too.
+export const ENGINE_TABLES=['material','water','placement'];
+const plain=v => v&&typeof v==='object'&&!Array.isArray(v);
+const sameKind=(a,b) => typeof a===typeof b&&Array.isArray(a)===Array.isArray(b)&&(a===null)===(b===null);
+export const engineTables=config => Object.fromEntries(ENGINE_TABLES.filter(k => plain(config[k])).map(k => [k,structuredClone(config[k])]));
+export function copyEngineTables(value) {
+  if (!plain(value)) return null;
+  const out={};
+  for (const k of ENGINE_TABLES) if (plain(value[k])) out[k]=Object.fromEntries(Object.entries(value[k]).filter(([,v]) => v!==undefined&&JSON.stringify(v).length<=4096).map(([key,v]) => [key,structuredClone(v)]));
+  return out;
+}
+// A map's engine tables over the served ones, key by key and one level into a nested block (placement.rock): a key the data gained since the
+// map was saved keeps the data's value, and one it lost, or one of another kind, is dropped.
+const mergeKnown=(into,from,depth=0) => { const out={...into}; for (const [k,v] of Object.entries(from)) { if (!Object.hasOwn(into,k)||!sameKind(v,into[k])) continue; out[k]=depth<1&&plain(v)&&plain(into[k])?mergeKnown(into[k],v,depth+1):structuredClone(v); } return out; };
+export function applyEngineTables(config,engine) { for (const k of ENGINE_TABLES) if (plain(config[k])&&plain(engine?.[k])) config[k]=mergeKnown(config[k],engine[k]); return config; }
+// The world's role map (world.materials: the library material each surface role starts from, and the extra ones its tools lay) and the
+// optional stages it gives (a beach, the mineral margins' fringe and body; internal/site/config.go). The map keeps it, so a role a built-in
+// world gains or drops later reaches no saved map. A borrowed beach (config.beachBorrowed) is the lender's, chosen by beachFrom: not kept.
+const ROLE_STAGES=['beach','fringe','body'];
+export function worldRoles(config) { const {beach:_,...rest}=config.materials||{}; return structuredClone(config.beachBorrowed?rest:config.materials||{}); }
+export function copyRoles(value) {
+  if (!plain(value)) return null;
+  const out={};
+  for (const [k,v] of Object.entries(value)) if (k==='extra') { if (Array.isArray(v)) out.extra=v.filter(x => typeof x==='string'&&LIBRARY[x]); } else if (typeof v==='string'&&LIBRARY[v]) out[k]=v;
+  return out;
+}
+export function applyRoles(config,roles) { if (!plain(roles)) return config; config.materials=structuredClone(roles); config.layers=['slopeGrass','rock',...ROLE_STAGES.filter(k => roles[k])]; return config; }
+// Apply look's seven cards (owner, 2026-11-19): what of another world or map a map can take. A World row belongs to the card of the World
+// section it sits in (sculpt-ui.js WORLD_HOMES, passed as `home`); a setting that is no row (a shape tool's default) belongs to Tools.
+export const LOOK_CARDS=[['ground','Ground'],['water','Water'],['rocks','Rock types'],['surface','Surface layers'],['light','Light & weather'],['tools','Tools'],['features','Features']];
+const HOME_CARDS=[[/^(World\/Ground|Ground\/)/,'ground'],[/^(World\/Water|Water & shores\/)/,'water'],[/^(Rock types|Cliffs & stones)\//,'rocks'],[/^(Surface|Vegetation|Sand)\//,'surface'],[/^(World\/Light & weather|Light & shine\/|Rain & erosion\/)/,'light']];
+const KEY_CARDS={beachFrom:'water',sandEdge:'surface',erosion:'light',erosionAge:'light',talusAngle:'light',shallowTone:'water',sun:'light',sky:'light',absorb:'rocks'};
+const NOT_LOOK=new Set(['palette','fill','relief']);   // view switches and diagnostics, not a look
+export function lookCard(key,home,{row=true}={}) {
+  if (KEY_CARDS[key]) return KEY_CARDS[key];
+  if (NOT_LOOK.has(key)) return null;
+  return row?HOME_CARDS.find(([re]) => re.test(home||''))?.[1]??null:'tools';
+}
+// The card a world material belongs to, by its world key (sculpt-materials.js worldKey): a role's surface, or a surface layer's.
+const ROLE_CARDS={worldGround:'ground',worldSlope:'ground',worldWater:'water',worldBeach:'water',worldRock:'rocks',worldDebris:'rocks',worldCrystal:'rocks',worldHigh:'surface',worldFringe:'surface',worldBody:'surface'};
+export const roleCard=key => ROLE_CARDS[key]??(typeof key==='string'&&key.startsWith('layer:')?'surface':null);
+// The card of a role in the world's role map (worldRoles) by its name there: a surface role's, the extra materials its tools lay (Tools), and
+// the materials only surface layers draw (soil, snow, moss: Surface layers).
+const ROLE_NAME_KEYS={ground:'worldGround',water:'worldWater',...Object.fromEntries(MAP_ROLES.map(([key,name]) => [name,key]))};
+export const roleNameCard=name => name==='extra'?'tools':ROLE_CARDS[ROLE_NAME_KEYS[name]]??'surface';
+export const worldKeys=config => new Set([...Object.keys(config.defaults||{}),...Object.keys(config.engineDefaults||{}),...KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)),'beachFrom','sandEdge','fill','relief','palette','sun']);
 export function savedWorld(config,settings,world) {
   const knobs={};
   for(const key of worldKeys(config)){const value=settings.get(key)??world.knobs?.[key]??config.defaults?.[key]??config.engineDefaults?.[key];if(value!==undefined&&value!==null)knobs[key]=String(value);}
-  // The world's surface layers where the artist changed them (docs/SURFACE_LAYERS.md); a world that kept its own carries none.
-  return {...storedWorldKit(config,world),materials:worldKept(withWorldMaterials(world.materials,config)),name:world.name||config.biome,base:config.biomeId,colors:worldHexColors(config,settings,world.colors||{}),knobs,...(world.surface?{surface:copySurface(world.surface)}:{})};
+  // The map saves its world whole (owner, 2026-11-19), its surface layers included, so retuning the built-in world never changes it.
+  const surface=world.surface??config.surface;
+  return {...storedWorldKit(config,world),materials:worldKept(withWorldMaterials(world.materials,config)),name:world.name||config.biome,base:config.biomeId,colors:worldHexColors(config,settings,world.colors||{}),knobs,...(surface?{surface:copySurface(surface)}:{}),engine:engineTables(config),roles:worldRoles(config)};
 }
 // A number written as text or a number: "abc", "NaN", "1e999" and "" are not.
 const finiteText=v => String(v).trim()!=='' && Number.isFinite(Number(v));
@@ -38,36 +87,14 @@ export function copySavedWorld(value,config) {
     colors[key]=key==='shallowTone'&&v?[...v]:v;
   }
   const surface=value.surface===undefined?null:copySurface(value.surface);
-  const result={...storedWorldKit(config,value),materials:worldKept(withWorldMaterials(value.materials,config)),name:value.name.slice(0,120),base:value.base,colors,knobs,...(value.featureSet?{featureSet:normalizeSet(value.featureSet,config)}:{}),...(surface?{surface}:{})};
-  if(value.tools!==undefined||value.rocks!==undefined)instantiateWorldKit({...config,surface:surface??config.surface,worldMaterials:keptWorldMaterials(result.materials,config)},result);
+  const engine=copyEngineTables(value.engine),roles=copyRoles(value.roles),cfg=roles?applyRoles({...config},roles):config;   // the map's roles decide its world materials
+  const result={...storedWorldKit(cfg,value),materials:worldKept(withWorldMaterials(value.materials,cfg)),name:value.name.slice(0,120),base:value.base,colors,knobs,...(value.featureSet?{featureSet:normalizeSet(value.featureSet,config)}:{}),...(surface?{surface}:{}),...(engine?{engine}:{}),...(roles?{roles}:{})};
+  if(value.tools!==undefined||value.rocks!==undefined)instantiateWorldKit({...cfg,surface:surface??config.surface,worldMaterials:keptWorldMaterials(result.materials,cfg)},result);
   return result;
 }
-export function savedWorldId(s) {
-  return typeof s.world==='string'&&/^[a-z0-9-]{1,80}$/.test(s.world)&&!['constructor','prototype'].includes(s.world)?s.world:s.biome;
-}
 
-// Whether a save's world (copySavedWorld's) draws as this browser's stored world of the same id (`mine`, the store's entry, or {} for a
-// built-in never changed here): every World row, color, surface layer and kept material. Opening a map whose world differs keeps both
-// (sculpt.js: the map's world opens as a world of its own), so a false "differs" only adds a world; it never loses one.
-export function sameSavedWorld(theirs,mine,config) {
-  const defaults=Object.fromEntries(KNOBS.flatMap(([,rows])=>rows.map(([key,,,,,value])=>[key,value])));
-  const base=key=>config.defaults?.[key]??config.engineDefaults?.[key]??defaults[key];
-  const keys=worldKeys(config);   // every key a save's world carries, a borrowed beach and the palette included
-  for(const key of keys){
-    const a=theirs.knobs?.[key]??base(key),b=mine.knobs?.[key]??base(key);
-    if(a===undefined||b===undefined){if(a!==b)return false;continue;}
-    const na=Number(a),nb=Number(b);
-    if(Number.isFinite(na)&&Number.isFinite(nb)?na!==nb:String(a)!==String(b))return false;
-  }
-  const colors=own=>JSON.stringify(Object.entries(worldHexColors(config,new Map(),own||{})).map(([k,v])=>[k,typeof v==='string'?v.toLowerCase():v]).sort(([a],[b])=>a<b?-1:1));
-  if(colors(theirs.colors)!==colors(mine.colors))return false;
-  if(JSON.stringify(theirs.surface??null)!==JSON.stringify(mine.surface??null))return false;
-  if(!kitWithin(worldKit(config,theirs),worldKit(config,mine)))return false;   // tools and rock types added to yours since do not fork
-  const a=worldOwnFor(theirs.materials,config),b=worldOwnFor(mine.materials,config,{stored:true});
-  return JSON.stringify(Object.entries(a).sort())===JSON.stringify(Object.entries(b).sort());
-}
 
-// Count the overrides the existing world store already holds, compared with its built-in data.
+// Count how a map's world settings differ from its built-in world's data today (World › the change count).
 // Copied defaults in an imported world are not changes; one material/list is one stored override.
 export function worldOverrideCount(world,config) {
   const equal=sameKitData;
@@ -87,4 +114,18 @@ export function worldOverrideCount(world,config) {
   n+=changed(kit.tools,baseKit.tools,'id')+changed(kit.rocks,baseKit.rocks,'key');
   return n;
 }
-export const resetWorldOverrides=world=>({name:world.name,base:world.base,colors:{},knobs:{},...(world.openedFrom?{openedFrom:world.openedFrom}:{})});
+
+// A world of the world store earlier builds kept in the browser, as an empty map of `map` (mapGeometry) that holds its look (owner,
+// 2026-11-19: stored worlds are converted once into maps). Its rows, colors, materials, surface layers, feature styles, rock types and
+// tools: the rock types instantiated from its catalog (with their world provenance, which opening the map turns into the map's own, as it
+// turns its tools into map tools: sculpt-world-kit.js mapOwnedKit). `config`: its base world's served config.
+export function storedWorldMap(world,config,map) {
+  // The store kept only the world materials the artist changed, without slots and marked with the library material each replaces: they are
+  // read as the store's were (keptWorldMaterials), not as a save's list.
+  const {materials:kept,...rest}=world,{featureSet,openedFrom:_,...record}=copySavedWorld({...rest,colors:world.colors??{},knobs:world.knobs??{}},config);
+  const surface=record.surface?withSurfaceMaterials(copySurface(record.surface),config.surface):config.surface;
+  const kit=instantiateWorldKit({...config,surface,worldMaterials:keptWorldMaterials(kept,config)},record,{builtIn:false});
+  const size=Math.max(map.width,map.height)+160;
+  return {format:'nanolathe-terrain-sculpt',version:6,encoding:'stroke-graph',nodes:[],map,size,grid:size/2,biome:config.biomeId,world:config.biomeId,
+    worldSettings:savedWorld({...config,surface},new Map(),{...record,materials:kit.materials}),rocks:kit.rocks,materials:kit.materials,mapData:{name:String(world.name||config.biome).slice(0,128),...(featureSet?{featureSet}:{})}};
+}

@@ -529,7 +529,7 @@ export class TerrainRenderer {
   // The draw's uniform table: only the six placement rows are read, at PLACEMENT_ROW. A table with a `placement` block gives them
   // (Green's); every other table leaves them to the world's material, as the world's placement always was.
   placementTable(variant) {
-    const rows = this.materialData?.placement ? tablePlacementRows(this.materialData) : this.placementRows(variant);
+    const rows = this.config.placement ? tablePlacementRows(this.config) : this.placementRows(variant);   // the map's copy (sculpt-save.js ENGINE_TABLES)
     // The world's surface layers in the rows before the placement rows (engine-frag.wgsl surfaceStage): two a layer from row 0, the stages' heads at SURFACE_HEAD_ROW.
     // A material layer draws the map's material that carries its id (worldLayer).
     const slotOf = id => [...(this.grounds || new Map())].find(([, m]) => m.worldLayer === id)?.[0] ?? -1;

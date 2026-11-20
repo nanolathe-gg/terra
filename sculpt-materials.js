@@ -643,9 +643,9 @@ export function withWorldMaterials(value, config, {carried = false} = {}) {
   // lists as text (sculpt.js setSurfaceList) would see a change where there is none.
   return copyMaterials(list);
 }
-// The world's ground and its water are world settings, like its sliders: every map drawn in the world shows the same two, and a map's
-// other materials are its own. A map's list (a save's, or none for a new map) takes the world's two here, each in the slot the map
-// already gave that role. `config.worldMaterials` holds the ones the artist changed (keptWorldMaterials); the rest are the library's.
+// The world's ground and its water, like its sliders, are the map's world settings (kept with the map since 2026-11-19); its other
+// materials are its own too. A map's list (a save's, or none for a new map) takes the world's two here, each in the slot the map already
+// gave that role. `config.worldMaterials` holds the map's saved ones (keptWorldMaterials); the rest are the library's.
 export function adoptWorldMaterials(value, config, {carried = false} = {}) {
   let list = withWorldMaterials(value, config, {carried});
   for (const [role, which] of ROLES) {
@@ -706,17 +706,6 @@ export function keptWorldMaterials(stored, config) {
     try { kept.push({replaces, name: nameOf(m.name), ...keyFields(key), ...copyMaterial(m)}); seen.add(key); } catch (_) {}
   }
   return kept;
-}
-// The store after an edit: this look's own, beside what the world keeps for the library materials its other looks name.
-export function mergeWorldMaterials(stored, own, config) {
-  const mine = m => { const key = worldKey(m); return key && m.replaces === worldLibraryKey(config, key); };
-  return [...(Array.isArray(stored) ? stored : []).filter(m => object(m) && 'replaces' in m && !mine(m)), ...own];
-}
-// The world's own materials by world key, to compare two worlds: a map's list (its world-keyed materials that differ from the
-// library's) or, with `stored`, this browser's store (the entries kept for this world's looks).
-export function worldOwnFor(list, config, {stored = false} = {}) {
-  const own = stored ? (Array.isArray(list) ? list : []).filter(m => object(m) && worldKey(m) && m.replaces === worldLibraryKey(config, worldKey(m))) : worldOwnMaterials(list, config);
-  return Object.fromEntries(own.map(m => [worldKey(m), JSON.stringify({name: m.name, ...copyMaterial(m)})]));
 }
 // The materials a map hands its world (a save's world settings, a world file): every one with a world key.
 export const worldKept = list => (list ?? []).filter(m => worldKey(m));

@@ -48,7 +48,9 @@ page and an older card disagree, this page wins.
 7. **One engine.** Every world runs the same GPU pipeline: shape, ground,
    time, surface and light. A world is data: its numbers in
    `materials/<world>.json`, its presets, and its ground and water
-   materials (`materials/textures.json`).
+   materials (`materials/textures.json`). A built-in world is where a new
+   map starts; the map then holds its world's settings whole, so retuning a
+   built-in world never changes a saved map (owner, 2026-11-19).
    - Code branches on a feature or on material data, never on a world's
      name (`repro/gate.sh` checks this).
    - There is one render path. Don't keep a CPU copy of GPU work, add a
@@ -79,9 +81,12 @@ page and an older card disagree, this page wins.
 9. **A control for everything an artist would shape, and each one earns its place.**
    - Artists set a world's look by hand (shape, structure, layering,
      variation, roughness, broad and fine detail, weathering, color,
-     vegetation, wetness, shine), and their settings become the world's
-     defaults. Reuse or extend an existing control before adding one; a new
-     control does not duplicate one that sits beside it.
+     vegetation, wetness, shine), and their settings are saved with the
+     map: a map is its own world, and any map's look can start a new map or
+     be applied to another (owner, 2026-11-19; nothing about a world is kept
+     in the browser apart from a map). Reuse or extend an existing control
+     before adding one; a new control does not duplicate one that sits
+     beside it.
    - Every control is continuous: its low end is a value of the same model,
      not a switch. Moving it to 0, or a small step above 0, changes the
      picture a little, never into a different render path.
@@ -225,6 +230,9 @@ Use additional standalone checks only for the work they protect:
 - Section editor, features, passability or workspace: the corresponding
   `repro/curveedit.mjs`, `features.mjs`, `passability.mjs` or `workspace.mjs`,
   with your own `--server` and `--port`.
+- What a map keeps, Apply look or New map with this look: `repro/map-snapshot.mjs`
+  (it edits `materials/*.json` in its worktree and puts them back) and
+  `repro/look.mjs`, with your own `--server` and `--port`.
 - Drag or bake performance: `node repro/perf.mjs` when investigating or
   claiming a performance change; compare both builds under similar conditions.
 - Visual terrain work: inspect affected authored scenes at 1x. Realism reports,

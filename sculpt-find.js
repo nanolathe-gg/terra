@@ -114,7 +114,7 @@ export const ACTIONS = [
   ['new-map', 'run'], ['tab-map', 'run', 'Map'], ['load', 'run'], ['save', 'run'], ['open-export', 'run'], ['map-export', 'go'], ['export', 'go'],
   ['share-link', 'go'], ['open-graphics', 'run', 'View'], ['view-rendered', 'run'], ['view-clay', 'run'], ['view-passability', 'run'], ['focus-canvas', 'run', 'Focus'], ['fit', 'run'],
   ['zoom-in', 'run', 'Zoom in'], ['zoom-out', 'run', 'Zoom out'], ['materials-toolbar', 'run'], ['tab-objects', 'run', 'Shapes'],
-  ['world-new', 'go:world-new-name'], ['world-export', 'run'], ['world-import', 'run'],
+  ['new-map-look', 'run'], ['world-apply', 'run'],
 ];
 
 function ownText(el) {
@@ -178,17 +178,15 @@ function whereOf(el) {
 const kindOf = el => el.type === 'color' ? 'color' : el.tagName === 'SELECT' ? 'choice' : el.type === 'checkbox' || el.type === 'radio' ? 'switch' : el.matches('.scrub, [type=range]') ? 'slider' : 'field';
 const layerName = li => { const n = li.querySelector('.surface-name'); return clean(n?.value ?? n?.textContent); };
 // What editing an element changes, as the page's own scope tag says it (sculpt-workspace.css .scope-tag): the tag of the nearest block that
-// holds the element, sitting directly in it (a map-saved row, the switch or button it follows), in its heading or head row (a group of
-// map-saved rows, the Map menu, the shape and Features cards, the World panel), or in the rock type picker's head (the rock type rows).
-// Null where the page says nothing (Settings, tools, actions, materials).
-const SCOPE_HEADS = ':scope > .scope-tag, :scope > :is(h2, h3, h4, .card-head, .control-search) > .scope-tag, :scope > .rock-picker .scope-tag';
+// holds the element, sitting directly in it or in its heading or head row (the shape card's This shape / New shapes). Null where the page
+// says nothing: everything else is the map's (owner, 2026-11-19).
+const SCOPE_HEADS = ':scope > .scope-tag, :scope > :is(h2, h3, h4, .card-head, .control-search) > .scope-tag';
 function scopeOf(el) {
   for (let a = el?.parentElement; a && a !== document.body; a = a.parentElement) {
     const tag = a.querySelector(SCOPE_HEADS), text = clean(tag?.textContent);
     if (text) return {text, variant: [...tag.classList].find(c => c !== 'scope-tag' && c.startsWith('scope-')) || ''};
   }
-  const tag=el?.closest('#pane-world')&&$('world-scope-tag');
-  return tag?{text:clean(tag.textContent),variant:'scope-world'}:null;
+  return null;
 }
 
 function rows(entries) {

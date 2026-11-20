@@ -45,6 +45,20 @@ It uses two isolated Chrome profiles on `<cdp>` and `<cdp>+1`, exercises the
 actual Save/Load buttons, and compares the recipe and rendered pixels after
 loading and refreshing. It is outside the fast unit checks.
 
+Two checks protect what a map keeps (a map holds its whole look; owner,
+2026-11-19):
+
+```sh
+node repro/map-snapshot.mjs --server http://127.0.0.1:<yours> --port <cdp>
+node repro/look.mjs --server http://127.0.0.1:<yours> --port <cdp>
+```
+
+`map-snapshot.mjs` retunes parts of Green's data and checks that a saved map
+keeps its save and pixels while a new map changes. It edits `materials/*.json`
+in the worktree the server serves and restores them; if it is killed, run
+`git checkout materials/`. `look.mjs` covers Apply look, New map with this
+look and the fork, each against a reload of the saved map.
+
 ## Optional retail reproductions
 
 The following workflow is retained for a future return to retail matching.

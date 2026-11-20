@@ -73,9 +73,10 @@ rejected as a whole. Appearance edits do not revalidate terrain beneath an
 unchanged footprint.
 
 Recipes travel with the working map across world changes, and with map saves and
-share links. Creating a custom world captures the current recipes as its starting
-set. Existing world-file export/import also carries that set. A saved map's own
-recipes take precedence over world defaults. No additional save format, storage
+share links. World › Apply look from… (Features) and Map › New map with this look
+take another world's or map's set (owner, 2026-11-19: the map holds everything; a
+placed feature keeps its style). A saved map's own recipes take precedence over
+world defaults. No additional save format, storage
 key, undo stack, endpoint or drawing path was introduced. Old feature-set options
 are not migrated, following the repository's pre-release save policy.
 
@@ -97,8 +98,9 @@ Measured during implementation:
 - Browser coverage imports Red tendrils and Lava rocks into Green, independently
   colors duplicated recipes, changes variant counts, rejects a conflicting
   footprint, fills and undoes a mixed collection, reorders and reloads recipes,
-  switches to Moon, and exports them. Custom-world defaults and actual world-file
-  export/import round trips also pass.
+  switches to Moon, and exports them. (Its custom-world and world-file round
+  trips were retired with the world store, 2026-11-19; repro/look.mjs covers
+  Features in Apply look.)
 - Unit coverage checks stable placement addresses, independent edits, source
   gameplay overrides, passability footprints, and preview/export burn parity.
 

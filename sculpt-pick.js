@@ -75,7 +75,6 @@ export function mountPick(host) {
   }
   // A swatch shows its thing's color unless the artist is choosing one in it (a rebuilt value would close the picker).
   const swatch = (id, color) => { const input = $(id); input.disabled = !color; if (color && document.activeElement !== input) input.value = color; };
-  const tag = (id, info) => { const e = $(id); e.textContent = info.tag; e.className = 'scope-tag scope-' + info.scope; };
   // Settings rows (host.settings): sliders that edit through the World row's own range (host.setSetting), one undo step a release. A list
   // with the same rows keeps its elements and takes new values, except in the row being used, so a read after a release never replaces it.
   function fillRows(box, rows, slot) {
@@ -123,7 +122,7 @@ export function mountPick(host) {
     const water = wet ? host.water() : null;
     $('pick-water').hidden = !water; waterSlot = water?.slot ?? null;
     if (water) {
-      swatch('pick-water-color', water.color); $('pick-water-name').textContent = water.name; tag('pick-water-tag', water);
+      swatch('pick-water-color', water.color); $('pick-water-name').textContent = water.name;
       $('pick-water-depth').textContent = `${(-r.aboveSea).toFixed(1)} below the sea ·`; $('pick-shallow-chip').style.background = water.shallow;
       $('pick-water-reach').textContent = water.reach;
       group('pick-water-more', acting(host.settings(['Water & shores'])), null, n => `${count(n, 'water setting')} acting here`);
@@ -131,14 +130,13 @@ export function mountPick(host) {
     const rock = r && r.rock.share >= ROCK_SHOWN ? host.rock(r.rock.slot) : null;
     $('pick-rock').hidden = !rock; rockSlot = rock ? r.rock.slot : null; rockMaterial = rock?.material?.slot ?? null;
     if (rock) {
-      swatch('pick-rock-color', rock.color); $('pick-rock-name').textContent = rock.name; tag('pick-rock-tag', rock);
+      swatch('pick-rock-color', rock.color); $('pick-rock-name').textContent = rock.name;
       $('pick-rock-kind').textContent = 'rock type' + (wet ? ' on the bed' : '') + (r.rock.share < .95 ? ` · shows ${percent(r.rock.share)}` : '');
       // This rock type's own settings that act (its headlines in view, the rest folded), then the world's settings for every rock type.
       const own = acting(host.settings(['Rock types'], r.rock.slot)).filter(row => !row.home.endsWith('/Colors & recipe'));
       fillRows($('pick-rock-rows'), own.filter(row => row.headline), r.rock.slot);
       group('pick-rock-more', own.filter(row => !row.headline), r.rock.slot, n => `${count(n, 'more setting')} of ${rock.name}`);
       group('pick-cliffs', acting(host.settings(['Cliffs & stones'])), null, n => `${count(n, 'setting')} for every rock type`);
-      $('pick-cliffs-tag').textContent = 'World';
       $('pick-rock-material').textContent = rock.material?.name ?? 'No material: a plain gray'; $('pick-rock-edit').disabled = !rock.material;
       $('pick-rock-reach').textContent = rock.reach;
     }
@@ -167,7 +165,7 @@ export function mountPick(host) {
     const ground = r ? host.ground(r.slot) : null;
     $('pick-ground').hidden = !ground; groundSlot = ground?.slot ?? null;
     if (ground) {
-      swatch('pick-ground-color', ground.color); $('pick-ground-name').textContent = ground.name; tag('pick-ground-tag', ground);
+      swatch('pick-ground-color', ground.color); $('pick-ground-name').textContent = ground.name;
       $('pick-ground-kind').textContent = wet ? 'ground under the water' : 'ground'; $('pick-ground-reach').textContent = ground.reach;
       // The world's ground settings, where ground shows: not under water, nor on a pixel that is all rock.
       group('pick-ground-more', wet || r.rock.share >= .95 ? [] : acting(host.settings(['Ground'])), null, n => `${count(n, 'setting')} of the world’s ground acting here`);

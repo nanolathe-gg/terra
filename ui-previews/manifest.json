@@ -810,7 +810,8 @@
    "desert": "world-desert.png",
    "lava": "world-lava.png",
    "crystal": "world-crystal.png",
-   "ice": "world-ice.png"
+   "ice": "world-ice.png",
+   "lush": "world-lush.png"
   }
  }
 }

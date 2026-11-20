@@ -333,6 +333,10 @@ func (s *Site) configure() error {
 		if river, ok := table["river"]; ok {
 			c["river"] = clone(river)
 		}
+		// Where rock shows off the rock face (sculpt-material-model.js tablePlacementRows): a map saves its own copy (sculpt-save.js ENGINE_TABLES).
+		if placement, ok := table["placement"]; ok {
+			c["placement"] = clone(placement)
+		}
 		fallback := object{}
 		for _, k := range []string{"tree", "shrub", "rock", "scar"} {
 			if v, ok := obj(s.tables[s.Manifest.FeatureFallback]["features"])[k]; ok {

@@ -339,7 +339,7 @@ export function mountSurfacePanel(host) {
   }
   function materialSelect(layer, i) {
     const builtin = !isMaterialLayer(layer), options = host.library();
-    const select = el('select', {className: 'surface-material', id: uid('material'), title: 'The library material this layer draws (the world’s copy, shared by every layer that draws it)'});
+    const select = el('select', {className: 'surface-material', id: uid('material'), title: 'The library material this layer draws (one copy in this map, shared by every layer that draws it)'});
     if (builtin && layer.material == null) select.append(el('option', {value: '', textContent: 'None: it draws nothing', selected: true}));
     // A material layer with plants may draw no material: its plants grow on whatever lies below.
     if (!builtin && layer.plants) select.append(el('option', {value: '', textContent: 'None: plants only', selected: layer.material == null}));
@@ -410,7 +410,7 @@ export function mountSurfacePanel(host) {
       // A built-in that already draws a role material or its rock type's rock takes it from there (sculpt-material-model.js SURFACE_DRAWABLE).
       const own = builtin && !SURFACE_DRAWABLE.includes(layer.builtin);
       const materialRow = own ? el('p', {className: 'small surface-wide', textContent: `Drawn with ${role?.name ?? BUILTIN_SOURCES[layer.builtin]}: choose it in ${ROCK_TYPED.includes(layer.builtin) ? 'Rock types' : 'the Materials panel'}.`}) : el('div', {className: 'surface-wide surface-line'}, materialSelect(layer, i));
-      if (material && !own) { const b = el('button', {type: 'button', id: uid('edit'), textContent: 'Edit…', title: 'Open its material in the material editor (the world’s: every map in this world shows your edit)'}); b.onclick = () => host.edit(layer, b); materialRow.append(b); }
+      if (material && !own) { const b = el('button', {type: 'button', id: uid('edit'), textContent: 'Edit…', title: 'Open its material in the material editor'}); b.onclick = () => host.edit(layer, b); materialRow.append(b); }
       // Its place in the stack (within its stage) and, for a material layer, removing it: in the open row, so the head keeps room for the name.
       const order = el('div', {className: 'surface-wide surface-line surface-order'}, el('span', {className: 'small', textContent: STAGE_PLACE[stage] + '.'}), move(1, '↑ Raise'), move(-1, '↓ Lower'));
       if (!builtin) order.append(el('button', {type: 'button', textContent: 'Remove', title: 'Remove this layer (its material leaves the map unless a stroke uses it)', onclick: () => { const next = structuredClone(layers); next.splice(i, 1); put(next, true); }}));
@@ -421,7 +421,7 @@ export function mountSurfacePanel(host) {
       // A rock-typed built-in shows the world's rock material's (a rock type with a material of its own keeps that one's).
       const colored = material ?? (own ? role : null);
       if (colored?.own) {
-        const pick = el('input', {type: 'color', value: colored.own, id: uid('color'), title: 'Moves all of the material’s color steps together (the world’s copy, on every map); each step stays editable in the material editor'});
+        const pick = el('input', {type: 'color', value: colored.own, id: uid('color'), title: 'Moves all of the material’s color steps together; each step stays editable in the material editor'});
         const rgb = () => [1, 3, 5].map(k => parseInt(pick.value.slice(k, k + 2), 16) / 255);
         pick.oninput = () => { picking = true; host.recolor(layer, rgb(), false); };
         pick.onchange = () => { picking = false; host.recolor(layer, rgb(), true); build(); };

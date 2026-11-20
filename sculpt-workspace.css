@@ -76,8 +76,6 @@
 .mode-switch{display:flex;margin-left:auto;border:1px solid var(--line);border-radius:7px;overflow:hidden;flex:none;min-width:0}
 .mode-switch button{border:0;border-radius:0;background:transparent;padding:6px 16px;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap;display:flex;align-items:baseline;min-width:0}
 .mode-switch button[aria-selected=true]{background:#344c42;color:#d9ffe5}
-.world-sep{margin:0 5px;opacity:.6}
-.world-title{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
 .topbar .primary{background:#3f6b4c;border-color:#78ae8d;color:#f1ffe9;font-weight:600;padding-left:14px;padding-right:14px}.topbar .primary:hover:not(:disabled){background:#4a7d59}
 #open-graphics{white-space:nowrap}
 /* Find (sculpt-find.js): it takes the bar's free room up to a point, so it gives way before anything else shrinks; a box too narrow for its
@@ -185,10 +183,10 @@
 .pick-reach{margin:0;color:var(--muted);font-size:10.5px;line-height:1.35}
 /* The shape card: its name and actions, the sections every shape has, then Details, where a closed part is a chip. */
 .card-head{display:flex;align-items:center;gap:8px}.card-head .panel-title{flex:1;min-width:0;margin:0}
-/* One scope tag, three values: what an edit changes. This shape (or the new shapes a tool draws), this map, or every map in the world. */
+/* The shape card's scope tag: what an edit changes, this shape or the new shapes a tool draws. Everything else is the map's. */
 .scope-tag{display:inline-flex;align-items:center;flex:none;padding:0 6px;border:1px solid;border-radius:8px;font-size:9.5px;font-weight:600;line-height:15px;letter-spacing:.2px;white-space:nowrap;vertical-align:middle}
-.scope-tag.scope-shape{color:#f1d58c;border-color:#6f6136;background:#2d281b}.scope-tag.scope-map{color:#a2ccf0;border-color:#3b5a76;background:#1b2935}.scope-tag.scope-world{color:#a6dbb7;border-color:#41684f;background:#1b2f24}
-.control>.scope-tag,.world-fixed>.scope-tag{margin-top:4px}.world-fixed>button+.scope-tag{margin:0 0 0 6px}
+.scope-tag.scope-shape{color:#f1d58c;border-color:#6f6136;background:#2d281b}
+.control>.scope-tag{margin-top:4px}
 .card-actions{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:6px 0 8px}.card-actions .top-menu{position:static}
 .card-actions button,.card-actions .top-menu>summary{padding:3px 8px;font-size:10px;min-height:24px;box-sizing:border-box;display:inline-flex;align-items:center}
 #shape-selection-actions,#tool-delete-control{display:contents}#selection-delete,#tool-delete{color:#e8afa2}
@@ -264,8 +262,8 @@ footer{grid-row:3;font-size:10px;gap:14px}
 footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:nowrap}.status-details .popover{right:8px;bottom:28px}
 
 @media(max-width:1439px){.app{--map-menu-left:82px}}
-@media(max-width:1250px){.app{--inspector-width:290px;--map-menu-left:73px}.version{display:none}.topbar{gap:6px}.brand{font-size:12px}.topbar button,.topbar select{padding:5px 6px}.top-actions{gap:3px}.top-menu>summary{font-size:10px;padding:5px}.mode-switch button{padding:6px 10px}.world-title{max-width:120px}footer #levels{display:none}}
-@media(max-width:1050px){.app{--map-menu-left:29px}.brand{font-size:0;gap:0}.brand-mark{font-size:22px}.topbar{padding:0 7px;gap:5px}.topbar #undo,.topbar #redo{font-size:0}.topbar #undo:first-letter,.topbar #redo:first-letter{font-size:13px}.mode-switch button{padding:6px 9px}.world-title{max-width:96px}.status-line{display:none}}
+@media(max-width:1250px){.app{--inspector-width:290px;--map-menu-left:73px}.version{display:none}.topbar{gap:6px}.brand{font-size:12px}.topbar button,.topbar select{padding:5px 6px}.top-actions{gap:3px}.top-menu>summary{font-size:10px;padding:5px}.mode-switch button{padding:6px 10px}footer #levels{display:none}}
+@media(max-width:1050px){.app{--map-menu-left:29px}.brand{font-size:0;gap:0}.brand-mark{font-size:22px}.topbar{padding:0 7px;gap:5px}.topbar #undo,.topbar #redo{font-size:0}.topbar #undo:first-letter,.topbar #redo:first-letter{font-size:13px}.mode-switch button{padding:6px 9px}.status-line{display:none}}
 /* Features and Starts: one tool behind two rail entries. The card's switch sits in its header; kinds are tabs over the list behind them. */
 .feature-head{margin:0 0 6px}.feature-head h3{flex:1;min-width:0;margin:0}
 .feature-head .feature-modes{display:flex;gap:2px;margin:0}.feature-head .feature-modes[hidden]{display:none}.feature-head .feature-modes button{width:auto;height:auto;padding:3px 9px;font-size:10.5px}
@@ -280,10 +278,8 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 .tool-settings .control:has(>.feature-kinds),.tool-settings #feature-starts{display:block}
 #feature-starts>label{display:none}#feature-starts>select{width:100%;margin:0 0 6px}#feature-starts>button{width:100%}
 
-#new-map-dialog{color:var(--text,#dce4df);background:#151e22;border:1px solid #587265;border-radius:12px;width:min(680px,calc(100vw - 40px));padding:22px 24px}#new-map-dialog::backdrop{background:#05090bbb}#new-map-dialog h2{margin-top:0}.new-map-worlds{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0 6px}.new-map-worlds button{padding:16px 8px;white-space:normal;min-height:60px}.new-map-worlds button[aria-pressed=true]{border-color:#b4d589;background:#304a35}.new-map-size{display:flex;gap:16px;margin-top:9px}.new-map-size input{width:65px}#new-map-dialog .row{justify-content:flex-end}
-/* New world: a link under the cards; its name row in place under it. */
+#new-map-dialog,#look-dialog{color:var(--text,#dce4df);background:#151e22;border:1px solid #587265;border-radius:12px;width:min(680px,calc(100vw - 40px));padding:22px 24px}#look-dialog{width:min(480px,calc(100vw - 40px))}#new-map-dialog::backdrop,#look-dialog::backdrop{background:#05090bbb}#new-map-dialog h2,#look-dialog h2{margin-top:0}#look-dialog fieldset{border:1px solid #33463e;border-radius:8px;margin:12px 0;padding:8px 12px}.look-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:4px 12px}#look-dialog fieldset label{display:flex;gap:6px;align-items:center}#look-dialog .row{justify-content:flex-end}.new-map-worlds{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0 6px}.new-map-worlds button{padding:16px 8px;white-space:normal;min-height:60px}.new-map-worlds button[aria-pressed=true]{border-color:#b4d589;background:#304a35}.new-map-size{display:flex;gap:16px;margin-top:9px}.new-map-size input{width:65px}#new-map-dialog .row{justify-content:flex-end}
 .new-map-saved h3{margin:12px 0 6px;font-size:12px}.new-map-list{list-style:none;margin:0 0 4px;padding:0;max-height:220px;overflow:auto;border:1px solid #2c3b40;border-radius:8px}.new-map-list li{display:flex;align-items:center;gap:8px;padding:6px 8px;border-top:1px solid #2c3b40}.new-map-list li:first-child{border-top:0}.new-map-saved-text{flex:1;min-width:0;display:flex;flex-direction:column}.new-map-saved-text strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.new-map-saved-text .small{color:var(--muted)}#new-map-note{color:var(--accent)}.new-map-world-new{margin:0 0 12px}.link-button{border:0;background:none;padding:2px 0;color:var(--accent);font-size:11px}.link-button:hover:not(:disabled){background:none;text-decoration:underline}
-#new-map-world-row{justify-content:flex-start!important;max-width:360px}#new-map-world-row input{flex:2}#new-map-world-row button{flex:1}
 #new-map-sizes button{white-space:nowrap;font-size:11px}.new-map-name{display:block;margin-top:10px}.new-map-name input{margin-top:4px}
 
 .curve-numbers{display:none}.app.curves-large .curve-numbers{display:flex;flex-direction:column;gap:8px;grid-column:2;grid-row:2/4;overflow:auto;border-left:1px solid var(--line);padding:10px 14px}.curve-numbers h3{margin:8px 0 0}.curve-numbers label{display:flex;justify-content:space-between;align-items:center;gap:6px}.curve-numbers input{width:74px}.curve-numbers select{max-width:142px}#curve-shape-preview{width:100%;height:auto;background:#10171b;border:1px solid #3e5047}#map-progress{position:absolute;left:0;right:0;top:0;height:3px;z-index:8;overflow:hidden;background:#57745a55}#map-progress:after{content:'';display:block;width:35%;height:100%;background:#b4d589;animation:terrain-progress 1.4s ease-in-out infinite}@keyframes terrain-progress{from{transform:translateX(-100%)}to{transform:translateX(390%)}}.render-pending{position:relative}#render-stage{color:#e8bf72;white-space:nowrap}
@@ -452,7 +448,7 @@ footer #levels{color:#9fb0ad}.status-details summary{font-size:10px;white-space:
 
 /* Existing controls have one fixed home. The home scrolls as a single page. */
 .world-studio:not(.world-all) .world-nav [data-advanced]{display:none}
-.world-home-head{display:flex;flex-wrap:wrap;gap:7px;align-items:center}.world-home-head .world-name{display:block;width:100%;margin:0;font-size:17px}.world-home-head #biome-select{width:100%}.world-home-head .scope-tag{max-width:100%;white-space:normal}.world-home-head .row{width:100%}
+.world-home-head{display:flex;flex-wrap:wrap;gap:7px;align-items:center}.world-home-head .world-name{display:block;width:100%;margin:0;font-size:17px}.world-home-head .row{width:100%}
 .world-home-cards{display:flex;flex-direction:column;gap:10px;margin-top:10px}.world-home-card{border:1px solid var(--line);border-radius:7px;padding:9px;min-width:0}.world-home-card>h3{font-size:13px;margin:0 0 7px;color:var(--text)}.world-home-card .control{margin:6px 0}.world-home-card .material-pick{display:flex;gap:5px;align-items:center;flex-wrap:wrap}.world-home-card select{min-width:0;max-width:100%;flex:1}.world-home-card .small{font-size:10px;margin:4px 0}.world-home-card .link{font-size:11px}.world-all-settings{margin-top:7px}.world-home-layer{display:block;text-align:left;margin:5px 0}.world-home-rock{display:flex;gap:6px;align-items:center;border:0;background:transparent;padding:4px 0;text-align:left}.world-use-dot{width:6px;height:6px;border-radius:50%;background:#9cdda6}.world-home-foot{margin-top:12px;flex-wrap:wrap}.world-home-back{margin:0 0 8px}.world-home .world-rows:empty{display:none}
 
 
