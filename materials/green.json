@@ -809,6 +809,26 @@
  },
  "world": {
     "materials": {"ground": "green-ground", "water": "green-water", "rock": "green-rock", "slope": "green-slope", "debris": "green-debris", "soil": "green-soil", "snow": "green-snow", "moss": "green-moss", "sand": "green-sand", "band": "green-band", "crystal": "crystals", "extra": ["green-groundgrain"]},
+    "surface": [
+        {"name": "Highland ground", "builtin": "highland"},
+        {"name": "Slope cover", "builtin": "slopeCover"},
+        {"name": "Bare soil", "builtin": "soil", "material": "@soil"},
+        {"name": "Rock", "builtin": "rock"},
+        {"name": "Beach", "builtin": "beach"},
+        {"name": "Crown rock", "builtin": "crown"},
+        {"name": "Base band", "builtin": "baseBand", "material": "@band"},
+        {"name": "Moss on regrown debris", "builtin": "regrownMoss", "material": "@moss"},
+        {"name": "Debris fines", "builtin": "fines"},
+        {"name": "Painted rock", "builtin": "paintedRock"},
+        {"name": "Painted snow", "builtin": "paintedSnow", "material": "@snow"},
+        {"name": "Painted moss", "builtin": "paintedMoss", "material": "@moss"},
+        {"name": "Sand dust", "builtin": "sandDust", "material": "@sand"},
+        {"name": "Sand", "builtin": "sand", "material": "@sand"},
+        {"name": "Chips", "builtin": "chips"},
+        {"name": "Snow on ice crests", "builtin": "iceCrest", "material": "@snow"},
+        {"name": "Snow on ice tops", "builtin": "iceCap", "material": "@snow"},
+        {"id": "gentlelumps", "name": "Lumps on gentle grades", "material": "green-lumps", "stage": "ground", "where": [{"fact": "slope", "from": 0.03, "to": 0.1, "fade": 0.02}, {"fact": "toWater", "from": 180, "fade": 10}]}
+    ],
     "knobDefaults": {
         "coastRamp": 0.75,
         "looseSupply": 0.08,
