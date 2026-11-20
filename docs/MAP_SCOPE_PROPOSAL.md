@@ -28,6 +28,59 @@ These override the options and recommendations in sections 2 to 8.
 
 "Go ahead and capture these decisions, then implement everything."
 
+## As built (branch `proposal/map-scope`, 2026-11-19)
+
+Where this differs from sections 2 to 8, this section wins.
+
+- **The map holds everything** that changes the export or is kit:
+  - every row's value;
+  - the colors;
+  - the world materials;
+  - the surface layers;
+  - the rock column, with the built-in's own column normalized back on load;
+  - the feature styles, rock types and tools;
+  - the world's engine tables (`material`, `water` and `placement`,
+    `worldSettings.engine`). Retuning one of these changed a saved map's
+    pixels, so they are kept too.
+
+  `repro/map-snapshot.mjs` retunes nine parts of Green and checks that a
+  saved map's save and pixels stay the same.
+- **Still built from data, not kept:**
+  - the toolbar's built-in buttons and their presets (for new shapes only);
+  - rock recipes and material starting points (for adding only);
+  - the feature generator's tables (for new features only).
+- **Local:** the GPU budget, preview quality, panels and weathered view.
+  - The TA palette and Art/Clay stay map settings. Export does not visibly
+    force either one, so moving them could change exported art. This is
+    unverified, so they were left alone.
+  - The camera key `view` no longer counts as a world setting.
+- **No world store.** It is read once to convert, then removed:
+  - every world of your own, and every built-in world you changed, becomes
+    an empty 4 × 4 map named after it;
+  - a world a map brought with it (`openedFrom`) is skipped;
+  - a map made by an earlier build gets its world tools turned into map
+    tools, and its rock types lose their world provenance, when it is opened
+    or used as a look source (`mapOwnedKit`).
+- **Start a map** lists only the built-in worlds. To use another map's look,
+  open its file or link, then choose **Map › New map with this look**.
+- **World › Apply look from…** takes a built-in world, one of this browser's
+  maps, or a map file.
+  - It has the seven cards, plus the choice to keep or reset hand-edited
+    shape settings.
+  - Within one world it applies in place as one undo step.
+  - A whole look from another world forks the map there.
+  - Its note says how many rock types and tools it replaces.
+- **Kept as shortcuts, not folded into Apply look:**
+  - **The world select:** it forks the map into another world and keeps the
+    map's rock types and tools. A whole Apply look replaces them instead.
+  - **Reset:** it returns the world settings and world materials to the
+    built-in's and keeps rock types and tools.
+  - **Reset shapes to world defaults.**
+
+  Each one does something Apply look's defaults do not.
+- **No "changed" marks on world values.** Strokes' existing `edited` lists
+  are now saved in files and share links too.
+
 ## 1. What is wrong today
 
 Every World row says "Every map in Green Planet". The editor cannot keep that
