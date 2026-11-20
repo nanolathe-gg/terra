@@ -5,7 +5,7 @@ import {withWorldMaterials,worldOwnMaterials,worldKept,worldOwnFor,keptWorldMate
 import {KNOBS} from './sculpt-knobs.js';
 import {worldHexColors,isTone} from './sculpt-scene.js';
 import {normalizeSet} from './sculpt-feature-set.js';
-import {copySurface} from './sculpt-material-model.js';
+import {copySurface,withSurfaceMaterials} from './sculpt-material-model.js';
 
 // The tables of a world's data the renderer reads as they are (not rows): its material constants, water colors and placement thresholds.
 // The map keeps them with its world settings, so retuning a built-in world's table never changes a saved map either. Only a key the
@@ -119,3 +119,16 @@ export function worldOverrideCount(world,config) {
   return n;
 }
 export const resetWorldOverrides=world=>({name:world.name,base:world.base,colors:{},knobs:{},...(world.openedFrom?{openedFrom:world.openedFrom}:{})});
+
+// A world of the world store earlier builds kept in the browser, as an empty map of `map` (mapGeometry) that holds its look (owner,
+// 2026-11-19: stored worlds are converted once into maps). Its rows, colors, materials, surface layers, feature styles, rock types and
+// tools: the rock types instantiated from its catalog (with their world provenance, which opening the map turns into the map's own, as it
+// turns its tools into map tools: sculpt-world-kit.js mapOwnedKit). `config`: its base world's served config.
+export function storedWorldMap(world,config,map) {
+  const {featureSet,openedFrom:_,...record}=copySavedWorld({...world,colors:world.colors??{},knobs:world.knobs??{}},config);
+  const surface=record.surface?withSurfaceMaterials(copySurface(record.surface),config.surface):config.surface;
+  const kit=instantiateWorldKit({...config,surface,worldMaterials:keptWorldMaterials(world.materials,config)},record,{builtIn:false});
+  const size=Math.max(map.width,map.height)+160;
+  return {format:'nanolathe-terrain-sculpt',version:6,encoding:'stroke-graph',nodes:[],map,size,grid:size/2,biome:config.biomeId,world:config.biomeId,
+    worldSettings:{...record,materials:worldKept(kit.materials)},rocks:kit.rocks,materials:kit.materials,mapData:{name:String(world.name||config.biome).slice(0,128),...(featureSet?{featureSet}:{})}};
+}

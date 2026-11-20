@@ -1,5 +1,5 @@
 import {requestAdapter} from './sculpt-webgpu.js';
-import {savedWorld,worldOverrideCount,resetWorldOverrides,copySavedWorld,worldKeys,applyEngineTables,copyEngineTables,LOOK_CARDS,lookCard,roleCard} from './sculpt-save.js';
+import {savedWorld,worldOverrideCount,resetWorldOverrides,copySavedWorld,worldKeys,applyEngineTables,copyEngineTables,storedWorldMap,LOOK_CARDS,lookCard,roleCard} from './sculpt-save.js';
 import {normalizeSet} from './sculpt-feature-set.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mapGeometry,mountMapCanvas,validMapSize} from './sculpt-map.js';
@@ -3161,7 +3161,7 @@ let releaseMap=null,shareError=null;   // lets go of this tab's hold on its map;
 // other tab has it; else none, and the picker asks. The map is held (a Web Lock) for as long as the page lives.
 async function chooseMap() {
   if (!SAVING) return;
-  try { mapStore=openMapStore(); await importLegacyMaps(mapStore,localStorageOrNull()); }
+  try { mapStore=openMapStore(); await importLegacyMaps(mapStore,localStorageOrNull()); const made=await convertStoredWorlds(mapStore,localStorageOrNull()); if (made) mapsNote=`${made===1?'Your saved world is now a map':`Your ${made} saved worlds are now maps`}, named after ${made===1?'it':'them'}, in Your maps. To start from one, open it, then Map › New map with this look.`; }
   catch (err) { mapStore=null; mapsNote='Saving in this browser is unavailable ('+err.message+'). Use Save to keep your map as a file.'; }
   shareError=await openSharedLink();
   if (!mapStore) return;
@@ -3178,6 +3178,28 @@ async function chooseMap() {
   } catch (err) { mapStore=null; tabMapId=null; mapsNote='Saved maps could not be read ('+err.message+'). Use Save to keep your map as a file.'; }
 }
 const localStorageOrNull=() => { try { return localStorage; } catch (_) { return null; } };
+// The world store of earlier builds, converted once (owner, 2026-11-19): each world of your own, and each built-in world you changed, becomes
+// an empty 4 x 4 map with its look, named for it (sculpt-save.js storedWorldMap). A world a map brought with it (openedFrom) is that map's own
+// look and is not converted. A map's id follows its world's, so two tabs converting at once write the same entries; the store is removed
+// once every world is in.
+async function convertStoredWorlds(store,storage) {
+  let stored=null; try { stored=JSON.parse(storage?.getItem(WORLD_STORE)||'null'); } catch (_) {}
+  if (!stored||typeof stored!=='object'||Array.isArray(stored)) { if (stored!==null) try { storage.removeItem(WORLD_STORE); } catch (_) {} return 0; }
+  const known=new Set((await store.list()).map(m => m.id)),configs=new Map();let made=0,failed=0;
+  for (const [id,w] of Object.entries(stored)) {
+    if (!w||typeof w!=='object'||w.openedFrom||typeof w.base!=='string') continue;
+    const mapId='world-'+id.replace(/[^a-z0-9-]/gi,'').slice(0,80);if (known.has(mapId)) continue;
+    try {
+      if (!configs.has(w.base)) { const response=await fetch(configUrl(w.base)); if (!response.ok) throw Error(`the ${w.base} world could not be read`); configs.set(w.base,applyWorldRock(await response.json())); }
+      const cfg=configs.get(w.base),builtIn=id in (cfg.biomes||{});
+      if (builtIn&&!worldOverrideCount(w,cfg)) continue;   // a built-in world nobody changed
+      const s=storedWorldMap({...w,name:builtIn?`${w.name||cfg.biome} (your settings)`:w.name},cfg,mapGeometry(4,4));
+      await store.put(mapId,s,mapMeta(mapId,s));made++;
+    } catch (err) { failed++; console.warn(`The saved world “${w.name||id}” could not be turned into a map:`,err.message); }
+  }
+  if (!failed) try { storage.removeItem(WORLD_STORE); } catch (_) {}
+  return made;
+}
 function newMapReady() { $('new-map-open').disabled=!ready; }
 function openNewMap(first=false, dimensionsFromMap=null, look=false) {
   const dialog=$('new-map-dialog'); let picked=config.biomeId;   // a built-in world's id
