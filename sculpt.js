@@ -26,7 +26,7 @@ import {copySurface,layerKey,withSurfaceMaterials} from './sculpt-material-model
 import {mountSurfacePanel,BUILTIN_LABELS} from './sculpt-surface-panel.js';
 import {goTo, bringIntoView} from './sculpt-find.js';
 import {mountPick} from './sculpt-pick.js';
-import {mapOwnedKit,worldKit,storedWorldKit,baseRockKeys,sameKitData,assertKitMaterials,authoredWorldTool,instantiateWorldKit,addWorldRockInstance,resolvedWorldCard,worldToolUnavailable} from './sculpt-world-kit.js';
+import {mapOwnedKit,worldKit,storedWorldKit,sameKitData,assertKitMaterials,authoredWorldTool,instantiateWorldKit,addWorldRockInstance,resolvedWorldCard,worldToolUnavailable} from './sculpt-world-kit.js';
 import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,toolMaterialSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,markEdited,copyMapTools,nextMapToolId,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
@@ -3149,7 +3149,7 @@ let releaseMap=null,shareError=null;   // lets go of this tab's hold on its map;
 // other tab has it; else none, and the picker asks. The map is held (a Web Lock) for as long as the page lives.
 async function chooseMap() {
   if (!SAVING) return;
-  try { mapStore=openMapStore(); await importLegacyMaps(mapStore,localStorageOrNull()); const {made,failed}=await convertStoredWorlds(mapStore,localStorageOrNull()); worldsNote=[made?`${made===1?'Your saved world is now a map':`Your ${made} saved worlds are now maps`}, named after ${made===1?'it':'them'}, in Maps. To start from one, open it, then Map › New map with this look.`:'',failed?`${failed===1?'One saved world':`${failed} saved worlds`} could not be turned into ${failed===1?'a map':'maps'} yet; ${failed===1?'it stays':'they stay'} in this browser and the editor tries again next time.`:''].filter(Boolean).join(' '); if (worldsNote) mapsNote=worldsNote; }
+  try { mapStore=openMapStore(); await importLegacyMaps(mapStore,localStorageOrNull()); const {made,failed,skipped}=await convertStoredWorlds(mapStore,localStorageOrNull()); worldsNote=[made?`${made===1?'Your saved world is now a map':`Your ${made} saved worlds are now maps`}, named after ${made===1?'it':'them'}, in Maps. To start from one, open it, then Map › New map with this look.`:'',failed?`${failed===1?'One saved world':`${failed} saved worlds`} could not be turned into ${failed===1?'a map':'maps'} yet; ${failed===1?'it stays':'they stay'} in this browser and the editor tries again next time.`:'',skipped?`${skipped===1?'One saved world':`${skipped} saved worlds`} could not be read and ${skipped===1?'was':'were'} left out.`:''].filter(Boolean).join(' '); if (worldsNote) mapsNote=worldsNote; }
   catch (err) { mapStore=null; mapsNote='Saving in this browser is unavailable ('+err.message+'). Use Save to keep your map as a file.'; }
   shareError=await openSharedLink();
   if (!mapStore) return;
@@ -3174,20 +3174,23 @@ let worldsNote='';   // what converting the world store did (Maps' note and the 
 async function convertStoredWorlds(store,storage) {
   let stored=null; try { stored=JSON.parse(storage?.getItem(WORLD_STORE)||'null'); } catch (_) {}
   if (!stored||typeof stored!=='object'||Array.isArray(stored)) { if (stored!==null) try { storage.removeItem(WORLD_STORE); } catch (_) {} return {made:0,failed:0}; }
-  const known=new Set((await store.list()).map(m => m.id)),configs=new Map();let made=0,failed=0;
+  const known=new Set((await store.list()).map(m => m.id)),configs=new Map();let made=0,failed=0,skipped=0;
   for (const [id,w] of Object.entries(stored)) {
     if (!w||typeof w!=='object'||w.openedFrom||typeof w.base!=='string') continue;
     const mapId='world-'+id.replace(/[^a-z0-9-]/gi,'').slice(0,80);if (known.has(mapId)) continue;
+    // Only a failure that may pass (the network, the map store) leaves the store for the next boot; a world whose base this build has no more,
+    // or whose record cannot be read, never converts and is skipped.
+    let permanent=true;
     try {
-      if (!configs.has(w.base)) { const response=await fetch(configUrl(w.base)); if (!response.ok) throw Error(`the ${w.base} world could not be read`); configs.set(w.base,applyWorldRock(await response.json())); }
+      if (!configs.has(w.base)) { permanent=false; const response=await fetch(configUrl(w.base)); permanent=response.status===404; if (!response.ok) throw Error(`the ${w.base} world could not be read`); configs.set(w.base,applyWorldRock(await response.json())); permanent=true; }
       const cfg=configs.get(w.base),builtIn=id in (cfg.biomes||{});
       if (builtIn&&!worldOverrideCount(w,cfg)) continue;   // a built-in world nobody changed
       const s=storedWorldMap({...w,name:builtIn?`${w.name||cfg.biome} (your settings)`:w.name},cfg,mapGeometry(4,4));
-      await store.put(mapId,s,mapMeta(mapId,s,made+1));made++;   // dated at the start of time: a tab reopens the map edited last, not these
-    } catch (err) { failed++; console.warn(`The saved world “${w.name||id}” could not be turned into a map:`,err.message); }
+      permanent=false; await store.put(mapId,s,mapMeta(mapId,s,made+1));made++;   // dated at the start of time: a tab reopens the map edited last, not these
+    } catch (err) { if (permanent) skipped++; else failed++; console.warn(`The saved world “${w.name||id}” could not be turned into a map${permanent?' and is left out':''}:`,err.message); }
   }
   if (!failed) try { storage.removeItem(WORLD_STORE); } catch (_) {}
-  return {made,failed};
+  return {made,failed,skipped};
 }
 function newMapReady() { $('new-map-open').disabled=!ready; }
 function openNewMap(first=false, dimensionsFromMap=null, look=false) {
@@ -3289,7 +3292,7 @@ async function boot() {
     // The tab's map is restored with its world when it was drawn there, or opened (a file, a share link): carried otherwise (bootMap).
     {const a=workingMap;if(!pending&&a&&!experiment.has('newMap')&&a.biome===config.biomeId&&!experiment.has('forkedFrom'))automatic=a;}
     // An unreadable embedded world (a damaged file or working copy) is reported, never fatal: the map opens in the world the address names.
-    const restoring=pending??automatic;let embedded=null;try{embedded=copySavedWorld(restoring?.worldSettings,config);}catch(err){embeddedWorldError=err.message;}
+    const restoring=pending??automatic;let embedded=null;try{embedded=copySavedWorld(restoring?mapOwnedKit(restoring,config).sketch.worldSettings:undefined,config);}catch(err){embeddedWorldError=err.message;}   // an earlier build's world tools are the map's (loadSketch), so an unreadable one costs no setting
     worlds={};
     // The map's world settings are its own (owner, 2026-11-19): they are this page's world, whatever the built-in world holds now.
     if(embedded){worlds[config.biomeId]={...embedded};for(const [key,value]of Object.entries(embedded.knobs))experiment.set(key,value);applyRoles(config,embedded.roles);}

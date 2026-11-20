@@ -127,5 +127,5 @@ export function storedWorldMap(world,config,map) {
   const kit=instantiateWorldKit({...config,surface,worldMaterials:keptWorldMaterials(kept,config)},record,{builtIn:false});
   const size=Math.max(map.width,map.height)+160;
   return {format:'nanolathe-terrain-sculpt',version:6,encoding:'stroke-graph',nodes:[],map,size,grid:size/2,biome:config.biomeId,world:config.biomeId,
-    worldSettings:{...record,materials:worldKept(kit.materials)},rocks:kit.rocks,materials:kit.materials,mapData:{name:String(world.name||config.biome).slice(0,128),...(featureSet?{featureSet}:{})}};
+    worldSettings:savedWorld({...config,surface},new Map(),{...record,materials:kit.materials}),rocks:kit.rocks,materials:kit.materials,mapData:{name:String(world.name||config.biome).slice(0,128),...(featureSet?{featureSet}:{})}};
 }
