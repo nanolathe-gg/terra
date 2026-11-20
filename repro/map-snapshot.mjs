@@ -34,7 +34,10 @@ const RETUNES = [
   {name: 'material table', file: 'green.json', snapshot: true, edit: g => { g.material.rockSlope = .7; g.material.wetBand = 30; }},
   {name: 'placement table', file: 'green.json', snapshot: true, edit: g => { g.placement.rock.slope = .3; }},
   {name: 'water table', file: 'green.json', snapshot: true, edit: g => { g.water.shallowRGB = [200, 40, 40]; }},
+  {name: 'rock type recipe', file: 'green.json', snapshot: true, edit: g => { Object.assign(g.world.rock.recipes.evad.knobs, {rockFace: 3, faceRock: 1, faceGrass: 0}); }},
+  {name: 'added highland role', file: 'green.json', snapshot: true, edit: g => { g.world.materials.high = 'green-moss'; }},
 ];
+// A retune that changes no fresh map tests nothing: each must change a new map drawn the same way (`fresh`), or it is reported as vacuous.
 await cdpPortFree(port);
 const browser = spawn(chromePath, ['--headless=new', ...chromeGpuFlags, `--remote-debugging-port=${port}`, `--user-data-dir=${join(out, 'profile')}`, '--window-size=1440,900', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
 const originals = new Map();
@@ -54,31 +57,52 @@ try {
   await ev(`(()=>{const w=document.getElementById('weather');if(w.checked)w.click();sculptDebug.scene([['hill',[[120,120],[260,170]],{card:{elevation:90}}]],{ground:true});return true;})()`); await ready();
   for (let i = 0; i < 50 && !await ev(`sculptDebug.savedMap().then(m=>m?.nodes?.length>0)`); i++) await sleep(100);
   const reopen = async () => { await send('Page.navigate', {url: `${server}/?gpuMB=512`}); await ready(); return {save: normal(await ev('sculptDebug.sketch()')), pixels: await image()}; };
-  const base = await reopen(), results = {};
+  const tab = await ev(`sessionStorage.getItem('terraform-tab-v1')`);
+  // A new map with the same hill, in this tab, then the tab pointed back at the saved map (a newMap address reuses the tab's map id).
+  const fresh = async () => {
+    await ev(`sessionStorage.removeItem('terraform-tab-v1'),true`);
+    await send('Page.navigate', {url: `${server}/?biome=green&mapX=1&mapY=1&newMap=1&gpuMB=512`}); await ready();
+    await ev(`(()=>{const w=document.getElementById('weather');if(w.checked)w.click();sculptDebug.scene([['hill',[[120,120],[260,170]],{card:{elevation:90}}]],{ground:true});return true;})()`); await ready();
+    const result = {save: normal(await ev('sculptDebug.sketch()')), pixels: await image()};
+    await ev(`sessionStorage.setItem('terraform-tab-v1',${JSON.stringify(tab)}),true`);
+    return result;
+  };
+  const differs = (a, b) => !Buffer.from(a.pixels).equals(Buffer.from(b.pixels)) || !isDeepStrictEqual(a.save.worldSettings, b.save.worldSettings) || !isDeepStrictEqual(a.save.rocks, b.save.rocks) || !isDeepStrictEqual(a.save.materials, b.save.materials) || !isDeepStrictEqual(a.save.column, b.save.column);
+  const freshBase = await fresh(), base = await reopen(), results = {};
   for (const r of RETUNES) {
     const path = file(r.file); if (!originals.has(path)) originals.set(path, readFileSync(path, 'utf8'));
     const data = JSON.parse(originals.get(path)); r.edit(data); writeFileSync(path, JSON.stringify(data));
     try {
-      const now = await reopen(), changed = Object.keys({...base.save, ...now.save}).filter(k => !isDeepStrictEqual(base.save[k], now.save[k]));
-      results[r.name] = {snapshot: r.snapshot, saveSame: !changed.length, ...(changed.length ? {changed} : {}), pixelsSame: Buffer.from(base.pixels).equals(Buffer.from(now.pixels))};
+      const freshNow = await fresh(), now = await reopen(), changed = Object.keys({...base.save, ...now.save}).filter(k => !isDeepStrictEqual(base.save[k], now.save[k]));
+      results[r.name] = {snapshot: r.snapshot, saveSame: !changed.length, ...(changed.length ? {changed, world: Object.keys({...base.save.worldSettings, ...now.save.worldSettings}).filter(k => !isDeepStrictEqual(base.save.worldSettings?.[k], now.save.worldSettings?.[k])).map(k => k === 'colors' || k === 'knobs' ? k + ':' + Object.keys({...base.save.worldSettings[k], ...now.save.worldSettings[k]}).filter(j => !isDeepStrictEqual(base.save.worldSettings[k]?.[j], now.save.worldSettings[k]?.[j])).join('|') : k)} : {}), pixelsSame: Buffer.from(base.pixels).equals(Buffer.from(now.pixels)), fresh: differs(freshBase, freshNow)};
     } finally { writeFileSync(path, originals.get(path)); }
   }
   // Pulling a retune in on purpose: with Green's material table and a row retuned, Apply look from Green (every card) draws exactly what a
   // reload of the map then draws (the in-place apply and the load agree), and differs from the map as first saved. The second run opens the
   // dialog on its defaults (this world's own, every card: what Reset was) on the map the first left.
   const path = file('green.json'), retuned = JSON.parse(originals.get(path) ?? readFileSync(path, 'utf8')); if (!originals.has(path)) originals.set(path, readFileSync(path, 'utf8'));
-  retuned.material.rockSlope = .7; retuned.material.wetBand = 30; retuned.world.knobDefaults.coastRamp = .2; writeFileSync(path, JSON.stringify(retuned));
+  retuned.material.rockSlope = .7; retuned.material.wetBand = 30; retuned.world.knobDefaults.coastRamp = .2; retuned.placement.rock.slope = .3; retuned.world.engineDefaults.terraceCalm = .8; writeFileSync(path, JSON.stringify(retuned));
   try {
     for (const [name, act] of [['Apply look from Green', `(async()=>{document.getElementById('world-apply').click();await new Promise(r=>setTimeout(r,300));const s=document.getElementById('look-source');s.value='builtin:green';s.dispatchEvent(new Event('change'));for(let i=0;i<50&&document.getElementById('look-apply').disabled;i++)await new Promise(r=>setTimeout(r,100));document.getElementById('look-apply').click();return true;})()`], ['Apply look from Green again', `(async()=>{document.getElementById('world-apply').click();await new Promise(r=>setTimeout(r,300));for(let i=0;i<50&&document.getElementById('look-apply').disabled;i++)await new Promise(r=>setTimeout(r,100));document.getElementById('look-apply').click();return true;})()`]]) {
-      await reopen(); await ev(act); await sleep(500); await ready();
-      const applied = await image(); const reloaded = await reopen();
-      results[name] = {snapshot: true, saveSame: true, pixelsSame: Buffer.from(applied).equals(Buffer.from(reloaded.pixels)), changed: !Buffer.from(applied).equals(Buffer.from(base.pixels))};
+      const before = await reopen(); await ev(act); await sleep(500); await ready();
+      const applied = await image(), appliedSave = normal(await ev('sculptDebug.sketch()'));
+      // One Undo puts the map back: its picture and its save.
+      await ev(`(()=>{document.getElementById('undo').click();return true;})()`); await sleep(300); await ready();
+      const undone = {save: normal(await ev('sculptDebug.sketch()')), pixels: await image()};
+      await ev(`(()=>{document.getElementById('redo').click();return true;})()`); await sleep(300); await ready();
+      const redone = await image();
+      for (let i = 0; i < 50 && !await ev(`sculptDebug.savedMap().then(m=>JSON.stringify(m?.worldSettings)===${JSON.stringify(JSON.stringify(appliedSave.worldSettings))})`); i++) await sleep(100);
+      const reloaded = await reopen();
+      results[name] = {snapshot: true, saveSame: isDeepStrictEqual(appliedSave.worldSettings, reloaded.save.worldSettings), pixelsSame: Buffer.from(applied).equals(Buffer.from(reloaded.pixels)), changed: !Buffer.from(applied).equals(Buffer.from(base.pixels)),
+        undo: Buffer.from(undone.pixels).equals(Buffer.from(before.pixels)) && isDeepStrictEqual(undone.save.worldSettings, before.save.worldSettings), redo: Buffer.from(redone).equals(Buffer.from(applied))};
+      if (!results[name].undo || !results[name].redo) results[name].pixelsSame = false;
       if (!results[name].changed) results[name].pixelsSame = false;
     }
   } finally { writeFileSync(path, originals.get(path)); }
   const failed = Object.entries(results).filter(([, r]) => r.snapshot && !(r.saveSame && r.pixelsSame)).map(([name]) => name);
-  console.log(JSON.stringify({results, failed, errors}));
-  if (failed.length || errors.length) process.exitCode = 1;
+  const vacuous = Object.entries(results).filter(([, r]) => r.fresh === false).map(([name]) => name);
+  console.log(JSON.stringify({results, failed, vacuous, errors}));
+  if (failed.length || vacuous.length || errors.length) process.exitCode = 1;
 } finally {
   for (const [path, text] of originals) writeFileSync(path, text);
   ws?.close(); browser.kill();

@@ -32,11 +32,25 @@ try {
   const send = (method, params = {}) => new Promise((res, rej) => { const n = ++id; pending.set(n, m => m.error ? rej(Error(JSON.stringify(m.error))) : res(m.result)); ws.send(JSON.stringify({id: n, method, params})); });
   const ev = async x => { const r = await send('Runtime.evaluate', {expression: x, awaitPromise: true, returnByValue: true}); if (r.exceptionDetails) throw Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
   const ready = async (c = 'true') => { for (let i = 0; i < 1200; i++) { try { if (await ev(`!!window.sculptDebug&&!!window.sculptCanvas&&!!window.sculptRegion&&sculptRegion.ready()&&(${c})`)) { await ev('sculptCanvas.idle()'); return; } } catch {} await sleep(150); } throw Error('page not ready: ' + errors.join('\n')); };
-  const image = () => ev(`(async()=>{const b=await sculptCanvas.debugBake({x:100,y:60,width:200,height:160},1),c=new OffscreenCanvas(b.width,b.height);c.getContext('2d').drawImage(b,0,0);b.close();return Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data);})()`);
+  const bake = () => ev(`(async()=>{const b=await sculptCanvas.debugBake({x:100,y:60,width:200,height:160},1),c=new OffscreenCanvas(b.width,b.height);c.getContext('2d').drawImage(b,0,0);b.close();return Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data);})()`);
+  const image = async () => { for (let i = 0; ; i++) { try { return await bake(); } catch (err) { if (i > 100 || !/PipelinesPending/.test(err.message)) throw err; await sleep(200); } } };   // after a reload the pipelines may still compile
   const normal = x => ({...x, nodes: x.nodes.map(n => ({...n, hidden: Boolean(n.hidden)}))});
   const sketch = () => ev('sculptDebug.sketch()'), text = sel => ev(`document.querySelector(${JSON.stringify(sel)}).textContent`);
   const click = sel => ev(`(()=>{document.querySelector(${JSON.stringify(sel)}).click();return true;})()`);
   // The dialog: a source, the cards to take (all when omitted), then Apply.
+  // The picture an apply leaves is what a reload of the saved map draws (AGENTS.md rule 12): settings that are no row included.
+  const sameAfterReload = async (label) => {
+    const live = await image(), was = normal(await sketch()), want = JSON.stringify(was.worldSettings);
+    for (let i = 0; i < 50 && !await ev(`sculptDebug.savedMap().then(m=>JSON.stringify(m?.worldSettings)===${JSON.stringify(want)})`); i++) await sleep(100);
+    await send('Page.navigate', {url: `${server}/?gpuMB=512`}); await ready();
+    const now = await image(), is = normal(await sketch());
+    if (!Buffer.from(now).equals(Buffer.from(live))) {
+      const diff = k => JSON.stringify(was[k]) !== JSON.stringify(is[k]);
+      writeFileSync(join(out, 'reload-was.json'), JSON.stringify(was)); writeFileSync(join(out, 'reload-is.json'), JSON.stringify(is));
+      let n = 0; for (let i = 0; i < now.length; i += 4) if (now[i] !== live[i] || now[i + 1] !== live[i + 1] || now[i + 2] !== live[i + 2]) n++;
+      assert.fail(`${label}: the live picture is not what a reload draws (${n} pixels; save keys that differ: ${Object.keys({...was, ...is}).filter(diff).join(', ') || 'none'})`);
+    }
+  };
   const apply = async (source, cards) => {
     await click('#world-apply'); await sleep(300);
     await ev(`(()=>{const s=document.getElementById('look-source');s.value=${JSON.stringify(source)};if(s.value!=='file')s.dispatchEvent(new Event('change'));for(const b of document.querySelectorAll('#look-cards input'))b.checked=${cards ? `${JSON.stringify(cards)}.includes(b.value)` : 'true'};document.getElementById('look-cards').dispatchEvent(new Event('change'));return true;})()`);
@@ -65,8 +79,9 @@ try {
   await click('#redo'); await sleep(300); await ready();
   assert.deepEqual(normal(await sketch()), normal(partial), 'Redo applies the look again');
   assert.ok(Buffer.from(await image()).equals(Buffer.from(partialPixels)), 'with the same pixels');
-  await click('#undo'); await sleep(300); await ready();
-  report.partial = 'Rock types and Light & weather from Painted Desert; Ground kept; Undo and Redo restore the whole save and its pixels';
+  await sameAfterReload('Rock types and Light & weather from Painted Desert');
+  await ev(`(()=>{sculptDebug.loadSketch(${JSON.stringify(before)});return true;})()`); await ready();
+  report.partial = 'Rock types and Light & weather from Painted Desert; Ground kept; Undo and Redo restore the whole save and its pixels; a reload draws the same';
   // Features from the map's own world: an edited feature style comes back as built, and a placed feature stays.
   await ev(`(()=>{const s=sculptDebug.sketch();s.mapData.featureSet.deposit.recipes[0].name='Edited deposit';s.mapData.features=[{kind:'deposit',v:0,x:8,z:8,metal:143}];sculptDebug.loadSketch(s);return true;})()`); await ready();
   await apply('builtin:green', ['features']); await sleep(800); await click('#look-apply'); await sleep(500); await ready();
@@ -87,7 +102,7 @@ try {
   assert.ok(hillOf(await sketch()).edited.includes('elevation'), 'one Undo brings the hand edits back');
   report.resetShapes = 'no card + Reset every shape: the hill back to its tool\'s defaults; one Undo';
   // 2. The map's own look: an edited row, a map tool, a feature set. Save as tool through the shape card.
-  await ev(`(()=>{const el=document.getElementById('knob-reliefAmount');el.value='1.1';el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`); await sleep(800);
+  for (const [key, value] of [['reliefAmount', '1.1'], ['undulation', '10']]) { await ev(`(()=>{const el=document.getElementById('knob-${key}');el.value='${value}';el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`); await sleep(800); }
   const hill = await ev(`sculptDebug.sketch().nodes.findIndex(n=>n.kind==='landform')`);
   await ev(`(async()=>{const c=s=>document.querySelector(s).click(),w=ms=>new Promise(r=>setTimeout(r,ms));c('#tab-objects');await w(300);c('#layers li[data-index="${hill}"] .layer-name');await w(300);c('#tab-tool');await w(300);document.getElementById('tool-save').open=true;document.getElementById('tool-save-name').value='Look hill';document.getElementById('tool-save-name').dispatchEvent(new Event('input'));await w(200);c('#tool-save-button');return true;})()`); await ready();
   await ev(`(()=>{const d=sculptRegion.mapData();d.name='Look source';sculptRegion.restoreMapData(d);return true;})()`);
@@ -102,6 +117,7 @@ try {
   assert.equal(child.nodes.filter(n => n.kind !== 'ground').length, 0, 'the new map starts blank');
   assert.equal(child.map.unitsX, 2, 'at the size chosen');
   assert.equal(child.worldSettings.knobs.reliefAmount, '1.1', 'with the edited row');
+  assert.equal(child.nodes.find(n => n.kind === 'ground')?.amplitude, 10, 'with the source\'s undulation in its ground');
   assert.deepEqual(child.tools.map(t => t.label), ['Look hill'], 'with the map\'s tool');
   assert.deepEqual(child.mapData.featureSet, source.mapData.featureSet, 'with the feature styles');
   assert.deepEqual(child.rocks, source.rocks, 'with the rock types');
@@ -118,6 +134,18 @@ try {
   assert.deepEqual(tooled.tools.map(t => t.label), ['Look hill'], 'Tools brought the file\'s tool');
   assert.notEqual(tooled.worldSettings.knobs.reliefAmount, '1.1', 'and nothing else');
   report.file = 'Tools from a map file, alone';
+  // Weathering off: restoring an Undulation change (Undo, Redo, an apply) leaves a Time pass that differs from a reload's, on main too
+  // (reported separately); the authored terrain is what this checks.
+  await ev(`(()=>{const w=document.getElementById('weather');if(w.checked)w.click();return true;})()`); await ready();
+  await apply('file', ['ground']);
+  const d1 = await send('DOM.getDocument'), in1 = await send('DOM.querySelector', {nodeId: d1.root.nodeId, selector: '#look-file'});
+  await send('DOM.setFileInputFiles', {nodeId: in1.nodeId, files: [file]}); await sleep(500);
+  await click('#look-apply'); await sleep(500); await ready();
+  const grounded = await sketch();
+  assert.equal(grounded.worldSettings.knobs.undulation, '10'); assert.equal(grounded.nodes.find(n => n.kind === 'ground')?.amplitude, 10, 'Ground brings the undulation into the terrain');
+  await sameAfterReload('Ground from a map file');
+  await ev(`(()=>{const w=document.getElementById('weather');if(!w.checked)w.click();return true;})()`); await ready();
+  report.ground = 'Ground from a map file: its undulation reaches the terrain; a reload draws the same';
   if (old) {   // a save whose world kept its tool: the tool comes as a map tool
     await apply('file', ['tools']);
     const d2 = await send('DOM.getDocument'), in2 = await send('DOM.querySelector', {nodeId: d2.root.nodeId, selector: '#look-file'});
@@ -127,14 +155,24 @@ try {
     assert.deepEqual(fromOld.tools.map(t => t.label), oldTools.map(t => t.label), 'the old world\'s tools came as map tools');
     report.oldFile = `Tools from an earlier build's file: ${oldTools.map(t => t.label).join(', ')}`;
   }
-  // 5. A whole look from another world forks the map there.
+  // 5. A whole look from another world forks the map there; the original stays in Maps as it was.
+  await ev(`(()=>{const d=sculptRegion.mapData();d.name='Fork original';sculptRegion.restoreMapData(d);sculptDebug.scene([['hill',[[120,120],[260,170]],{card:{elevation:70}}]],{ground:true});return true;})()`); await ready();
+  const original = await sketch();
+  for (let i = 0; i < 50 && !await ev(`sculptDebug.savedMap().then(m=>m?.nodes?.some(n=>n.kind==='landform'))`); i++) await sleep(100);
   await apply('builtin:lava'); await sleep(800);
   assert.match(await text('#look-note'), /another world/);
   await click('#look-apply'); await sleep(2000); await ready(`sculptDebug.biome==='lava'`);
   const forked = await sketch();
   assert.equal(forked.worldSettings.name, 'Lava'); assert.deepEqual(forked.tools ?? [], [], 'a whole look takes the world\'s tools: none of its own');
   assert.match(await text('#status'), /Applied the look of Lava/);
-  report.fork = 'whole look from Lava: the map forked into Lava with its look';
+  assert.equal(forked.nodes.filter(n => n.kind === 'landform').length, 1, 'the fork keeps the shapes');
+  const kept = await ev(`(async()=>{const r=indexedDB.open('terraform-maps',1);const db=await new Promise((a,b)=>{r.onsuccess=()=>a(r.result);r.onerror=()=>b(r.error);});const t=db.transaction('meta','readonly').objectStore('meta').getAll();return await new Promise(a=>t.onsuccess=()=>a(t.result.map(m=>({id:m.id,name:m.name,biome:m.biome}))));})()`);
+  const left = kept.find(m => m.biome === 'green' && m.name === 'Fork original');
+  assert.ok(left, 'the original is still in Maps, in Green');
+  const stored = await ev(`(async()=>{const r=indexedDB.open('terraform-maps',1);const db=await new Promise((a,b)=>{r.onsuccess=()=>a(r.result);r.onerror=()=>b(r.error);});const q=db.transaction('maps','readonly').objectStore('maps').get(${JSON.stringify(left.id)});return await new Promise(a=>{q.onsuccess=()=>a(q.result);q.onerror=()=>a(null);});})()`);
+  assert.equal(stored?.nodes?.filter(n => n.kind === 'landform').length, 1, 'with its shape');
+  assert.equal(stored.worldSettings.name, original.worldSettings.name, 'and its own look');
+  report.fork = 'whole look from Lava: the map forked into Lava with its look and its shape; the original stays in Maps with its shape';
   assert.deepEqual(errors, []);
   console.log(JSON.stringify(report));
 } finally { ws?.close(); browser.kill(); }
