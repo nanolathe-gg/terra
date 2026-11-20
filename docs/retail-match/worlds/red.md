@@ -96,3 +96,15 @@ Leads:
    darkens from depth 8; the shelf's crack web (`bedCracks`) is absent in
    retail but removing it costs red-1's ponds.
 5. Red-1's flat share is still 29% against 19%.
+6. **Red-2's river outline** (reviewer, by eye, trial-084 pair): retail's
+   river curves down to the west edge as a channel with banks in fine
+   concentric steps; ours is a square pool with a few broad dark terraces.
+   Check its water strokes against layout.png first (shape lane).
+7. **Red's tools after round 1** (not viewed): the world rock face is .8 now,
+   but darkknob keeps 2, and red-1's crescent on darkknob drew hard black
+   lines retail lacks (trial-072). The Knob and Crescent tools draw darkknob.
+
+Reviewer's note (2026-11-20): relief .8 was ported as kept. At .5 the
+steep crop is a little smoother, but neither matches retail's smooth,
+finely ribbed rims, and the whole-window edge balance is closer at .8
+(red-1 horizontal edges .195 against .22 at .5; retail .119).
