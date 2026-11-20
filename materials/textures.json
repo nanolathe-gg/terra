@@ -38,6 +38,30 @@
   "palette": [43,42,41,40,39,38,238,37,172,170,61,74,169,93,168,60,167,73,166,59,92,72,165,58,184,71,55,70,182,181],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
+ "green-shoal": {
+  "name": "Green shoal bed with dark specks",
+  "seed": 0,
+  "nodes": [
+   {"id":"step-1","type":"warp","kind":"turbulence","name":"Pattern distortion","params":{"amount":0,"size":9,"layers":0,"axis":0,"seed":0},"in":{"in":null},"x":0,"y":75},
+   {"id":"step-2","type":"noise","kind":"smooth","name":"Mottling / streaks","params":{"size":3.5,"detail":0.3,"layers":0,"seed":0},"in":{"in":"step-1"},"x":236,"y":75},
+   {"id":"step-3","type":"noise","kind":"smooth","name":"Fine grain","params":{"size":1.15,"detail":0,"layers":0,"seed":1},"in":{"in":null},"x":472,"y":-75},
+   {"id":"step-4","type":"levels","name":"Pattern levels","params":{"low":0.05,"high":0.95,"gamma":1,"invert":0},"in":{"in":"step-2"},"x":472,"y":75},
+   {"id":"step-5","type":"gradient","name":"Pattern colors","params":{"ease":1},"in":{"in":"step-4"},"stops":[[0,0.1855,0.3226,0.0825],[0.5,0.2244,0.3823,0.1105],[1,0.2692,0.4419,0.1365]],"x":708,"y":75},
+   {"id":"step-6","type":"gradient","name":"Grain colors","params":{"ease":0},"in":{"in":"step-3"},"stops":[[0,0.67,0.655,1.035],[1,1.33,1.345,0.965]],"x":708,"y":-75},
+   {"id":"step-7","type":"combine","kind":"multiply","name":"Multiply grain","params":{"amount":1,"offset":0},"in":{"a":"step-5","b":"step-6","mask":null},"x":944,"y":0},
+   {"id":"shoal-s","type":"scatter","name":"Dark specks","params":{"spacing":3,"radius":1,"coverage":0.7,"jitter":1.5,"hardness":1,"profile":1,"sizeVariation":0.5,"toneVariation":0.3,"follow":0,"seed":21},"in":{"in":null},"x":236,"y":225},
+   {"id":"shoal-one","type":"constant","name":"One","params":{"value":1},"x":472,"y":300},
+   {"id":"shoal-b","type":"combine","kind":"subtract","name":"Keep off specks","params":{"amount":1,"offset":0},"in":{"a":"shoal-one","b":"shoal-s","mask":null},"x":708,"y":225},
+   {"id":"shoal-c","type":"combine","kind":"multiply","name":"Darken specks","params":{"amount":0.45,"offset":0},"in":{"a":"step-7","b":"shoal-b","mask":null},"x":944,"y":225},
+   {"id":"fleck-s","type":"scatter","name":"Light flecks","params":{"spacing":5,"radius":0.8,"coverage":0.4,"jitter":1.5,"hardness":1,"profile":1,"sizeVariation":0.5,"toneVariation":0.3,"follow":0,"seed":33},"in":{"in":null},"x":236,"y":375},
+   {"id":"fleck-g","type":"gradient","name":"Fleck light","params":{"ease":0},"in":{"in":"fleck-s"},"stops":[[0,1,1,1],[1,1.6,1.6,1.6]],"x":708,"y":375},
+   {"id":"fleck-c","type":"combine","kind":"multiply","name":"Light flecks on","params":{"amount":1,"offset":0},"in":{"a":"shoal-c","b":"fleck-g","mask":null},"x":944,"y":375},
+   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"fleck-c","height":null,"shine":null},"x":1180,"y":0}
+  ],
+  "controls": [{"label":"Mottling size","node":"step-2","param":"size","min":1,"max":14},{"label":"Grass colors","node":"step-5","param":"stops"}],
+  "palette": [43,42,41,40,39,38,238,37,172,170,61,74,169,93,168,60,167,73,166,59,92,72,165,58,184,71,55,70,182,181],
+  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
+ },
  "green-lumps": {
   "name": "Green grass with lit lumps",
   "seed": 0,

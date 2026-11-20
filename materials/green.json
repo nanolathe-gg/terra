@@ -827,7 +827,8 @@
         {"name": "Chips", "builtin": "chips"},
         {"name": "Snow on ice crests", "builtin": "iceCrest", "material": "@snow"},
         {"name": "Snow on ice tops", "builtin": "iceCap", "material": "@snow"},
-        {"id": "gentlelumps", "name": "Lumps on gentle grades", "material": "green-lumps", "stage": "ground", "where": [{"fact": "slope", "from": 0.03, "to": 0.1, "fade": 0.02}, {"fact": "toWater", "from": 180, "fade": 10}]}
+        {"id": "gentlelumps", "name": "Lumps on gentle grades", "material": "green-lumps", "stage": "ground", "where": [{"fact": "slope", "from": 0.03, "to": 0.1, "fade": 0.02}, {"fact": "toWater", "from": 180, "fade": 10}]},
+        {"id": "shoalspecks", "name": "Specks on the shallow bed", "material": "green-shoal", "stage": "ground", "where": [{"fact": "aboveSea", "from": -30, "to": -1, "fade": 1}]}
     ],
     "knobDefaults": {
         "coastRamp": 0.75,
