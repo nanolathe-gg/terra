@@ -72,7 +72,7 @@ Your output folder is `$R/match/terraform-wt-match-<world>/<world>/`
 | --- | --- | --- |
 | `materials/<world>.json` | `world.knobDefaults`, `world.rock`, `world.surface`, `world.materials` (with `extra`), `world.shapes`, `water` | look (every window) |
 | `materials/textures.json` | materials used only by your world, or new ones named `<world>-...` | look (every window) |
-| `repro/scenes/<world>-<n>.json` | stroke cards' `rockPreset`, `groundPreset` and shape options (Steps, gullies, cracks, curve...); the query's `undulation*` keys; new `paint` strokes that lay a ground, or paint a style or override (Relief, Cracks, Banding, Relaxation, Deposits, Vegetation, Rock exposure; REFERENCE.md, "Paint channels") where the retail map differs | map (that window) |
+| `repro/scenes/<world>-<n>.json` | stroke cards' `rockPreset`, `groundPreset` and shape options (Steps, gullies, cracks, curve...); the query's `undulation*` keys and the map's own `sea` and `plain` (its plain's height above the sea; a low-floored retail map gets the game's whole 0-255); new `paint` strokes that lay a ground, or paint a style or override (Relief, Cracks, Banding, Relaxation, Deposits, Vegetation, Rock exposure; REFERENCE.md, "Paint channels") where the retail map differs | map (that window) |
 | `repro/scenes/<world>-<n>.json` | stroke points, `diameter`, `elevation`: only where the strokes do not follow the retail heights | shape (that window) |
 
 **The look lane** is the world: one answer for every window. **The map

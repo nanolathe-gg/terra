@@ -42,7 +42,8 @@ const params = new URLSearchParams(`biome=${scene.biome}&mapX=${MAPX}&mapY=${MAP
 for (const [k, v] of new URLSearchParams(extraQuery)) params.set(k, v);   // the page reads a key's first value, so an appended one would lose
 const search = params.toString();
 const strokes = scene.strokes.map(([kind, points, options]) => [kind, points.map(([x, y]) => [x + OX, y + OY]), options]);
-const writeHeights = (sea, heights) => writeFileSync(`${out}/ours-heights.json`, JSON.stringify({grid: 512, sea, heights}));
+// base: the plain above the sea (repro/stats.py reads it; a map may hold its own, the `plain` setting).
+const writeHeights = (sea, heights, base) => writeFileSync(`${out}/ours-heights.json`, JSON.stringify({grid: 512, sea, heights, ...(Number.isFinite(base) ? {base} : {})}));
 
 if (chrome) await renderInChrome();
 else await renderHeadless().catch(error => { console.error(`render.mjs: ${sceneFile}: ${error.message}`); process.exit(1); });
@@ -56,7 +57,7 @@ async function renderHeadless() {
   const options = s.drawOptions({clay: clayOn, light: 'original'});
   const pixels = await headless.renderWindow(s, {x: OX, y: OY, width: WINDOW, height: WINDOW, options});
   writeFileSync(`${out}/ours.png`, encodePng(WINDOW, WINDOW, pixels));
-  writeHeights(s.config.seaLevel, await headless.windowHeights(s, {x: OX, y: OY}));
+  writeHeights(s.config.seaLevel, await headless.windowHeights(s, {x: OX, y: OY}), s.config.baseHeight - s.config.seaLevel);
   // The picture must not depend on how the map is cut into tiles: the window's four 512 px tiles, baked alone, match the 256 px view tiles.
   const big = await headless.renderWindow(s, {x: OX, y: OY, width: WINDOW, height: WINDOW, tile: 512, options});
   let tiles = 0; for (let i = 0; i < big.length; i += 4) if (big[i] !== pixels[i] || big[i + 1] !== pixels[i + 1] || big[i + 2] !== pixels[i + 2]) tiles++;

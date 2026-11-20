@@ -2,7 +2,7 @@ import {requestAdapter} from './sculpt-webgpu.js';
 import {savedWorld,worldOverrideCount,copySavedWorld,worldKeys,applyEngineTables,copyEngineTables,storedWorldMap,LOOK_CARDS,lookCard,roleCard,roleNameCard,worldRoles,copyRoles,applyRoles} from './sculpt-save.js';
 import {normalizeSet} from './sculpt-feature-set.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
-import {configureMap,mapGeometry,mountMapCanvas,validMapSize} from './sculpt-map.js';
+import {configureMap,mapGeometry,mountMapCanvas,validMapSize,savedPlain} from './sculpt-map.js';
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,worldHome,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-column.js';
@@ -2022,7 +2022,7 @@ async function loadSketchFile(s,commit=true) {
   if(s.map && !validMapSize(s.map.unitsX,s.map.unitsY,s.seaLevel))throw new Error('The map file’s size or sea level is out of range (1–40 units a side, sea level 0–255).');
   const biome=typeof s?.biome==='string'?s.biome:'';
 
-  const mapChanged=(s?.map?.unitsX??0)!==(config.map?.unitsX??0) || (s?.map?.unitsY??0)!==(config.map?.unitsY??0) || (s?.map && s.seaLevel!==config.seaLevel);
+  const mapChanged=(s?.map?.unitsX??0)!==(config.map?.unitsX??0) || (s?.map?.unitsY??0)!==(config.map?.unitsY??0) || (s?.map && s.seaLevel!==config.seaLevel) || (s?.map && savedPlain(s)!==null && savedPlain(s)!==Math.round(config.baseHeight-config.seaLevel));
   // Opening a file always makes a map of its own (nothing is replaced); without a store, only a file of another world or size reloads.
   if (biome && ((mapStore && commit) || biome!==config.biomeId || s.worldSettings!==undefined || mapChanged)) {
     let served=false;
@@ -2034,7 +2034,7 @@ async function loadSketchFile(s,commit=true) {
       copyMapTools(s.tools);copyColumn(s.column);copyRockSettings(s.rock);copyRocks(s.rocks);copyMaterials(s.materials);s.nodes.forEach(checkedHeights);deserializeNodes(s.nodes);
     } catch (err) { error(err.message); return false; }
     if (!served) { error(`The saved terrain belongs to the ${biome} world, which this server does not have. The current terrain was left as it was.`); return false; }
-    const place={biome,mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:''},next=Object.fromEntries(Object.entries(place).filter(([,v])=>v!==''&&v!==null&&v!==undefined));
+    const place={biome,mapX:s.map?.unitsX??'',mapY:s.map?.unitsY??'',sea:s.map?s.seaLevel:'',plain:s.map?savedPlain(s)??'':''},next=Object.fromEntries(Object.entries(place).filter(([,v])=>v!==''&&v!==null&&v!==undefined));
     if (mapStore) {
       const id=newMapId();
       try { await mapStore.put(id,s,mapMeta(id,s)); await saveWorking(); }
@@ -2266,7 +2266,7 @@ async function openSharedLink() {
     if (!mapStore) { const token=Math.random().toString(36).slice(2)+Date.now().toString(36); await stashPendingSketch(token,shared); experiment.set('pendingSketch',token); }
     else { const mine=newMapId(); await mapStore.put(mine,shared,mapMeta(mine,shared)); tabState.map=mine; }
     experiment.set('shared','1'); experiment.set('biome',shared.biome); experiment.delete('world');
-    if (shared.map) { experiment.set('mapX',String(shared.map.unitsX)); experiment.set('mapY',String(shared.map.unitsY)); experiment.set('sea',String(shared.seaLevel)); }
+    if (shared.map) { experiment.set('mapX',String(shared.map.unitsX)); experiment.set('mapY',String(shared.map.unitsY)); experiment.set('sea',String(shared.seaLevel)); if (savedPlain(shared)!==null) experiment.set('plain',String(savedPlain(shared))); }
     return null;
   } catch (err) { return err.message; }
 }
@@ -3238,7 +3238,7 @@ function openNewMap(first=false, dimensionsFromMap=null, look=false) {
     clearTimeout(autosaveTimer);if(!await leaveMap()){$('new-map-error').textContent='Your current map could not be saved in this browser. Save it as a file before starting a new map.';return;}
     let lookToken='';
     if(look){lookToken=Math.random().toString(36).slice(2)+Date.now().toString(36);try{await stashPendingSketch(lookToken,sketch());}catch(err){$('new-map-error').textContent='This map’s look could not be handed to the new map ('+err.message+').';return;}}
-    const next={biome:look?config.biomeId:picked,...(look?{lookFrom:lookToken}:{}),mapName:$('new-map-name').value.trim()||'Untitled map',mapX:$('new-map-width').value,mapY:$('new-map-height').value,newMap:1,...(Number.isInteger(dimensionsFromMap?.sea)?{sea:dimensionsFromMap.sea}:{})};
+    const next={biome:look?config.biomeId:picked,...(look?{lookFrom:lookToken}:{}),mapName:$('new-map-name').value.trim()||'Untitled map',mapX:$('new-map-width').value,mapY:$('new-map-height').value,newMap:1,...(Number.isInteger(dimensionsFromMap?.sea)?{sea:dimensionsFromMap.sea}:{}),...(Number.isInteger(dimensionsFromMap?.plain)?{plain:dimensionsFromMap.plain}:{})};
     if(leaveFor(mapStore?newMapId():null,next))keepSaved=true;
   };
   dialog.showModal();
@@ -3304,7 +3304,7 @@ async function boot() {
       // An address without a size reopens the tab's map at its size and sea level.
       const w=experiment.has('pendingSketch')?null:workingMap;
       const m=w?.map;
-      if (m?.unitsX>0 && m?.unitsY>0) { experiment.set('mapX',String(m.unitsX)); experiment.set('mapY',String(m.unitsY)); if (!experiment.has('sea') && w.biome===config.biomeId && Number.isFinite(w.seaLevel)) experiment.set('sea',String(w.seaLevel)); }
+      if (m?.unitsX>0 && m?.unitsY>0) { experiment.set('mapX',String(m.unitsX)); experiment.set('mapY',String(m.unitsY)); if (!experiment.has('sea') && w.biome===config.biomeId && Number.isFinite(w.seaLevel)) experiment.set('sea',String(w.seaLevel)); if (!experiment.has('plain') && w.biome===config.biomeId && savedPlain(w)!==null) experiment.set('plain',String(savedPlain(w))); }
       else { experiment.set('mapX','4'); experiment.set('mapY','4'); }
     }
     {

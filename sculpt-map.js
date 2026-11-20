@@ -3,17 +3,24 @@ export {mountMapCanvas} from './sculpt-canvas.js';
 // Card D: rectangular map bounds over the prototype's square working
 // field. The extra south rows supply projected art, including the void strips.
 // A map's size (1-40 units a side) and sea level (0-255) as the editor can open them; a save or shared map with others is not opened.
+// A map's plain: how far its level ground stands above its sea (its world's own by default; Green 9). A whole number, the plain at most 255.
+export const validPlain=(plain,sea) => Number.isInteger(plain) && plain>=0 && sea+plain<=255;
+// The plain a saved map holds (its baseHeight over its sea level), or null.
+export const savedPlain=s => Number.isFinite(s?.baseHeight) && Number.isFinite(s?.seaLevel) ? Math.round(s.baseHeight-s.seaLevel) : null;
 export const validMapSize=(unitsX,unitsY,sea) => [unitsX,unitsY].every(n => Number.isInteger(n) && n>=1 && n<=40) && Number.isInteger(sea) && sea>=0 && sea<=255;
 export function configureMap(config, query) {
   if (!query.has('mapX') && !query.has('mapY')) return null;
   const unitsX=Number(query.get('mapX')),unitsY=Number(query.get('mapY')),sea=Number(query.get('sea')??config.defaultSeaLevel??64);
   if (!validMapSize(unitsX,unitsY,sea)) throw new Error('Map size must be 1–40 units on each side; sea level must be 0–255.');
+  const plain=query.has('plain')?Number(query.get('plain')):null;
+  if (plain!==null && !validPlain(plain,sea)) throw new Error('A map’s plain stands a whole number of units above its sea, from 0 up to 255 in all.');
   // DESIGN_MAP_GENERATOR geometry; 160 extra pixels cover base/2 even at
   // sea 255. Fields and GPU bakes are regional; this is the canonical lattice.
   config.map=mapGeometry(unitsX,unitsY);
   config.size=Math.max(config.map.width,config.map.height)+160; config.grid=config.size/2;
   config.worldSize=config.size; config.worldGrid=config.grid;
   config.baseHeight+=sea-config.seaLevel; config.seaLevel=sea;
+  if (plain!==null) config.baseHeight=sea+plain;   // the map's own plain (Map › Plain height above sea), else its world's
   return config.map;
 }
 

@@ -93,6 +93,7 @@ for (const t of w.tools ?? []) {
 const colorKeys = new Set(['sunColor', 'skyColor']);   // the light colors the address reads (sculpt-scene.js hexColors)
 for (const [k, v] of new URLSearchParams(query)) {
   if (colorKeys.has(k)) { if (!/^[0-9a-f]{6}$/i.test(v)) errors.push(`--query ${k}=${v}: a color is six hex digits (rrggbb).`); continue; }
+  if (k === 'sea' || k === 'plain') continue;   // a map's own heights (MAP_HEIGHTS below)
   if (!known.has(k)) { errors.push(`--query ${k}: not a World control or known setting, so it would change nothing. See section 1 of the reference.`); continue; }
   const r = ranges.get(k), x = Number(v);
   if (!Number.isFinite(x)) errors.push(`--query ${k}=${v}: not a number.`);
@@ -101,6 +102,8 @@ for (const [k, v] of new URLSearchParams(query)) {
 
 // The map lane: each window's scene.
 const UNDULATION = new Set(['undulation', 'undulationScale', 'undulationCover', 'undulationArt']);   // the map's ground node (sculpt-knobs.js UNDULATION)
+// A map's own sea level and plain height above it (Map pane; sculpt-map.js configureMap): a low-floored retail map uses the game's 0-255.
+const MAP_HEIGHTS = new Set(['sea', 'plain']);
 const [{SHAPE_FIELDS, LANDFORM_KEYS, SECTION_KEYS}, {worldSlots, materialUse}] = await Promise.all([import('../sculpt-scene.js'), import('./match_world.mjs')]);
 const {config, rocks, materials, missed} = await worldSlots(world, configs);
 if (missed.length) warnings.push(`world.rock: no room in the map's materials for the rock material of ${missed.join(', ')}; ${missed.length > 1 ? 'they show' : 'it shows'} the world's rock material (REFERENCE.md, "Rock slots")`);
@@ -118,6 +121,7 @@ for (const f of scenes) {
   const had = new Set(new URLSearchParams(before).keys());
   for (const [k, v] of new URLSearchParams(sc.query ?? '')) {
     if (!pinned.has(k)) pinned.set(k, []); pinned.get(k).push(`${f.replace('.json', '')} ${v}`);
+    if (MAP_HEIGHTS.has(k)) { if (!(Number.isInteger(Number(v)) && Number(v) >= 0 && Number(v) <= 255)) errors.push(`${at} query ${k}=${v}: a whole number 0-255.`); continue; }
     if (!known.has(k)) { errors.push(`${at} query ${k}: not a setting the page reads.`); continue; }
     if (!UNDULATION.has(k) && !had.has(k)) errors.push(`${at} query ${k}: a scene's query sets only the map's own ground relief (${[...UNDULATION].join(', ')}). ${k} is the world's: set it in world.knobDefaults, or give this map a rock type or ground of its own (README.md, "The map lane").`);
     const r = ranges.get(k), x = Number(v);
