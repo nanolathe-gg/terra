@@ -3151,7 +3151,7 @@ let releaseMap=null,shareError=null;   // lets go of this tab's hold on its map;
 // other tab has it; else none, and the picker asks. The map is held (a Web Lock) for as long as the page lives.
 async function chooseMap() {
   if (!SAVING) return;
-  try { mapStore=openMapStore(); await importLegacyMaps(mapStore,localStorageOrNull()); const {made,failed,skipped}=await convertStoredWorlds(mapStore,localStorageOrNull()); worldsNote=[made?`${made===1?'Your saved world is now a map':`Your ${made} saved worlds are now maps`}, named after ${made===1?'it':'them'}, in Maps. To start from one, open it, then Map › New map with this look.`:'',failed?`${failed===1?'One saved world':`${failed} saved worlds`} could not be turned into ${failed===1?'a map':'maps'} yet; ${failed===1?'it stays':'they stay'} in this browser and the editor tries again next time.`:'',skipped?`${skipped===1?'One saved world':`${skipped} saved worlds`} could not be read and ${skipped===1?'was':'were'} left out.`:''].filter(Boolean).join(' '); if (worldsNote) mapsNote=worldsNote; }
+  try { mapStore=openMapStore(); await importLegacyMaps(mapStore,localStorageOrNull()); const {made,failed,skipped}=await convertStoredWorlds(mapStore,localStorageOrNull()); worldsNote=[made?`${made===1?'Your saved world is now a map':`Your ${made} saved worlds are now maps`}, named after ${made===1?'it':'them'}, in Maps. To start from one, open it, then Map › New map with this look.`:'',failed?`${failed===1?'One saved world':`${failed} saved worlds`} could not be turned into ${failed===1?'a map':'maps'} yet; ${failed===1?'it stays':'they stay'} in this browser and the editor tries again next time.`:'',skipped?`${skipped===1?'One saved world':`${skipped} saved worlds`} could not be read; ${skipped===1?'it stays':'they stay'} in this browser, left out of Maps.`:''].filter(Boolean).join(' '); if (worldsNote) mapsNote=worldsNote; }
   catch (err) { mapStore=null; mapsNote='Saving in this browser is unavailable ('+err.message+'). Use Save to keep your map as a file.'; }
   shareError=await openSharedLink();
   if (!mapStore) return;
@@ -3176,12 +3176,12 @@ let worldsNote='';   // what converting the world store did (Maps' note and the 
 async function convertStoredWorlds(store,storage) {
   let stored=null; try { stored=JSON.parse(storage?.getItem(WORLD_STORE)||'null'); } catch (_) {}
   if (!stored||typeof stored!=='object'||Array.isArray(stored)) { if (stored!==null) try { storage.removeItem(WORLD_STORE); } catch (_) {} return {made:0,failed:0}; }
-  const known=new Set((await store.list()).map(m => m.id)),configs=new Map();let made=0,failed=0,skipped=0;
+  const known=new Set((await store.list()).map(m => m.id)),configs=new Map(),left={};let made=0,failed=0,skipped=0;
   for (const [id,w] of Object.entries(stored)) {
     if (!w||typeof w!=='object'||w.openedFrom||typeof w.base!=='string') continue;
     const mapId='world-'+id.replace(/[^a-z0-9-]/gi,'').slice(0,80);if (known.has(mapId)) continue;
-    // Only a failure that may pass (the network, the map store) leaves the store for the next boot; a world whose base this build has no more,
-    // or whose record cannot be read, never converts and is skipped.
+    // A world that does not convert stays in the store, never lost: one whose base this build has no more, or whose record cannot be read,
+    // is left out of Maps with a note (permanent); a failure that may pass (the network, the map store) is tried again next time.
     let permanent=true;
     try {
       if (!configs.has(w.base)) { permanent=false; const response=await fetch(configUrl(w.base)); permanent=response.status===404; if (!response.ok) throw Error(`the ${w.base} world could not be read`); configs.set(w.base,applyWorldRock(await response.json())); permanent=true; }
@@ -3189,9 +3189,10 @@ async function convertStoredWorlds(store,storage) {
       if (builtIn&&!worldOverrideCount(w,cfg)) continue;   // a built-in world nobody changed
       const s=storedWorldMap({...w,name:builtIn?`${w.name||cfg.biome} (your settings)`:w.name},cfg,mapGeometry(4,4));
       permanent=false; await store.put(mapId,s,mapMeta(mapId,s,made+1));made++;   // dated at the start of time: a tab reopens the map edited last, not these
-    } catch (err) { if (permanent) skipped++; else failed++; console.warn(`The saved world “${w.name||id}” could not be turned into a map${permanent?' and is left out':''}:`,err.message); }
+    } catch (err) { if (permanent) skipped++; else failed++; left[id]=w; console.warn(`The saved world “${w.name||id}” could not be turned into a map${permanent?'; it stays in this browser':''}:`,err.message); }
   }
-  if (!failed) try { storage.removeItem(WORLD_STORE); } catch (_) {}
+  // Converted worlds leave the store (so a map deleted later is not made again); the rest stay.
+  try { if (Object.keys(left).length) storage.setItem(WORLD_STORE,JSON.stringify(left)); else storage.removeItem(WORLD_STORE); } catch (_) {}
   return {made,failed,skipped};
 }
 function newMapReady() { $('new-map-open').disabled=!ready; }
