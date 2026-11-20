@@ -218,7 +218,14 @@ Change nothing else:
   reason they did not show. Round 4 wrote that the shelf cannot take a
   fine speckle, but never tried `bedContrast`, the control that carries the
   bed's grain into the shelf; and that a shape preset cannot reach a
-  window, from a trial that changed a shape no window draws.
+  window, from a trial that changed a shape no window draws. Round 5 wrote
+  that a rock type's new material was not bound because the map's table
+  was full. REFERENCE.md's "Rock slots" table shows each rock type's
+  material and how full the table is, and it was bound (15 of 23 slots).
+  Its moss material had kept the gray rock's `color` key, which recolors
+  the whole graph; without it the face turned green. Cite that table, and
+  read the material's own keys, before you write that a material is not
+  used.
 - **Scores can be gamed.** In past rounds, a flat gray matched retail's
   average brightness, scattered dark boulders improved a score, and
   blotches added "texture". Round 4 matched green-5's plain edge count
