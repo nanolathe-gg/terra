@@ -109,8 +109,10 @@ unchanged (.192/.102).
   47 (retail 55); the pale ledge streaks and retail's black east shadows remain.
 - **Green-1's coastal pits come from the ground roll, not Time:** they stay
   with erosion=0 (its 023) and go at undulation 5 (024, shape .169). The
-  Relaxation: less paint stays. engine-shape.wgsl `groundLifted` fades the
-  roll in by height over sea+1..sea+8 (a code reading; proposal).
+  Relaxation: less paint stays. The round's guess, `groundLifted`'s height
+  fade (sea+1..sea+8), is ruled out: with the fade removed, green-1 without
+  its paint renders byte-identical (reviewer's throwaway edit, 2026-11-20;
+  a 3x roll in the same file changed 6.8% of pixels, so it was loaded).
 - **Green-5's slope risers are out of reach of data:** every kind of lever
   was tried (rock 031-034, map 030/035, material and layer 036-038, 048);
   slope lines stay .0018 against .0045. A layer's material relief is unlit,
@@ -132,6 +134,12 @@ Leads:
 4. **Gentle crinkle** (green-5's gentle grade, green-2's lines): a layer
    material that bakes its relief through a Light node, instead of dark lines.
 5. Shape presets and the contour-line levers were not reached.
+6. **New since round 13** (harness and editor, 2026-11-20): a scene may set
+   its map's own water (`shallowDepth`, `deepDepth`, `bedTint`, `bedBright`,
+   `bedContrast`, `bedCracks`, `wetBand`; green-1's shelf is the candidate);
+   the damp band `wetBand` is a World control; `faceScratch` is the lever
+   for green-6's down-slope ribs; one metric counts at most 3 family band
+   widths in a score.
 
 ## Pilot notes (2026-11-18)
 

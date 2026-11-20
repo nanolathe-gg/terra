@@ -82,10 +82,12 @@ water, and red-1's own wider dry bank.
 
 Leads:
 
-1. **The wet band** (`material.wetBand` 13, outside the match lanes)
-   darkens ground and rock up to 52 units above the sea: red-3's
-   near-black coast and red-2's dark bank. `flatBank` lifts it but also
-   takes the bank's light and shade (round 1, trial-085).
+1. **The damp band** is now a World control, `wetBand` (Water & shores;
+   Red's material table sets 13). It darkens ground up to 13 units above
+   the sea and rock up to 52: red-3's near-black coast and red-2's dark
+   bank. At 1, every red-3 shore finding clears (reviewer's holdout
+   diagnostic). Choose its value on red-1 and red-2, check red-3, then
+   re-trial without the two dry-bank layers, which worked around it.
 2. **Relief .8** scores best but puts red-1's steep edges at 6x retail
    and red-2's bank edges at 3.4x; .5 halves them and costs .026 of mean
    look (trial-088).
@@ -93,16 +95,26 @@ Leads:
    2-8 units with soft polygon cracks. Fissure networks draw thin dark
    lines the look score punishes; lumps paint lands in the flat class.
 4. **Water by map:** red-2's river stays light to depth 24, red-3's sea
-   darkens from depth 8; the shelf's crack web (`bedCracks`) is absent in
-   retail but removing it costs red-1's ponds.
+   darkens from depth 8. Red renders shallowDepth 2 and deepDepth 42 (its
+   material table; round 1's REFERENCE.md wrongly showed 24 and 60), and
+   deepDepth 90 takes red-2 .13 to .11. A scene may now set its own water
+   keys (README, map lane). The shelf's crack web (`bedCracks`) is absent in
+   retail but removing it costs red-1's ponds: a per-map choice now.
 5. Red-1's flat share is still 29% against 19%.
 6. **Red-2's river outline** (reviewer, by eye, trial-084 pair): retail's
    river curves down to the west edge as a channel with banks in fine
    concentric steps; ours is a square pool with a few broad dark terraces.
    Check its water strokes against layout.png first (shape lane).
-7. **Red's tools after round 1** (not viewed): the world rock face is .8 now,
+7. **Rock streaks:** retail's knobs have fine down-slope streaks;
+   `faceScratch` (with Size, Length, Angle 0) draws grooves down a face and
+   was only tried at 0 (round 1's 021).
+8. **Red's tools after round 1** (not viewed): the world rock face is .8 now,
    but darkknob keeps 2, and red-1's crescent on darkknob drew hard black
    lines retail lacks (trial-072). The Knob and Crescent tools draw darkknob.
+
+Scores: one metric now counts at most 3 family band widths (harness,
+2026-11-20); red-3's base look reads .86 instead of 1.20, most of it from
+230 thin dark pixels at the waterline.
 
 Reviewer's note (2026-11-20): relief .8 was ported as kept. At .5 the
 steep crop is a little smoother, but neither matches retail's smooth,
