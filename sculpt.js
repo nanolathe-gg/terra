@@ -22,6 +22,7 @@ import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postM
 import {openMapStore,importLegacyMaps,mapMeta,mapToReopen,byRecent,mapsInUse,holdMap,newMapId,readTab,writeTab,cleanAddress,startsMap,LEGACY_KEYS} from './sculpt-maps.js';
 import {isRiver,pointsSignature,movedRiver,seedRiverLine} from './sculpt-river.js';
 import {HELP_TOOLS} from './sculpt-help-examples.js';
+import {ToolPictures,copyPictures,savedPictures,pictureKey,encodePicture,mapPictureSize,worldSnapshot,worldPictureKey,toolFrame,TOOL_PATH} from './sculpt-thumbnails.js';
 import {copySurface,layerKey,withSurfaceMaterials} from './sculpt-material-model.js';
 import {mountSurfacePanel,BUILTIN_LABELS} from './sculpt-surface-panel.js';
 import {goTo, bringIntoView} from './sculpt-find.js';
@@ -92,6 +93,7 @@ let tool='plateau', seed=DEFAULT_SEED, varySeed=true, refinementSeed=DEFAULT_SEE
 const randomSeed=current=>{const next=(Math.random()*4294967296)>>>0;return next===current?(next+1)>>>0:next;};
 let history=[], historyIndex=-1, historySerial=0;
 let revision=0, autosaveTimer, ready=false;
+let pictures={map:null,tools:{}};   // the save's pictures (sculpt-thumbnails.js; picturesNow)
 const TOOL_FIELDS={cracks:['cracks',0,100],diameter:['diameter',16,1200],amount:['amount',-80,160],roughness:['roughness',0,100],softness:['softness',0,100]};
 for (const [key,id,,,lo,hi] of SHAPE_FIELDS) TOOL_FIELDS[key]=[id,lo,hi];
 const worldSetting=key => worldSettingIn(config,experiment,key);
@@ -219,7 +221,9 @@ function buildToolbar() {
     const b=document.createElement('button');
     b.dataset.tool=t.id; b.dataset.shape=shapeFrom(config,toolShape(t)); if (t.help) b.dataset.help=t.help; b.setAttribute('aria-pressed','false'); b.setAttribute('aria-label',t.label); b.title=t.label;
     b.style.setProperty('--tool-color',t.color); b.disabled=true;b.dataset.unavailable=toolUnavailable(t);if(b.dataset.unavailable)b.title=b.dataset.unavailable;
-    if (!t.card && HELP_TOOLS.includes(b.dataset.shape)) { const pic=new Image(); pic.className='tool-pic'; pic.loading='lazy'; pic.alt=''; pic.src=`ui-previews/tool-${b.dataset.shape}.png`; b.append(pic); }
+    // Its picture: the map's own of this tool in this world (sculpt-thumbnails.js) once drawn, until then the shape's hover example.
+    const own=pictures.tools[t.id]?.image;
+    if (own || !t.card && HELP_TOOLS.includes(b.dataset.shape)) { const pic=new Image(); pic.className='tool-pic'; pic.loading='lazy'; pic.alt=''; pic.src=own??`ui-previews/tool-${b.dataset.shape}.png`; b.append(pic); }
     const name=document.createElement('span'); name.className='tool-name'; name.textContent=t.label; b.append(icon(t.icon),name);
     if (t.card) b.dataset.mapTool='';   // a map's own: its hover shows its shape's sketch, not the shape's rendered example
     return b;
@@ -772,6 +776,11 @@ function nodeBounds(n) {
   // A height image covers its samples and the margin round them (heightsBounds); it reads no other cell, so it has no read apron (regionalReadApron).
   if (n.kind==='heights') { const b=heightsBounds(n); return {x0:clamp(Math.floor(b.x0/spacing-originCellX),0,grid-1),y0:clamp(Math.floor(b.y0/spacing-originCellY),0,grid-1),x1:clamp(Math.ceil(b.x1/spacing-originCellX),0,grid-1),y1:clamp(Math.ceil(b.y1/spacing-originCellY),0,grid-1)}; }
   if (!n.points) return {x0:0,y0:0,x1:grid-1,y1:grid-1};
+  const {ax,ay,bx,by,r}=nodeReach(n);
+  return {x0:clamp(Math.floor((ax-r)/spacing-originCellX),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing-originCellY),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing-originCellX),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing-originCellY),0,grid-1)};
+}
+// A drawn shape's points' box (ax..bx, ay..by, px) and how far it reaches past them (r, px), unclamped: nodeBounds' box, and a tool picture's frame.
+function nodeReach(n) {
   const q=nodeShapeParams(n),radius=q.radius||40,rough=q.rough??.35;
   const reach={erase:Math.min(1.7,1+rough*1.3)+1.9*rough,sand:Math.min(1.7,1+rough*1.3)+1.9*rough,grass:Math.min(1.7,1+rough*1.3)+1.9*rough,paint:Math.min(1.7,1+rough*1.3)+1.9*rough}[n.kind] ?? 1+.4*rough;
   let r=radius*reach+12*spacing;
@@ -788,7 +797,7 @@ function nodeBounds(n) {
   // A fissure reaches its branches (and their forks) and, in network mode, its footprint.
   if (n.kind==='fissure') { const k=n.frame?Math.hypot(n.frame[0],n.frame[1]):1; r=(q.fissureNetwork>=.5?radius*1.1:0)+(Math.round(q.fissureBranches)>=1?(q.fissureBranchLen||0)*2.4*k:0)+(q.fissureWidth||5)*3*k+24+12*spacing; }
   if (extent?.spur!=null) r+=extent.spur;
-  return {x0:clamp(Math.floor((ax-r)/spacing-originCellX),0,grid-1),y0:clamp(Math.floor((ay-r)/spacing-originCellY),0,grid-1),x1:clamp(Math.ceil((bx+r)/spacing-originCellX),0,grid-1),y1:clamp(Math.ceil((by+r)/spacing-originCellY),0,grid-1)};
+  return {ax,ay,bx,by,r};
 }
 // How far past its path a landform's brush reaches, term by term (the extents its segment boxes use): `reach`, its section grown by the width
 // variation, wander, talus, copies and impact (landformReach); `coast`, its shore features (null without any); `prism`, prisms standing past the
@@ -1922,7 +1931,84 @@ function nodeDefaults(n,own=mapTools,tables) {
 function workingCopy() {
   const s=sketch();
   s.world=worldId;
-  return s;
+  return withPictures(s);
+}
+// A save with the pictures drawn so far (Maps' entry and Download file; a share link carries none). Attaching them costs nothing: they are
+// drawn only when the editor is idle (picturesNow), never while saving.
+function withPictures(s) { const p=savedPictures(pictures,toolIds()); if (p) s.pictures=p; return s; }
+
+// The save's pictures (sculpt-thumbnails.js): the map from above, drawn once the map has been left alone for PICTURE_QUIET after a change
+// (or when it is downloaded), and each toolbar tool's stroke in this map's world, drawn one at a time while the editor is idle, only where a
+// tool's key (what its picture reads) has changed. New pictures reach the map's entry with the next save, or one save once they are done.
+let mapPictureDue=true,pictureEdits=0,pictureTimer=null,pictureSaveTimer=null,toolPictures=null;
+const PICTURE_QUIET=15000;
+const pictureStats={map:[],tools:0,skipped:{}};
+const editorQuiet=() => ready && !loading && !stroke && !moving && !document.hidden && !sculptRegion.previewActive() && Boolean(mapCanvas) && !mapCanvas.gpuWorkPending() && !mapCanvas.previewWorkPending() && !mapCanvas.foregroundPending();
+function picturesLater(delay=PICTURE_QUIET) { clearTimeout(pictureTimer); pictureTimer=setTimeout(picturesNow,delay); }
+async function picturesNow() {
+  pictureTimer=null;
+  if (!editorQuiet()) { picturesLater(3000); return; }
+  if (mapPictureDue) { const drawn=await drawMapPicture(); if (drawn) picturesChanged(); else if (drawn===null) { picturesLater(3000); return; } }
+  queueToolPictures();
+}
+// The map's picture: its play area baked at a coarse level through the view's own renderer, in tiles of at most MAP_PICTURE_TILE px (one bake of
+// a whole large map does not fit the renderer's budget), then drawn down to MAP_PICTURE. Between tiles it gives way: an edit, or (unless the
+// artist asked, Download file) any input or view work, stops it, and the next quiet moment starts it again. Measured (M-series Mac, Metal):
+// a 4 x 4 map is one tile, 24-72 ms; a 16 x 16 map is 16 tiles, 1.0-1.2 s in all, at most 94 ms a tile.
+const MAP_PICTURE_TILE=2048;
+async function drawMapPicture(asked=false) {
+  const m=config.map; if (!mapCanvas || !m) return false;
+  const edits=pictureEdits,width=m.playRight??m.width,height=m.playBottom??m.height,fit=mapPictureSize(width,height),t0=performance.now();
+  const canvas=new OffscreenCanvas(Math.ceil(width/fit.level),Math.ceil(height/fit.level)),g=canvas.getContext('2d',{alpha:false});
+  try {
+    for (let y=0;y<height;y+=MAP_PICTURE_TILE) for (let x=0;x<width;x+=MAP_PICTURE_TILE) {
+      if (edits!==pictureEdits || !asked && !editorQuiet()) return null;   // gave way: picturesNow tries again
+      const bitmap=await mapCanvas.debugBake({x,y,width:Math.min(MAP_PICTURE_TILE,width-x),height:Math.min(MAP_PICTURE_TILE,height-y)},fit.level);
+      g.drawImage(bitmap,x/fit.level,y/fit.level); bitmap.close?.();
+    }
+    const image=await encodePicture(canvas,fit.width,fit.height); canvas.width=canvas.height=1;
+    pictureStats.map.push(Math.round(performance.now()-t0)); if (pictureStats.map.length>20) pictureStats.map.shift();
+    if (!image) return false;
+    pictures.map={image}; if (edits===pictureEdits) mapPictureDue=false;
+    return true;
+  } catch (error) { console.warn('The map picture could not be drawn',error); return false; }
+}
+// A toolbar tool's stroke along the hover examples' path, as a scene draws it (scriptedScene), its rock and ground among the map's.
+// A world tool that is a preset of a drawn shape (Knoll, Escarpment) is given with its card, as the map's own tools are: a landform stroke with it.
+function toolPictureNodes(id) {
+  const tools=[...(worldToolList??[]).filter(authoredWorldTool).map(t=>({...t,card:toolCard(t.id)})),...mapTools],scene=list => sceneNodes(config,[[id,TOOL_PATH,{seed:2701}]],{ground:false,seed:2701,settings:experiment,tools:list});
+  let list; try { list=scene(tools); } catch (error) { const t=toolById(id); if (!t || tools.some(x => x.id===id)) throw error; list=scene([...tools,{...t,card:toolCard(id)}]); }
+  return keepStrokeTools(keepStrokeMaterials(keepStrokeRocks(list,mapRocks),mapMaterials),toolIds());
+}
+function queueToolPictures() {
+  const main=mapCanvas?.renderer; if (!ready || !main) return;
+  const world=worldSnapshot(main,worldKeys(config)),context=shapeContext(),options=currentDrawOptions(),worldKey=worldPictureKey(world,context,options);
+  toolPictures??=new ToolPictures({idle:editorQuiet});
+  for (const t of shapeTools().slice(1)) {
+    if (toolUnavailable(t)) { pictureStats.skipped[t.id]='unavailable'; continue; }
+    let nodes; try { nodes=toolPictureNodes(t.id); } catch (error) { pictureStats.skipped[t.id]=error.message; continue; }   // a tool a scene cannot draw keeps its hover example
+    const rocks=new Map(rocksInUse(nodes,mapRocks).map(r => [r.slot,r])),key=pictureKey(worldKey,nodes,[...rocks]);
+    if (pictures.tools[t.id]?.key===key) continue;
+    const drawn=nodes.filter(n => n.points?.length); if (!drawn.length) { pictureStats.skipped[t.id]='no stroke'; continue; }
+    const reaches=drawn.map(nodeReach),reach={ax:Math.min(...reaches.map(q => q.ax)),ay:Math.min(...reaches.map(q => q.ay)),bx:Math.max(...reaches.map(q => q.bx)),by:Math.max(...reaches.map(q => q.by)),r:Math.max(...reaches.map(q => q.r))};
+    toolPictures.request(main,{id:t.id,key,world,nodes,frame:toolFrame(reach),rocks,context,refSpacing:spacing,options,done:(error,image) => {
+      if (error || !image) { console.warn('A tool picture could not be drawn',t.id,error); return; }
+      pictures.tools[t.id]={key,image}; pictureStats.tools++; showToolPicture(t.id); picturesChanged();
+    }});
+  }
+}
+function showToolPicture(id) {
+  const image=pictures.tools[id]?.image; if (!image) return;
+  for (const b of document.querySelectorAll(['#shape-tools','#map-shape-tools','#water-tools'].map(g => `${g} button[data-tool="${CSS.escape(id)}"]`).join(','))) {
+    let pic=b.querySelector('.tool-pic');
+    if (!pic) { pic=new Image(); pic.className='tool-pic'; pic.alt=''; b.prepend(pic); }
+    pic.src=image;
+  }
+}
+// New pictures go into the map's entry once they stop coming (one save for a round of tool pictures), when the editor is idle.
+function picturesChanged() {
+  clearTimeout(pictureSaveTimer);
+  pictureSaveTimer=setTimeout(function write() { if (toolPictures?.queue.size) { pictureSaveTimer=setTimeout(write,1000); return; } if (!editorQuiet()) { pictureSaveTimer=setTimeout(write,2000); return; } if (!keepSaved) saveWorking(); },1000);
 }
 // Writes this tab's map to its entry; answers the write (a promise), or false when nothing is saved (a scratch page, no map chosen, no store).
 function saveWorking() {
@@ -1948,6 +2034,7 @@ function persistLater(delay=450) {
   if (!SAVING) { $('save-state').textContent='Comparison sketch · use Map › Save as link or Download file to keep it.'; return; }
   if (!mapStore) { $('save-state').textContent=mapsNote||'Saving in this browser is unavailable. Use Save to keep this map as a file.'; return; }
   if (delay<200) { saveHeld=saveHeld || performance.now()-lastSaveAt<200; if (saveHeld) delay=200; }
+  mapPictureDue=true; pictureEdits++; picturesLater();   // the pictures wait for the map to be left alone
   clearTimeout(autosaveTimer); autosaveTimer=setTimeout(async () => {
     saveHeld=false;
     if (stroke || moving || loading) { persistLater(); return; }
@@ -1973,6 +2060,8 @@ function loadSketch(s,carry=false) {
   shapeClipboard=null;   // copied shapes name this map's rocks and materials: they do not paste into another map
   // Reject damaged saves before committing any pending edit to the old map.
   worldInputQueue.flush();
+  // Its pictures show at once; a tool's whose key no longer matches (another build, another world) is drawn again when the editor is idle.
+  { const p=copyPictures(s.pictures); toolPictures?.cancel(); pictures={map:p?.map??null,tools:{...(p?.tools??{})}}; mapPictureDue=!p?.map; if (ready) picturesLater(); }
   if(!carry&&rock)setRockSettings(rock);
   cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather();
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; varySeed=s.varySeed!==false; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
@@ -2222,7 +2311,15 @@ $('undo').addEventListener('click',() => moveHistory(-1)); $('redo').addEventLis
 $('blank').addEventListener('click',() => { if (stroke) return; applySeedControl(); refinementSeed=seed; cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); nodes=[]; selected=-1;alsoSelected=[]; addGroundNode(); regionalFields.changed(); markChanged(); checkpoint(); status('Blank dry ground.'); schedule(); queueWeather(); });
 // The downloaded file is named after the map (Map › Map name), as the exported .ufo is.
 const mapFileName=() => ($('map-name').value.trim().replace(/[^\w-]+/g,'_').replace(/^_+|_+$/g,'')||'map')+'.json';
-$('save').addEventListener('click',() => { if (!stroke) download(new Blob([JSON.stringify(sketch())],{type:'application/json'}),mapFileName()); });
+// Download file: the save with its pictures. A map picture that is out of date is drawn first (tens of ms on a 4 x 4 map; never more than 1.5 s, or the
+// file keeps the last one); tool pictures this world still lacks follow when the editor is idle.
+$('save').addEventListener('click',async () => {
+  if (stroke) return;
+  const s=sketch();
+  if (mapPictureDue || !pictures.map) { const drawn=await Promise.race([drawMapPicture(true),new Promise(r => setTimeout(() => r(false),1500))]); if (drawn) picturesChanged(); }
+  download(new Blob([JSON.stringify(withPictures(s))],{type:'application/json'}),mapFileName());
+  if (SAVING) picturesLater(2000);
+});
 $('load').addEventListener('click',() => { if (!stroke) $('file').click(); });
 // With no map open yet, a file picker closed without a file, or a file that fails to load, goes back to the picker: there is still
 // nowhere to save a map drawn. (From the first picker, the picker is already back behind the file chooser.)
@@ -3125,7 +3222,7 @@ async function bootMap(pending=null) {
     }
   }
   else status('Blank map ready · draw terrain with the existing tools.');
-  ready=true; $('editor').disabled=false; $('world-editor').disabled=false; $('loading-screen').classList.add('ready'); loadingStep('Drawing the terrain…'); setTimeout(loadingDone,10000);
+  ready=true; if (SAVING) picturesLater(); $('editor').disabled=false; $('world-editor').disabled=false; $('loading-screen').classList.add('ready'); loadingStep('Drawing the terrain…'); setTimeout(loadingDone,10000);
   if (resave) saveWorking();
   history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
   if (pending) { try {   // a page that keeps no maps: the one-use handoff (Cache API)
@@ -3279,7 +3376,10 @@ async function savedMapsList() {
       try { await mapStore.remove(m.id); } catch (err) { $('new-map-error').textContent='The map could not be deleted ('+err.message+').'; }
       savedMapsList();
     };
-    row.append(text,open,drop);return row;
+    // Its picture from above (sculpt-thumbnails.js), or an empty box of the same size for a map that has none yet.
+    const pic=document.createElement(m.picture?.startsWith('data:image/webp;base64,')?'img':'span');pic.className='new-map-saved-picture';
+    if (pic.tagName==='IMG') { pic.src=m.picture; pic.alt=''; pic.width=pic.height=56; }
+    row.append(pic,text,open,drop);return row;
   }));
 }
 document.addEventListener('terraform-new-map',e=>{if(ready&&!loading&&!stroke&&!moving)openNewMap(false,e.detail);});
@@ -3379,6 +3479,10 @@ window.sculptDebug = {dirty:()=>mapCanvas?.dirty(),inputs:()=>worldInputQueue.st
 window.sculptDebug.savedMap=() => mapStore&&tabMapId?mapStore.get(tabMapId):Promise.resolve(null);
 window.sculptDebug.replaceSavedMap=s => { if(!mapStore||!tabMapId)return Promise.resolve(false); clearTimeout(autosaveTimer); keepSaved=true; return mapStore.put(tabMapId,s,mapMeta(tabMapId,s)).then(() => true); };
 window.sculptDebug.saveNow=() => Promise.resolve(saveWorking());
+// The save's pictures (sculpt-thumbnails.js) for the checks: what is drawn, what is queued and how long the map's took; clearPictures forgets them.
+window.sculptDebug.pictures=() => ({map:pictures.map?.image??null,tools:Object.fromEntries(Object.entries(pictures.tools).map(([id,p]) => [id,p.image])),mapDue:mapPictureDue,queued:toolPictures?.queue.size??0,running:Boolean(toolPictures?.running),timer:pictureTimer!==null,mapMs:[...pictureStats.map],toolsDrawn:pictureStats.tools,toolMs:toolPictures?.stats.ms??0,skipped:{...pictureStats.skipped},quiet:{ready,loading,stroke:Boolean(stroke),moving:Boolean(moving),hidden:document.hidden,preview:sculptRegion.previewActive(),gpu:mapCanvas?.gpuWorkPending(),previewWork:mapCanvas?.previewWorkPending(),foreground:mapCanvas?.foregroundPending()}});
+window.sculptDebug.clearPictures=() => { toolPictures?.cancel(); pictures={map:null,tools:{}}; mapPictureDue=true; };
+window.sculptDebug.picturesNow=() => picturesNow();
 window.sculptDebug.tabMap=() => tabMapId;
 window.sculptDebug.pagedShapeCompare=async rect => {
   const eng=await createShapeEngine({device:renderer.device,grid:worldGrid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT});

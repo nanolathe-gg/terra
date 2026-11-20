@@ -129,6 +129,7 @@
     "sculpt-materials.js",
     "sculpt-material-cache.js",
     "sculpt-material-preview.js",
+    "sculpt-thumbnails.js",
     "sculpt-material-graph.js",
     "sculpt-material-editor.js",
     "sculpt-surface-panel.js",
