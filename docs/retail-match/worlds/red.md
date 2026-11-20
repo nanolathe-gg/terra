@@ -16,8 +16,8 @@ Means of the tuning windows at the base (main 50328b75): shape .27, look .33.
 
 | Window | Rock slot used | Rock type |
 | --- | --- | --- |
-| red-1 | none set (-1: the world's own rock) | the rock keys in `knobDefaults` (rockFace .8 since round 1) |
-| red-2 | 2 on the knob stroke (round 1); the rest unset | `darkknob` (crust -.3, rockFace 2) |
+| red-1 | 1 on every stroke (round 2) | Smooth soil (`soil`, the Hill tool's): no rock shown, no face construction |
+| red-2 | 2 on the knob stroke (round 1); the rest unset | `darkknob` (crust -.3, rockFace 2, material `red-knob` since round 2) |
 | red-3 | none set | the world's own rock |
 
 `rubble` (slot 3) reaches no window. red-2 paints Rock (channel 1, amount
@@ -69,7 +69,64 @@ pairs.
   spider, king of the hill and red river.
 - Retail's plain sits at 85 with the sea 5-38 below it.
 
-## Start here (round 2)
+## Start here (round 3)
+
+Round 2 (branch `match-red-2`, 111 of 300 trials; report in
+`$R/match/terraform-wt-match-red-2/red/REPORT.md` or the round's final
+message) took the mean from shape .14, look .17 (trial-000) to shape .13,
+look .10 (trial-111: red-1 .11/.12, red-2 .14/.08); held-out red-3 .86 to
+.83 (holdout-006). Kept: `wetBand` 4 in knobDefaults; red-2's own water
+(deepDepth 100, bedCracks 0); red-1's strokes on Smooth soil (slot 1);
+red-1's plain rolls more (undulation 8, cover .75); darkknob draws
+`red-knob`, a rock material of vertical ribs. A world faceRock 0 was kept
+and then reverted in favour of red-1's soil choice (Red's real cliffs are
+fluted rock: `$R/agent-biome-match/out/catalog/red/crops/cliff-ashap_plateau.png`).
+
+Leads:
+
+1. **Red-1's soil faces** carry the ground relief's fine down-slope
+   streaks: the window's edge directions now match retail (horizontal
+   edges left the furthest list), but steep edge density is 15x retail
+   and slope edges 2x (trial-111). There is no middle: any rock face
+   construction (rockFace .1, .4 from slope .2 or .8) brings the
+   contour-wise edges back (trial-108..110). At reliefAmount .5 the same
+   choice draws 4.8x (trial-047) but scores .14 with undulation 8
+   (trial-083): the owner's relief call.
+2. **Red-2's NW upland** (largest finding, gentle edges 0.00x): retail's
+   upland is pitted 2-8 units in 30-50 px polygon cells. A material of
+   lit 40 px cells with soft dark borders (`red-crumple`, diff in the
+   round's folder) draws the network by eye (trial-071), but our heights
+   there stay level, so the gentle class never forms; a cut landform
+   with heightVary pits the heights but reads crumbly (trial-041/042/073).
+   See the round's proposal.
+3. **Red-3's sea shelf** reads 92 against 65, its share 25% against 15%.
+   World deepDepth 26 (red-2 keeps its own 100) takes red-3 .83 to .80
+   and red-1 .12 to .11 (trial-104, holdout-005), but it was judged
+   mainly on the held-out window and not kept: a reviewer's call.
+4. **Red-3's coast rock** is blotchy near-black: world rock faceTone .5
+   (its maximum). faceTone .15 calms red-2's knobs by eye with the same
+   score (trial-107; darkknob .1 in trial-092) and was not kept (its
+   finding moved under a third). Red-3's thin dark pixels (236) are dark
+   rock specks poking into the shelf along its north coast, not the damp
+   band.
+5. **wetBand**: 4 suits the tuning windows; red-3 prefers 1 (holdout-002
+   .81 against .83). At 1-2, red-2 gains about 40 thin dark pixels: the
+   shadow seam at its island knob's waterline, which crosses the line
+   threshold as the bank lightens (trial-049). crispShore .5 removes it
+   on red-2 but costs red-1 (trial-053..055).
+6. **The dry-bank layers** still earn their place at wetBand 4 and 1
+   (trial-056/057).
+7. **Red-1's steep:light** (108 against 88): lightCap 1.05 clears it and
+   takes red-1 to .09 but red-2 to .14 (trial-080).
+8. Red-2's strokes follow the retail water footprint to within a stroke
+   width; moving the second bank stroke east made the look worse
+   (trial-099/100). The stroke `cracks` field is live but gated by world
+   crackSeverity 0.
+
+Reviewer's notes from round 2 still to settle: relief .8 (owner's call),
+and whether red-1's soil choice is right given its denser steep edges.
+
+## Start here (round 2, done)
 
 Round 1 (branch `match-red`, 88 of 300 trials; report in
 `$R/match/terraform-wt-match-red/red/REPORT.md` or the round's final
