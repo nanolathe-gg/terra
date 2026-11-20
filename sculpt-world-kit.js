@@ -1,6 +1,6 @@
 // A world's tool and rock kit is portable data. Maps keep their own numeric slots; only explicit worldKey provenance makes a runtime
 // rock a World edit. Material dependencies are ordinary validated graphs inline, or references to the existing world roles/layers.
-import {checkTool,checkCard,storedCard,worldTools,shapeGone,MAP_TOOLS_MAX} from './sculpt-tools.js';
+import {checkTool,checkCard,storedCard,worldTools,shapeGone,toolShape,copyMapTools,addMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
 import {shapeFrom} from './sculpt-scene.js';
 import {copyRocks,worldRocks,giveRockMaterials,ROCK_SLOTS} from './sculpt-rock-presets.js';
 import {copyMaterial,copyMaterials,addMaterial,setMaterial,worldMaterials,worldOwnMaterials,worldKey,roleName,MAP_ROLES,MATERIAL_SLOTS,materialStates,materialStaged,materialCacheUsage} from './sculpt-materials.js';
@@ -216,4 +216,23 @@ export function resetWorldKitInstances(config,kit,rocks,materials){
     const bound=bindMaterial(t.material,next);if(bound.missing)throw Error('A base world rock needs a missing material.');next=bound.materials;
     const {material:_,...rest}=r;return {...rest,name:t.name,knobs:structuredClone(t.knobs),column:structuredClone(t.column),colors:structuredClone(t.colors),...(bound.slot?{material:bound.slot}:{})};
   });assertKitMaterials(next);return {kit:base,rocks:result,materials:next};
+}
+
+// A save of an earlier build, its kit made the map's own (owner, 2026-11-19: everything lives with the map): each tool its world authored
+// becomes a map tool (its rock and ground as the save's slots; strokes, brush cards and the chosen tool follow its new id), and no rock
+// type keeps a world's provenance. `config`: the save's own world. Returns the save and how many world tools did not fit.
+export function mapOwnedKit(s,config){
+  const world=s?.worldSettings;
+  if(!object(world)||(world.tools===undefined&&world.rocks===undefined&&!(s.rocks??[]).some(r=>r?.worldKey)))return {sketch:s,lost:0};
+  let authored=[];try{authored=worldKit(config,world).tools.filter(authoredWorldTool);}catch(_){}
+  let own=copyMapTools(s.tools)??[],nodes=s.nodes??[],settings={...(s.toolSettings??{})},tool=s.tool,lost=0;
+  const rocks=copyRocks(s.rocks)??[],materials=copyMaterials(s.materials)??[];
+  for(const t of authored){
+    if(own.length>=MAP_TOOLS_MAX){lost++;continue;}
+    try{const added=addMapTool(own,nodes,{label:t.label,icon:t.icon,color:t.color,group:t.group,shape:shapeFrom(config,toolShape(t)),card:resolvedWorldCard(t,rocks,materials,config)});
+      own=added.tools;nodes=nodes.map(n=>n?.tool===t.id?{...n,tool:added.id}:n);if(settings[t.id]){settings[added.id]=settings[t.id];delete settings[t.id];}if(tool===t.id)tool=added.id;}
+    catch(_){lost++;}
+  }
+  const {tools:_t,rocks:_r,...kept}=world;
+  return {sketch:{...s,worldSettings:kept,nodes,toolSettings:settings,tool,...(own.length?{tools:own}:{}),...(s.rocks?{rocks:rocks.map(({worldKey:_,...r})=>r)}:{})},lost};
 }

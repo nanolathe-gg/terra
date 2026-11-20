@@ -3,7 +3,9 @@
 // - a partial apply from another world (Rock types, Light & weather) changes only those, keeps the map in its world, and one Undo restores it;
 // - a map saved with an edited row, a map tool and a feature set starts a new map with that look (blank, named, nothing to undo);
 // - Apply look from that map's file, Tools only, brings its tool; a whole look from another world forks the map there.
-//   node repro/look.mjs --server http://127.0.0.1:<yours> --port <cdp> [--out dir]
+// - Features from the map's own world bring the built-in feature styles back, placed features staying;
+// - with --old <file> (a map saved by a build that kept tools in the world), Tools from that file bring its world tool.
+//   node repro/look.mjs --server http://127.0.0.1:<yours> --port <cdp> [--out dir] [--old map.json]
 import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import assert from 'node:assert/strict';
@@ -16,6 +18,7 @@ const args = process.argv.slice(2), opt = k => args[args.indexOf(k) + 1];
 const server = args.includes('--server') ? opt('--server') : '', port = Number(args.includes('--port') ? opt('--port') : 0);
 if (!server || !Number.isInteger(port) || port < 1024) throw Error('Give your own --server and --port.');
 const out = resolve(args.includes('--out') ? opt('--out') : mkdtempSync(join(tmpdir(), 'terraform-look-'))); mkdirSync(out, {recursive: true});
+const old = args.includes('--old') ? resolve(opt('--old')) : '';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 await cdpPortFree(port);
 const browser = spawn(chromePath, ['--headless=new', ...chromeGpuFlags, `--remote-debugging-port=${port}`, `--user-data-dir=${join(out, 'profile-' + Date.now())}`, '--window-size=1440,900', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
@@ -28,6 +31,8 @@ try {
   const send = (method, params = {}) => new Promise((res, rej) => { const n = ++id; pending.set(n, m => m.error ? rej(Error(JSON.stringify(m.error))) : res(m.result)); ws.send(JSON.stringify({id: n, method, params})); });
   const ev = async x => { const r = await send('Runtime.evaluate', {expression: x, awaitPromise: true, returnByValue: true}); if (r.exceptionDetails) throw Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
   const ready = async (c = 'true') => { for (let i = 0; i < 1200; i++) { try { if (await ev(`!!window.sculptDebug&&!!window.sculptCanvas&&!!window.sculptRegion&&sculptRegion.ready()&&(${c})`)) { await ev('sculptCanvas.idle()'); return; } } catch {} await sleep(150); } throw Error('page not ready: ' + errors.join('\n')); };
+  const image = () => ev(`(async()=>{const b=await sculptCanvas.debugBake({x:100,y:60,width:200,height:160},1),c=new OffscreenCanvas(b.width,b.height);c.getContext('2d').drawImage(b,0,0);b.close();return Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data);})()`);
+  const normal = x => ({...x, nodes: x.nodes.map(n => ({...n, hidden: Boolean(n.hidden)}))});
   const sketch = () => ev('sculptDebug.sketch()'), text = sel => ev(`document.querySelector(${JSON.stringify(sel)}).textContent`);
   const click = sel => ev(`(()=>{document.querySelector(${JSON.stringify(sel)}).click();return true;})()`);
   // The dialog: a source, the cards to take (all when omitted), then Apply.
@@ -40,11 +45,11 @@ try {
   // 1. A Green map with a hill on Broken slopes; a partial apply from Painted Desert.
   await send('Page.navigate', {url: `${server}/?biome=green&mapX=1&mapY=1&newMap=1&gpuMB=512`}); await ready();
   await ev(`(()=>{sculptDebug.scene([['hill',[[120,120],[260,170]],{card:{rockPreset:2,elevation:80}}]],{ground:true});return true;})()`); await ready();
-  const before = await sketch();
-  await apply('builtin:desert', ['rocks', 'light']);
-  assert.match(await text('#look-note'), /Only the checked parts come from Painted Desert/);
+  const before = await sketch(), beforePixels = await image();
+  await apply('builtin:desert', ['rocks', 'light']);await sleep(800);
+  assert.match(await text('#look-note'), /Only the checked parts come from Painted Desert.*Replaces: this map’s 6 rock types become Painted Desert’s/);
   await click('#look-apply'); await sleep(500); await ready();
-  const partial = await sketch();
+  const partial = await sketch(), partialPixels = await image();
   assert.equal(partial.biome, 'green', 'a partial look keeps the map in its world');
   assert.notDeepEqual(partial.rocks.map(r => r.name), before.rocks.map(r => r.name), 'Rock types came from Painted Desert');
   assert.notEqual(partial.worldSettings.knobs.sunHeight, before.worldSettings.knobs.sunHeight, 'Light & weather came from Painted Desert');
@@ -52,11 +57,21 @@ try {
   assert.deepEqual(partial.materials.find(m => m.worldGround), before.materials.find(m => m.worldGround), 'the ground material stayed');
   assert.match(await ev(`document.getElementById('undo').title`), /applying a look/);
   await click('#undo'); await sleep(300); await ready();
-  const undone = await sketch();
-  assert.deepEqual(undone.rocks, before.rocks, 'one Undo restores the rock types');
-  assert.deepEqual(undone.worldSettings.knobs, before.worldSettings.knobs, 'and every world row');
-  assert.deepEqual(undone.nodes.map(n => n.params?.rockPreset), before.nodes.map(n => n.params?.rockPreset), 'and the shapes\' rock types');
-  report.partial = 'Rock types and Light & weather from Painted Desert; Ground kept; one Undo restored all';
+  assert.deepEqual(normal(await sketch()), normal(before), 'one Undo restores the whole save');
+  assert.ok(Buffer.from(await image()).equals(Buffer.from(beforePixels)), 'and its pixels');
+  await click('#redo'); await sleep(300); await ready();
+  assert.deepEqual(normal(await sketch()), normal(partial), 'Redo applies the look again');
+  assert.ok(Buffer.from(await image()).equals(Buffer.from(partialPixels)), 'with the same pixels');
+  await click('#undo'); await sleep(300); await ready();
+  report.partial = 'Rock types and Light & weather from Painted Desert; Ground kept; Undo and Redo restore the whole save and its pixels';
+  // Features from the map's own world: an edited feature style comes back as built, and a placed feature stays.
+  await ev(`(()=>{const s=sculptDebug.sketch();s.mapData.featureSet.deposit.recipes[0].name='Edited deposit';s.mapData.features=[{kind:'deposit',v:0,x:8,z:8,metal:143}];sculptDebug.loadSketch(s);return true;})()`); await ready();
+  await apply('builtin:green', ['features']); await sleep(800); await click('#look-apply'); await sleep(500); await ready();
+  const featured = await sketch();
+  assert.deepEqual(featured.mapData.featureSet, before.mapData.featureSet, 'Features from Green bring its feature styles back');
+  assert.equal(featured.mapData.features.length, 1, 'a placed feature stays');
+  await click('#undo'); await sleep(300); await ready(); await ev(`(()=>{const s=sculptDebug.sketch();s.mapData.featureSet=${JSON.stringify(before.mapData.featureSet)};s.mapData.features=[];sculptDebug.loadSketch(s);return true;})()`); await ready();
+  report.features = 'Features from the built-in world restore its styles; placed features stay';
   // 2. The map's own look: an edited row, a map tool, a feature set. Save as tool through the shape card.
   await ev(`(()=>{const el=document.getElementById('knob-reliefAmount');el.value='1.1';el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return true;})()`); await sleep(800);
   const hill = await ev(`sculptDebug.sketch().nodes.findIndex(n=>n.kind==='landform')`);
@@ -89,8 +104,17 @@ try {
   assert.deepEqual(tooled.tools.map(t => t.label), ['Look hill'], 'Tools brought the file\'s tool');
   assert.notEqual(tooled.worldSettings.knobs.reliefAmount, '1.1', 'and nothing else');
   report.file = 'Tools from a map file, alone';
+  if (old) {   // a save whose world kept its tool: the tool comes as a map tool
+    await apply('file', ['tools']);
+    const d2 = await send('DOM.getDocument'), in2 = await send('DOM.querySelector', {nodeId: d2.root.nodeId, selector: '#look-file'});
+    await send('DOM.setFileInputFiles', {nodeId: in2.nodeId, files: [old]}); await sleep(800);
+    await click('#look-apply'); await sleep(500); await ready();
+    const fromOld = await sketch(), oldTools = JSON.parse((await import('node:fs')).readFileSync(old, 'utf8')).worldSettings?.tools ?? [];
+    assert.deepEqual(fromOld.tools.map(t => t.label), oldTools.map(t => t.label), 'the old world\'s tools came as map tools');
+    report.oldFile = `Tools from an earlier build's file: ${oldTools.map(t => t.label).join(', ')}`;
+  }
   // 5. A whole look from another world forks the map there.
-  await apply('builtin:lava');
+  await apply('builtin:lava'); await sleep(800);
   assert.match(await text('#look-note'), /another world/);
   await click('#look-apply'); await sleep(2000); await ready(`sculptDebug.biome==='lava'`);
   const forked = await sketch();
