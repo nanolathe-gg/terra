@@ -115,6 +115,8 @@ struct Rock {
     crackNetwork: f32,    // 0: rills down the slope; 1: polygonal plates
     crackSpacing: f32,    // major crack block size, world px
     banding: f32,         // contour banding strength (0: none)
+    bandLevel: f32,       // strength of the bands on near-level ground (slope 0.004-0.09), times the slopes'
+    bandFill: f32,        // extra lines on near-level ground, where the bands run far apart: halves, then quarters, the spacing (0: none)
     crackMinor: f32,      // share of minor cracks inside blocks
     crackHairline: f32,   // share of hairline crazing
     crackBlocks: f32,     // how far blocks step and tilt against each other
@@ -255,7 +257,6 @@ struct Uniforms {
     bandLine: f32,        // darkness of the line along each riser (the column block's `bands`)
     bandJag: f32,         // pixel-scale wiggle of the band lines, in band steps (0: smooth)
     bandFade: f32,        // slope where bands are gone (they fade from 0.35/0.75 of it)
-    bandLevel: f32,       // strength of the bands on near-level ground (slope 0.004-0.09), times the slopes'
     sun: vec3f,           // the renderer's light, for lit crack walls
     crystalInk: f32,      // crystal outlines: 0 soft 92% dark, 1 crisp pure black
     // Painted masks (card C5).

@@ -1104,6 +1104,7 @@ export class TerrainRenderer {
     set('uBandJag', number('bandJag', 0));
     set('uBandFade', number('bandFade', 0.75));
     set('uBandLevel', number('bandLevel', 0));
+    set('uBandFill', number('bandFill', 0));
     set('uBeachDistance', this.layers.has('beach') ? (this.config.material?.beachWidth ?? 120) * number('beachWidth', 0.6) : 0);
     set('uHasBeach', this.layers.has('beach'));
     set('uSandBanding', number('sandBanding', 0));

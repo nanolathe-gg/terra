@@ -806,7 +806,7 @@ fn beachCover(p: vec2f, h: f32, slope: f32) -> f32 {
 // Retail lines are tonal steps, not drawn lines: a riser facing the sun is
 // a light line and one facing away a dark one; they are jagged at pixel
 // scale, broken into dashes, and mostly on gentle slopes (blind round 7).
-fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec3f {
+fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32, level: f32, fill: f32) -> vec3f {
     if (banding <= 0.0 || h < u.sea + 0.5) { return vec3f(0.0); }
     // Low banks drawn level (flatBank, Archipelago) carry no bands either.
     if (u.flatBank > 0.0 && h < u.base - 0.5) { return vec3f(0.0); }
@@ -816,7 +816,7 @@ fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec3
     // Bands on gentle ground have a strength of their own, bandLevel times the slopes' (retail's bands run onto nearly level ground:
     // rings round a bay, lines across a plain, spaced bandSpacing / slope px apart). It covers slopes 0.004 to 0.05 and is gone by 0.09,
     // below where the slope gate rises, so raising it does not crowd a slope that already has enough lines.
-    gate = max(gate, u.bandLevel * smoothstep(0.004, 0.03, slope) * (1.0 - smoothstep(0.05, 0.09, slope)));
+    gate = max(gate, level * smoothstep(0.004, 0.03, slope) * (1.0 - smoothstep(0.05, 0.09, slope)));
     // H5 3a: retail's gentle slopes carry few of the small dashes the risers make there.
     gate *= 1.0 - u.terraceCalm * (1.0 - smoothstep(0.15, 0.40, slope));
     if (gate <= 0.0) { return vec3f(0.0); }
@@ -849,7 +849,21 @@ fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec3
     let strength = banding * gate * dash;
     // Distance from the riser's middle, in world px along the slope.
     let px = abs(v - (1.0 - w * 0.5)) * S / max(slope, 0.004);   // a line stays one or two px wide down to the gentlest slope the gate allows
-    let line = (1.0 - smoothstep(0.3, 1.0, px)) * strength * u.bandLine;
+    var line = (1.0 - smoothstep(0.3, 1.0, px)) * strength * u.bandLine;
+    // Fill: on near-level ground the bands run bandSpacing / slope px apart (65 px at slope 0.02), far sparser than retail's hatch on gentle
+    // grades (green-2). Extra sets at half and a quarter of the spacing fade in where the lines run 20-40 and 40-80 px apart, so the bands
+    // the slope already draws stay where they are, and a grade a little steeper keeps its own spacing.
+    if (fill > 0.0) {
+        let levelGate = level * smoothstep(0.004, 0.03, slope) * (1.0 - smoothstep(0.05, 0.09, slope)) * (1.0 - u.terraceCalm * (1.0 - smoothstep(0.15, 0.40, slope)));
+        let gap = S / max(slope, 0.004);
+        for (var k = 1u; k <= 2u; k++) {
+            let n = f32(1u << k);
+            let fade = smoothstep(10.0 * n, 20.0 * n, gap);
+            if (fade <= 0.0) { continue; }
+            let pk = abs(fract(uu * n) - (1.0 - w * 0.5)) * S / n / max(slope, 0.004);
+            line = max(line, (1.0 - smoothstep(0.3, 1.0, pk)) * banding * levelGate * dash * fill * fade * u.bandLine);
+        }
+    }
     // The riser leans downhill (-fall): lit if that faces the sun.
     let facing = dot(-fall, normalize(u.sun.xy + 1e-6));
     return vec3f(offset * strength, line, facing);
@@ -1302,7 +1316,7 @@ fn bake(p: vec2f) -> vec4f {
     // Painted banding: fainter scales the world's strength down, stronger
     // doubles it up to twice and never drops below 0.8 times the painted amount.
     let banding = select(u.rock[rs & rockMask].banding * (1.0 + style.z), max(u.rock[rs & rockMask].banding * styleScale(style.z), 0.8 * style.z), style.z > 0.0);
-    let bandsAt = contourBands(p, h, slope, fall, banding);
+    let bandsAt = contourBands(p, h, slope, fall, banding, u.rock[rs & rockMask].bandLevel, u.rock[rs & rockMask].bandFill);
     var bands = bandsAt.xy * (1.0 - route);
     // E11: the dark lines round Archipelago's hills were the first contour risers on the
     // hill's foot.
