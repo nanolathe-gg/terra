@@ -62,6 +62,22 @@
   "palette": [43,42,41,40,39,38,238,37,172,170,61,74,169,93,168,60,167,73,166,59,92,72,165,58,184,71,55,70,182,181],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
+ "green-clump": {
+  "name": "Green massif clumps",
+  "seed": 0,
+  "nodes": [
+   {"id":"step-2","type":"noise","kind":"smooth","name":"Mottling","params":{"size":3.5,"detail":0.3,"layers":0,"seed":0},"in":{"in":null},"x":236,"y":75},
+   {"id":"step-3","type":"noise","kind":"smooth","name":"Fine grain","params":{"size":1.15,"detail":0,"layers":0,"seed":1},"in":{"in":null},"x":472,"y":-75},
+   {"id":"step-4","type":"levels","name":"Pattern levels","params":{"low":0.05,"high":0.95,"gamma":1,"invert":0},"in":{"in":"step-2"},"x":472,"y":75},
+   {"id":"step-5","type":"gradient","name":"Clump colors","params":{"ease":1},"in":{"in":"step-4"},"stops":[[0,0.16,0.39,0.07],[0.5,0.18,0.44,0.09],[1,0.2,0.48,0.11]],"x":708,"y":75},
+   {"id":"step-6","type":"gradient","name":"Grain colors","params":{"ease":0},"in":{"in":"step-3"},"stops":[[0,0.9,0.9,0.9],[1,1.1,1.1,1.1]],"x":708,"y":-75},
+   {"id":"step-7","type":"combine","kind":"multiply","name":"Multiply grain","params":{"amount":1,"offset":0},"in":{"a":"step-5","b":"step-6","mask":null},"x":944,"y":0},
+   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"step-7","height":null,"shine":null},"x":1180,"y":0}
+  ],
+  "controls": [{"label":"Clump colors","node":"step-5","param":"stops"}],
+  "palette": [168,170,172,166,167,173],
+  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
+ },
  "green-lumps": {
   "name": "Green grass with lit lumps",
   "seed": 0,
