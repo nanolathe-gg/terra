@@ -56,13 +56,14 @@ Where this differs from sections 2 to 8, this section wins.
   `repro/map-snapshot.mjs` retunes eleven parts of Green and checks that a
   saved map's save and pixels stay the same. Each retune must also change
   a new map, or the check reports it as testing nothing.
-- **Known gaps:**
-  - colors a world's data might set (`world.colors`) are kept only where the
-    map has them. No world sets any today; the renderer's built-in sun and
-    sky are code;
-  - on main as well: restoring an Undulation change (Undo, Redo, or an
-    Apply look that changes Undulation) leaves a weathered picture that
-    differs from a reload's. The authored terrain is right.
+- **Known gap:** colors a world's data might set (`world.colors`) are kept
+  only where the map has them. No world sets any today; the renderer's
+  built-in sun and sky are code.
+- **Checks bake the final picture:** `sculptCanvas.idle()` does not wait
+  for the Time pass, so `look.mjs` and `map-snapshot.mjs` wait until the map
+  could be exported (weathering ready) before they compare pixels. An
+  earlier "Undulation restore" mismatch was this: the picture read before
+  its weathering had finished.
 - **Still built from data, not kept:**
   - the toolbar's built-in buttons and their presets (for new shapes only);
   - rock recipes and material starting points (for adding only);

@@ -33,7 +33,10 @@ try {
   const ev = async x => { const r = await send('Runtime.evaluate', {expression: x, awaitPromise: true, returnByValue: true}); if (r.exceptionDetails) throw Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
   const ready = async (c = 'true') => { for (let i = 0; i < 1200; i++) { try { if (await ev(`!!window.sculptDebug&&!!window.sculptCanvas&&!!window.sculptRegion&&sculptRegion.ready()&&(${c})`)) { await ev('sculptCanvas.idle()'); return; } } catch {} await sleep(150); } throw Error('page not ready: ' + errors.join('\n')); };
   const bake = () => ev(`(async()=>{const b=await sculptCanvas.debugBake({x:100,y:60,width:200,height:160},1),c=new OffscreenCanvas(b.width,b.height);c.getContext('2d').drawImage(b,0,0);b.close();return Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data);})()`);
-  const image = async () => { for (let i = 0; ; i++) { try { return await bake(); } catch (err) { if (i > 100 || !/PipelinesPending/.test(err.message)) throw err; await sleep(200); } } };   // after a reload the pipelines may still compile
+  // The picture once it is final: idle() does not wait for the Time pass (background refinement), so a bake waits until the map could be
+  // exported (canExport: weathering ready); after a reload the pipelines may still compile.
+  const settled = async () => { for (let i = 0; i < 300 && !await ev('sculptRegion.canExport()'); i++) await sleep(100); };
+  const image = async () => { await settled(); for (let i = 0; ; i++) { try { return await bake(); } catch (err) { if (i > 100 || !/PipelinesPending/.test(err.message)) throw err; await sleep(200); } } };
   const normal = x => ({...x, nodes: x.nodes.map(n => ({...n, hidden: Boolean(n.hidden)}))});
   const sketch = () => ev('sculptDebug.sketch()'), text = sel => ev(`document.querySelector(${JSON.stringify(sel)}).textContent`);
   const click = sel => ev(`(()=>{document.querySelector(${JSON.stringify(sel)}).click();return true;})()`);
@@ -141,9 +144,6 @@ try {
   assert.deepEqual(tooled.tools.map(t => t.label), ['Look hill'], 'Tools brought the file\'s tool');
   assert.notEqual(tooled.worldSettings.knobs.reliefAmount, '1.1', 'and nothing else');
   report.file = 'Tools from a map file, alone';
-  // Weathering off: restoring an Undulation change (Undo, Redo, an apply) leaves a Time pass that differs from a reload's, on main too
-  // (reported separately); the authored terrain is what this checks.
-  await ev(`(()=>{const w=document.getElementById('weather');if(w.checked)w.click();return true;})()`); await ready();
   await apply('file', ['ground']);
   const d1 = await send('DOM.getDocument'), in1 = await send('DOM.querySelector', {nodeId: d1.root.nodeId, selector: '#look-file'});
   await send('DOM.setFileInputFiles', {nodeId: in1.nodeId, files: [file]}); await sleep(500);
@@ -151,7 +151,6 @@ try {
   const grounded = await sketch();
   assert.equal(grounded.worldSettings.knobs.undulation, '10'); assert.equal(grounded.nodes.find(n => n.kind === 'ground')?.amplitude, 10, 'Ground brings the undulation into the terrain');
   await sameAfterReload('Ground from a map file');
-  await ev(`(()=>{const w=document.getElementById('weather');if(!w.checked)w.click();return true;})()`); await ready();
   report.ground = 'Ground from a map file: its undulation reaches the terrain; a reload draws the same';
   if (old) {   // a save whose world kept its tool: the tool comes as a map tool
     await apply('file', ['tools']);
