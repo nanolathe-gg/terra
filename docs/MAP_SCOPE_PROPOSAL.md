@@ -70,14 +70,13 @@ Where this differs from sections 2 to 8, this section wins.
   - Within one world it applies in place as one undo step.
   - A whole look from another world forks the map there.
   - Its note says how many rock types and tools it replaces.
-- **Kept as shortcuts, not folded into Apply look:**
-  - **The world select:** it forks the map into another world and keeps the
-    map's rock types and tools. A whole Apply look replaces them instead.
-  - **Reset:** it returns the world settings and world materials to the
-    built-in's and keeps rock types and tools.
-  - **Reset shapes to world defaults.**
-
-  Each one does something Apply look's defaults do not.
+- **Apply look replaces the world select, Reset and Reset shapes** (owner,
+  2026-11-19: "Fold into Apply look"). The dialog opens on the map's own
+  built-in world with every card checked, which is a full reset; another
+  world, whole, is a world switch (a fork); no card with "Reset every
+  shape" resets the shapes. A world switch now takes the other world's rock
+  types and tools too: to keep this map's, apply Rock types or Tools from
+  the map left behind (it stays in Maps).
 - **No "changed" marks on world values.** Strokes' existing `edited` lists
   are now saved in files and share links too.
 

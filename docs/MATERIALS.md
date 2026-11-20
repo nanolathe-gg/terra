@@ -33,8 +33,8 @@ controls; node settings are the author's tools.
   the world-owned materials of 2026-11-14). They are world settings like its
   sliders, and like every world setting they are saved with the map, whole:
   a revision of the library never changes a map already made. A new map
-  starts from the built-in world's (the library's). World › Reset returns
-  both to the library's.
+  starts from the built-in world's (the library's). World › Apply look
+  from… the map's own world returns both to the library's.
 - **A map** holds up to fifteen materials in slots 1 to 15: the world's two,
   the materials for the surfaces its world names, its rock types' rock
   materials, and its own for landforms and the Paint brush (a stroke's Ground
