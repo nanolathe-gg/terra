@@ -108,6 +108,24 @@ For the owner's eye: `bandJag` .4 (round 11's trial-043) brings green-2's
 slope hatch closer by eye (mean look .128 to .125, held-out unchanged) but
 was held by the keep rule (slope lines rose to 2.3x retail).
 
+New engine levers (landed 2026-11-20, after round 11):
+
+- **Steps up to 12** on profile steps (were 8).
+- **`bandLevel` per rock type**, and **`bandFill`** (0-1): extra contour
+  lines at half and a quarter of the spacing where near-level bands run far
+  apart. On green-2, bandLevel 2 with fill 1 draws wiggly lines across the
+  gentle grade (by eye; gentle lines .00037 to .00044, retail .0018).
+- **A map's own `sea` and `plain`** in a scene's query (green-4: retail's
+  floor is about 1; at sea 0, plain 1 its strokes must be rescaled to fit
+  under 255).
+- **A scene's own `surface` list** (copy the world's whole, change amounts;
+  green-3 with gentlelumps at 0: look .091 to .070). See the brief's keep
+  rule.
+- **Time erodes the shape the art shows**: a map that hides its roll
+  (undulationArt below 1) no longer gets creases cut along it. Green-1's
+  Relaxation: less paint may now be unneeded; green-1, 3 and 5 moved a
+  little (re-measure them at the base).
+
 Leads:
 
 1. **Gentle-grade contour lines** stay out of reach of data (round 11's
