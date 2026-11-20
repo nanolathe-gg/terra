@@ -77,9 +77,10 @@ Where this differs from sections 2 to 8, this section wins.
     an empty 4 × 4 map named after it ("Green Planet (your settings)" for a
     changed built-in world). Each map holds a full snapshot of its look;
   - a world a map brought with it (`openedFrom`) is skipped;
-  - a world that can never convert (its base world is gone, or its record
-    cannot be read) is left out with a note. Only a failure that may pass
-    (the network or the map store) keeps the store for the next boot;
+  - converted worlds leave the store; a world that does not convert (its
+    base world is gone, its record cannot be read, or the network or map
+    store failed) stays in it, left out of Maps with a note, so nothing is
+    lost and a map deleted later is not made again;
   - a map made by an earlier build gets its world tools turned into map
     tools, and its rock types lose their world provenance, when it is opened
     or used as a look source (`mapOwnedKit`).
