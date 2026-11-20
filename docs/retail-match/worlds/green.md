@@ -94,44 +94,44 @@ These notes are by eye, from the base crops in
 - No rock coasts on Green. Shores are a natural sand-grass edge.
 - Hills must stay grassy. Rock on a hill is cracks and patches, not a cap.
 
-## Start here (round 13)
+## Start here (round 14)
 
-Round 12 (branch `match-green-13`, 64 of 300 trials; report in
-`$R/match/terraform-wt-match-green-13/green/REPORT.md`) was reviewed and
-ported whole on 2026-11-20 (its base was main; the port renders
-byte-identical to its trial-057). Mean shape .175 to .134, look .129 to
-.126; held-out green-7 not reached (.192/.102).
+Round 13 (branch `match-green-14`, 48 of 300 trials; report in
+`$R/match/terraform-wt-match-green-14/green/REPORT.md`) was reviewed and
+ported on 2026-11-20. Mean shape .134, look .126 to .125; held-out green-7
+unchanged (.192/.102).
 
-- **Green-4 on its own floor:** sea 0 (plain 9, Green's own), elevations
-  x0.8, four steps, a steeper wall foot. Shape .391 to .146; the flat class
-  now matches retail; 0.1% of cells above 255. By eye the massifs rise off a
-  level floor like retail's. **Its look rose .169 to .201:** the rock reads
-  as larger solid green patches with pale lit ledge streaks, where retail is
-  a fine mosaic of small clumps on darker rock. That is lead 1.
-- **Green-2's ridge** on a rock type `divide` (slot 9: bandLevel 2, bandFill
-  1): look .159 to .139; wiggly lines on its gentle grade by eye, at 0.24x
-  retail's count (under the one-third rule; ported for the look and the eye).
-- **Green-3's own surface list** without gentle lumps: look .096 to .071.
-- **evad** with fewer minor and hairline cracks (crackMinor .2, crackHairline
-  .1): green-1 .063 to .054; by eye a few long cracks cross its grass as in
-  retail. Its steep luma rose 62 to 66 (retail 56). evad is shared with the
-  Broken hill tool, which was not viewed.
+- **Green-4's ground as clumps on gray rock:** `green-clump` mixes its green
+  with dark grays through a 3.5 px Clumps noise and a sharp Levels edge
+  (palette + grays 90-94); passrock faceRock .55 to .45. Look .201 to .198,
+  steep:lines cleared. By eye (trial-012 steep crop) the solid green slabs
+  break into clumps through the rock, as retail's do. Cost: steep luma 50 to
+  47 (retail 55); the pale ledge streaks and retail's black east shadows remain.
+- **Green-1's coastal pits come from the ground roll, not Time:** they stay
+  with erosion=0 (its 023) and go at undulation 5 (024, shape .169). The
+  Relaxation: less paint stays. engine-shape.wgsl `groundLifted` fades the
+  roll in by height over sea+1..sea+8 (a code reading; proposal).
+- **Green-5's slope risers are out of reach of data:** every kind of lever
+  was tried (rock 031-034, map 030/035, material and layer 036-038, 048);
+  slope lines stay .0018 against .0045. A layer's material relief is unlit,
+  so lined materials read as smudges (proposal: lit micro-terraces).
 
 Leads:
 
-1. **Green-4's rock mosaic after the lowering:** smaller clumps, fewer pale
-   ledge streaks, darker rock with black east shadows.
-2. **Green-1's Relaxation: less paint** still matters: without it, dark Time
-   pits return on its coast (round 12's 017; shape .146 to .123). Find what
-   draws the pits.
-3. **Gentle contour lines:** a surface-layer rule drawing a lined material is
-   still untried; near-level bands draw on level plains as much as on grades
-   (round 12's 015, 027-029).
-4. **A land-only floor near the sea:** at plain 1-4 green-4's floor draws
-   water specks or the low-ground tone (round 12's 001-004); the roll fades
-   within 8 units of the sea (engine-shape.wgsl groundLifted).
-5. Green-5's slope lines, green-6's ribs, the shelf's streaks: no material or
-   layer try yet.
+1. **Green-4's brightness without line noise:** its largest look term is the
+   mean brightness (54 against 62). Every brighter material or rock raised
+   lines more than it gained (009, 010, 014). Steps 0 shortens the pale
+   streaks (004, look .16) but loses the shape; try Steps 2-3 with ledge
+   15-30, and a rock material copy without the brightest grays.
+2. **Green-6's ribbed faces:** gullies 100 with gullySize 70 follow retail's
+   spurs (040: shape .182 to .149) but the face texture costs look .083 to
+   .118. Try a ridgeblock material with vertical streaks, then both together.
+3. **Green-1's shelf:** green-3's shelf already matches, so the gap is
+   green-1's; try a rock type for green-1's water strokes, as green-3's
+   reefstone.
+4. **Gentle crinkle** (green-5's gentle grade, green-2's lines): a layer
+   material that bakes its relief through a Light node, instead of dark lines.
+5. Shape presets and the contour-line levers were not reached.
 
 ## Pilot notes (2026-11-18)
 
