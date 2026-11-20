@@ -126,8 +126,6 @@ for (const f of scenes) {
   (sc.strokes ?? []).forEach(([kind, , opt], i) => {
     const c = opt?.card ?? {}, where = `${at} stroke ${i} (${kind})`;
     for (const k of Object.keys(c)) if (!cardKeys.has(k)) warnings.push(`${where}: card key ${k} is not a stroke field (typo?). See section 5 of the reference.`);
-    // Profile steps stop at 8 (sculpt-shape-presets.js landformSteps); round 10 rendered Steps 12 and 16 byte-identical to 8.
-    if (Number(c.terraces) > 8 && !(kind === 'landform' && Number(c.stepReference) > 0)) warnings.push(`${where}: terraces ${c.terraces} draws as 8: profile steps take 0-8 (shoreline steps, stepReference 1 or 2, take 12).`);
     if (c.rockPreset !== undefined && !rockSlots.has(c.rockPreset)) errors.push(`${where}: rockPreset ${c.rockPreset} is not a rock slot of this map (${[...rockSlots].join(', ')}; section 7 of the reference).`);
     if (c.groundPreset !== undefined && c.groundPreset !== -1 && c.groundPreset !== 0) {
       const m = materials.find(m => m.slot === c.groundPreset);

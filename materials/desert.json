@@ -1024,10 +1024,10 @@
   "shapes": {
    "cones": {"from": "hill", "diameter": 200, "elevation": 65, "wander": 10, "cracks": 30},
    "grayDome": {"from": "hill", "diameter": 330, "elevation": 125, "wander": 10, "cracks": 60, "talus": 60},
-   "grayMesa": {"from": "plateau", "diameter": 900, "elevation": 245, "terraces": 10, "ledge": 25, "terraceJitter": 40, "wander": 30, "widthVary": 15, "varySize": 160, "gullies": 0, "breakup": 0, "talus": 40, "cracks": 60, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.08, 0.04], [0.16, 0.1], [0.24, 0.22], [0.32, 0.45], [0.38, 0.7], [0.44, 0.9], [0.5, 0.98], [0.55, 1], [1, 1]]}},
+   "grayMesa": {"from": "plateau", "diameter": 900, "elevation": 245, "terraces": 8, "ledge": 25, "terraceJitter": 40, "wander": 30, "widthVary": 15, "varySize": 160, "gullies": 0, "breakup": 0, "talus": 40, "cracks": 60, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.08, 0.04], [0.16, 0.1], [0.24, 0.22], [0.32, 0.45], [0.38, 0.7], [0.44, 0.9], [0.5, 0.98], [0.55, 1], [1, 1]]}},
    "outcrop": {"from": "mountain", "diameter": 190, "elevation": 80, "wander": 40, "varySize": 50, "widthVary": 40, "heightVary": 20, "gullies": 30, "gullySize": 30, "talus": 70, "cracks": 30, "talusLumps": 80},
    "capKnob": {"from": "hill", "diameter": 200, "elevation": 116, "wander": 10, "cracks": 30},
-   "plateau": {"amount": 70, "roughness": 0, "softness": 50, "cracks": 10, "faceVariation": 0, "lean": 100, "facing": 3, "terraces": 12, "combine": 0, "wander": 24, "widthVary": 10, "heightVary": 0, "varySize": 120, "varyFoot": 100, "varyMiddle": 150, "ledge": 40, "terraceJitter": 40, "breakup": 0, "gullies": 0, "elevation": 65, "talus": 30, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.06, 0.06], [0.14, 0.2], [0.24, 0.38], [0.34, 0.55], [0.4, 0.62], [0.44, 0.97], [0.46, 1], [1, 1]]}},
+   "plateau": {"amount": 70, "roughness": 0, "softness": 50, "cracks": 10, "faceVariation": 0, "lean": 100, "facing": 3, "terraces": 8, "combine": 0, "wander": 24, "widthVary": 10, "heightVary": 0, "varySize": 120, "varyFoot": 100, "varyMiddle": 150, "ledge": 40, "terraceJitter": 40, "breakup": 0, "gullies": 0, "elevation": 65, "talus": 30, "curve": {"form": "lfPlateau", "knots": [[0, 0], [0.06, 0.06], [0.14, 0.2], [0.24, 0.38], [0.34, 0.55], [0.4, 0.62], [0.44, 0.97], [0.46, 1], [1, 1]]}},
    "hill": {"wander": 46, "widthVary": 25, "heightVary": 10, "cracks": 10},
    "mountain": {"wander": 24, "cracks": 10},
    "ramp": {},

@@ -268,7 +268,7 @@ function heightControl(n) {
 }
 function stepControlRange(kind,p={}) {
   const shore=kind==='landform'&&Number(p.stepReference)>0;
-  $('sec-terraces').max=shore?'12':'8';$('sec-ledge').min=shore?'40':'0';$('sec-ledge').max=shore?'95':'90';
+  $('sec-terraces').max='12';$('sec-ledge').min=shore?'40':'0';$('sec-ledge').max=shore?'95':'90';
 }
 function showTool(state={},kind=toolKind(tool)) {
   heightControlRange(state);stepControlRange(kind,state);

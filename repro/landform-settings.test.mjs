@@ -26,7 +26,8 @@ test('a landform shares step count and flat share while choosing exactly one pas
     assert.equal(p.layerLedge,.8);assert.equal(p.layerRough,.7);
   }
   assert.equal(source.shoreLayers,12,'resolution must not rewrite the authored recipe');
-  assert.equal(landformSteps({...source,terraces:12}).terraces,8);
+  assert.equal(landformSteps({...source,terraces:12}).terraces,12,'profile steps take the control\'s whole range');
+  assert.equal(landformSteps({...source,terraces:16}).terraces,12);
   assert.equal(landformSteps({...source,stepReference:1,terraces:12}).shoreLayers,12);
 });
 

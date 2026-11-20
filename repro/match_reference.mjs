@@ -110,8 +110,6 @@ L.push('## 5. Stroke and shape card fields', '', 'A scene\'s strokes (`repro/sce
 head(['key', 'label', 'kinds', 'min', 'max', 'step', 'default', 'help']);
 for (const f of scene.SHAPE_FIELDS) { const [key, , label, kinds, min, max, step, dflt, help] = f; row([`\`${key}\``, label, (kinds ?? []).join(' '), min, max, step, dflt, help]); }
 L.push('', `Landform keys: ${scene.LANDFORM_KEYS.map(k => `\`${k}\``).join(', ')}. Section keys: ${scene.SECTION_KEYS.map(k => `\`${k}\``).join(', ')}.`, '');
-L.push('Steps (`terraces`) follow `stepReference`: profile steps (0, the default) take 0-8 and a higher count draws as 8 (sculpt-shape-presets.js',
-  '`landformSteps`); shoreline steps (1, 2) take 0-12. The row above shows the control\'s widest range (docs/LANDFORM_SHORES.md).', '');
 
 L.push(`## 6. ${world}: what it has now`, '');
 L.push('### Material roles (`world.materials`)', ''); head(['role', 'material', 'kind']);
