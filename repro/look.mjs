@@ -81,6 +81,13 @@ try {
   assert.ok(Buffer.from(await image()).equals(Buffer.from(partialPixels)), 'with the same pixels');
   await sameAfterReload('Rock types and Light & weather from Painted Desert');
   await ev(`(()=>{sculptDebug.loadSketch(${JSON.stringify(before)});return true;})()`); await ready();
+  // Settings that are no row reach the live picture: Tools from Painted Desert switches Green's render modes (transition, surface, material,
+  // scree), and the picture is what a reload draws.
+  await apply('builtin:desert', ['tools']); await sleep(800); await click('#look-apply'); await sleep(500); await ready();
+  assert.equal((await sketch()).worldSettings.knobs.transition, 'mineral', 'Tools from Painted Desert brings its render modes');
+  await sameAfterReload('Tools from Painted Desert');
+  await ev(`(()=>{sculptDebug.loadSketch(${JSON.stringify(before)});return true;})()`); await ready();
+  report.renderModes = 'Tools from Painted Desert: its render modes (no rows) reach the live picture; a reload draws the same';
   report.partial = 'Rock types and Light & weather from Painted Desert; Ground kept; Undo and Redo restore the whole save and its pixels; a reload draws the same';
   // Features from the map's own world: an edited feature style comes back as built, and a placed feature stays.
   await ev(`(()=>{const s=sculptDebug.sketch();s.mapData.featureSet.deposit.recipes[0].name='Edited deposit';s.mapData.features=[{kind:'deposit',v:0,x:8,z:8,metal:143}];sculptDebug.loadSketch(s);return true;})()`); await ready();

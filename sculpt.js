@@ -2784,9 +2784,11 @@ function restoreWorldState(w){
   let any=false;
   // The world's settings that are no row (a render mode, a Time constant: Tools and Light & weather in Apply look) follow the restored world
   // too, so the picture is what a reload of the map draws (AGENTS.md rule 12).
-  // Only the world data's own settings: the view switches a save also holds (palette, fill, relief) are this browser's.
+  // Only the world data's own settings: the view switches a save also holds (palette, fill, relief) are this browser's, and a setting the
+  // page's address names (a render trial, ?terraceBreak=.7) keeps the address's value, as it does at boot.
+  const named=new URLSearchParams(location.search);
   if(w.stored)for(const key of new Set([...Object.keys(baseWorldConfig.defaults||{}),...Object.keys(baseWorldConfig.engineDefaults||{})])){
-    if(KNOB_KEYS.has(key)||ROCK_KEYS.includes(key)||key==='beachFrom')continue;
+    if(KNOB_KEYS.has(key)||ROCK_KEYS.includes(key)||key==='beachFrom'||named.has(key))continue;
     const v=config.defaults?.[key]??config.engineDefaults?.[key],now=renderer.variant.get(key);
     if(v==null||String(now)===String(v))continue;
     worldInputQueue.put('knob:0:'+key,{type:'knob',slot:0,key,value:String(v),restore:true});any=true;
