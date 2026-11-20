@@ -72,10 +72,14 @@
    {"id":"step-5","type":"gradient","name":"Clump colors","params":{"ease":1},"in":{"in":"step-4"},"stops":[[0,0.16,0.39,0.07],[0.5,0.18,0.44,0.09],[1,0.2,0.48,0.11]],"x":708,"y":75},
    {"id":"step-6","type":"gradient","name":"Grain colors","params":{"ease":0},"in":{"in":"step-3"},"stops":[[0,0.9,0.9,0.9],[1,1.1,1.1,1.1]],"x":708,"y":-75},
    {"id":"step-7","type":"combine","kind":"multiply","name":"Multiply grain","params":{"amount":1,"offset":0},"in":{"a":"step-5","b":"step-6","mask":null},"x":944,"y":0},
-   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"step-7","height":null,"shine":null},"x":1180,"y":0}
+   {"id":"clump-n","type":"noise","kind":"smooth","name":"Clumps","params":{"size":3.5,"detail":0.5,"layers":0,"seed":7},"in":{"in":null},"x":236,"y":225},
+   {"id":"clump-l","type":"levels","name":"Clump edge","params":{"low":0.34,"high":0.5,"gamma":1,"invert":0},"in":{"in":"clump-n"},"x":472,"y":225},
+   {"id":"rock-c","type":"gradient","name":"Rock between clumps","params":{"ease":1},"in":{"in":"step-4"},"stops":[[0,0.12,0.12,0.11],[0.5,0.19,0.19,0.18],[1,0.28,0.28,0.27]],"x":708,"y":225},
+   {"id":"clump-m","type":"combine","kind":"mix","name":"Clumps over rock","params":{"amount":1,"offset":0},"in":{"a":"rock-c","b":"step-7","mask":"clump-l"},"x":944,"y":150},
+   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"clump-m","height":null,"shine":null},"x":1180,"y":0}
   ],
   "controls": [{"label":"Clump colors","node":"step-5","param":"stops"}],
-  "palette": [168,170,172,166,167,173],
+  "palette": [168,170,172,166,167,173,90,91,92,93,94],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
  "green-lumps": {

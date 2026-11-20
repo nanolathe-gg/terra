@@ -1026,7 +1026,7 @@
      "label": "Mossy massif",
      "material": "green-passrock",
      "knobs": {
-      "faceRock": 0.55,
+      "faceRock": 0.45,
       "faceGrass": 0.8,
       "faceBed": 8,
       "faceBlockSize": 6,
