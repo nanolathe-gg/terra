@@ -962,7 +962,6 @@ function setPicking(on) { if (on===picking) return; if (on) { mapFeatures?.deact
 const andList=words => words.length<2?words.join(''):`${words.slice(0,-1).join(', ')} and ${words.at(-1)}`;
 const strokesWith=slot => nodes.filter(n => !n.hidden && n.params?.groundPreset===slot).length;
 const shapesNote=count => count?`the ground of ${count} shape${count>1?'s':''} drawn with it`:'';
-const scopeOf=() => ({tag:'',scope:'map'});   // everything is the map's (owner, 2026-11-19): Pick shows no scope
 // What a change to a material's Color reaches (the line under a Pick swatch): the world's surface it is, and the rock types and shapes that draw it.
 function materialReach(m) {
   const role=roleOf(m),layer=role==='worldLayer'?(config.surface||[]).filter(l => l.material===m.worldLayer).map(l => l.name||BUILTIN_LABELS[l.builtin]||l.builtin).join(', '):'';
@@ -1022,7 +1021,7 @@ function pickSetting(key,value,commit,slot=null) {
 }
 function pickHost() {
   const material=slot => mapMaterials.find(m => m.slot===slot);
-  const info=m => ({slot:m.slot,name:m.name,color:hexOfRgb(drawnColor(m)),...scopeOf(),reach:materialReach(m)});
+  const info=m => ({slot:m.slot,name:m.name,color:hexOfRgb(drawnColor(m)),reach:materialReach(m)});
   return {
     offMap:at => !mapCanvas||mapCanvas.offMap(at),
     inspect:(at,current) => mapCanvas?mapCanvas.inspect(at,current):Promise.resolve(null),
@@ -1040,7 +1039,7 @@ function pickHost() {
     rock:slot => {
       if (slot!==0 && !mapRocks.some(r => r.slot===slot)) return null;
       const m=rockMaterialOf(slot);
-      return {name:rockName(slot),color:m?rockHex(slot):'',...scopeOf(),values:rockValues(slot),material:m?{slot:m.slot,name:m.name}:null,reach:rockReach(slot)};
+      return {name:rockName(slot),color:m?rockHex(slot):'',values:rockValues(slot),material:m?{slot:m.slot,name:m.name}:null,reach:rockReach(slot)};
     },
     recolorRock:(slot,hex,commit) => setRockColor(hex,commit,slot),
     openRock:slot => openRockType(slot),
@@ -1126,7 +1125,7 @@ function syncCardRock(kind) {
   const {choice,slots,shape}=cardRock(),one=slots.length===1?slots[0]:null,more=orList(slots.filter(s => s>0).map(rockName));
   $('lf-rock-swatch').style.background=one===null?'':rockHex(one); $('lf-rock-swatch').classList.toggle('varies',one===null);
   $('lf-rock-name').textContent=one===null?'Varies':rockName(one);
-  $('lf-rock-note').textContent=choice===0?'· the world’s rock type':choice>0?mapRocks.find(r=>r.slot===choice)?.worldKey?'· this world’s rock type':'· this map’s rock type':one!==null?'· the rock beneath'
+  $('lf-rock-note').textContent=choice===0?'· the world’s rock type':choice>0?'· this map’s rock type':one!==null?'· the rock beneath'
     :shape?`· ${more} where earlier shapes reach it, else ${rockName(0)}`:`· ${more} over shapes made of ${slots.length>2?'them':'it'}, else ${rockName(0)}`;
   $('lf-rock-edit').title=one===null?'Open World › Rock types (this shape’s rock varies, so the picker keeps its choice)':`Open ${rockName(one)} in World › Rock types`;
   $('cracks-look').textContent=`${one===null?'Rock types':rockName(one)} › Cracks & bands`;
@@ -2573,13 +2572,13 @@ function syncLookNote() {
   if (!B) { $('look-note').textContent=$('look-source').value==='file'?'Choose a map file.':'Reading the look…'; return; }
   const replaced=[...(cards.has('rocks')?[`this map’s ${plural(mapRocks.length,'rock type')} become ${from}’s ${(B.rocks??[]).length}`]:[]),...(cards.has('tools')&&(mapTools.length||(B.tools??[]).length)?[`its ${plural(mapTools.length,'saved tool')} become ${from}’s ${(B.tools??[]).length}`]:[])];
   $('look-note').textContent=[other&&all?`${config.biomes?.[base]||base} is another world: this makes a copy of your map in it with this look. The original stays in Maps.`:other?`Only the checked parts come from ${config.biomes?.[base]||base}; the map stays in ${config.biome}.`:`${$('look-source').value==='builtin:'+config.biomeId?`Returns the checked parts to ${config.biome}’s own. `:''}One Undo puts the map back as it was.`,
-    replaced.length?`Replaces: ${replaced.join('; ')}.`:''].filter(Boolean).join(' ');
+    replaced.length?`Replaces: ${replaced.join('; ')}${nodes.some(n=>n.kind!=='ground')?' (the ones your shapes use stay)':''}.`:''].filter(Boolean).join(' ');
 }
 async function openLookDialog() {
   if (!ready||loading||stroke||moving) return;
   const select=$('look-source'),worldsGroup=document.createElement('optgroup'),mapsGroup=document.createElement('optgroup');
   worldsGroup.label='Worlds';worldsGroup.append(...Object.entries(config.biomes||{}).map(([id,name])=>new Option(name,'builtin:'+id,false,id===config.biomeId)));
-  mapsGroup.label='Your maps';
+  mapsGroup.label='Maps';
   try { for (const m of byRecent(mapStore?await mapStore.list():[])) if (m.id!==tabMapId) mapsGroup.append(new Option(`${m.name} · ${config.biomes?.[m.biome]||m.biome}`,'map:'+m.id)); } catch (_) {}
   select.replaceChildren(worldsGroup,...(mapsGroup.children.length?[mapsGroup]:[]),new Option('A map file…','file'));
   for (const b of $('look-cards').querySelectorAll('input')) b.checked=true;$('look-dialog').querySelector('input[name=look-shapes][value=keep]').checked=true;

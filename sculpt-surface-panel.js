@@ -339,7 +339,7 @@ export function mountSurfacePanel(host) {
   }
   function materialSelect(layer, i) {
     const builtin = !isMaterialLayer(layer), options = host.library();
-    const select = el('select', {className: 'surface-material', id: uid('material'), title: 'The library material this layer draws (the world’s copy, shared by every layer that draws it)'});
+    const select = el('select', {className: 'surface-material', id: uid('material'), title: 'The library material this layer draws (one copy in this map, shared by every layer that draws it)'});
     if (builtin && layer.material == null) select.append(el('option', {value: '', textContent: 'None: it draws nothing', selected: true}));
     // A material layer with plants may draw no material: its plants grow on whatever lies below.
     if (!builtin && layer.plants) select.append(el('option', {value: '', textContent: 'None: plants only', selected: layer.material == null}));

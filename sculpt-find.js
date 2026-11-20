@@ -180,7 +180,7 @@ const layerName = li => { const n = li.querySelector('.surface-name'); return cl
 // What editing an element changes, as the page's own scope tag says it (sculpt-workspace.css .scope-tag): the tag of the nearest block that
 // holds the element, sitting directly in it or in its heading or head row (the shape card's This shape / New shapes). Null where the page
 // says nothing: everything else is the map's (owner, 2026-11-19).
-const SCOPE_HEADS = ':scope > .scope-tag, :scope > :is(h2, h3, h4, .card-head, .control-search) > .scope-tag, :scope > .rock-picker .scope-tag';
+const SCOPE_HEADS = ':scope > .scope-tag, :scope > :is(h2, h3, h4, .card-head, .control-search) > .scope-tag';
 function scopeOf(el) {
   for (let a = el?.parentElement; a && a !== document.body; a = a.parentElement) {
     const tag = a.querySelector(SCOPE_HEADS), text = clean(tag?.textContent);

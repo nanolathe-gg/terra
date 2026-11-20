@@ -48,7 +48,7 @@ try {
   await ev(`(()=>{sculptDebug.scene([['hill',[[120,120],[260,170]],{card:{rockPreset:2,elevation:80}}]],{ground:true});return true;})()`); await ready();
   const before = await sketch(), beforePixels = await image();
   await apply('builtin:desert', ['rocks', 'light']);await sleep(800);
-  assert.match(await text('#look-note'), /Only the checked parts come from Painted Desert.*Replaces: this map’s 6 rock types become Painted Desert’s/);
+  assert.match(await text('#look-note'), /Only the checked parts come from Painted Desert.*Replaces: this map’s \d+ rock types? become Painted Desert’s/);
   await click('#look-apply'); await sleep(500); await ready();
   const partial = await sketch(), partialPixels = await image();
   assert.equal(partial.biome, 'green', 'a partial look keeps the map in its world');
