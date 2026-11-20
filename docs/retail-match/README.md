@@ -195,6 +195,9 @@ Change nothing else:
 
 ## Rules of evidence
 
+- **Renders are deterministic.** The same files render the same bytes, so
+  any score change between two trials is real, never noise (round 8 called
+  a .013 rise noise).
 - **Numbers come from the trial log**, not from memory. Quote the trial id.
 - **"Renders exactly as the base"** means your change reached none of the
   windows. That is not the same as a control that does nothing. Find out

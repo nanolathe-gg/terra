@@ -163,6 +163,19 @@ thins.
   - Some built-ins draw nothing until a World control is above 0. The
     reference's "needs" column lists which: Bare soil needs `soilRim`,
     Crown rock a rock type's `rockCrown`, and so on.
+  - A layer that draws a material takes a material slot ahead of
+    `world.materials.extra`, so every extra ground moves up one and the
+    scenes' `groundPreset` numbers must follow (round 9 renumbered
+    green-5's paint from 12 to 14). The validator warns when a stroke's
+    slot now lays a layer's or role's material.
+  - A layer's material relief is not lit (only the ground's is). To make a
+    layer read as lit lumps, bake the light into its color with a Light
+    node in the material's graph (round 9's `green-lumps`, a billow through
+    a Light node).
+  - A layer's `slope` fact reads the art's height, which rolls with the
+    map's `undulationArt`. A world layer on gentle grades therefore also
+    draws on any plain whose art rolls; a map that should stay clean sets
+    a low `undulationArt` (round 9: green-3 at .2).
 
 ### 5. Colors
 
