@@ -280,7 +280,7 @@ moved, class by class, beside retail's value.
 | `slope:lines` too few | `banding`, `bandSoftness` (contour hatch), `slopeMarks`, `wrinkles` | the map lane: the window's strokes with Steps and a rock type of their own (section 6) |
 | One window's slopes or rock unlike the others' | the map lane: a rock type for that map, its strokes' Steps, `cracks`, `gullies` | a ground of its own |
 | `slope:edges` too many | `reliefAmount`, `worms`, `gentleRelief` | the slope material's fine Noise |
-| `steep:color` grayer, or greener than retail | rock material (the rock type's `material`, else the world's `rock`); `faceGrass`; surface rock rule | `faceTone`, `faceRindTone` |
+| `steep:color` grayer, or greener than retail | rock material (the rock type's `material`, else the world's `rock`): its mean color is the face's color, and its own hue variation shows at only a third (`rockGrain`). A material's `color` key recolors its whole graph and palette to that color: drop or change it in a copy of a rock material, or the copy draws the old rock's color (round 5's moss rock did); `faceGrass`; surface rock rule | `faceTone`, `faceRindTone` |
 | `steep:luma` | `faceShade`, `shadeDepth`, `ambient`, `lightCap` | rock material Gradient |
 | `steep:edges` too many (busy faces) | rock type: `rockFace` (depth), `faceBlockSize` up, `faceJoint` down, `faceSecondary` down | `faceWear`, `faceMass` |
 | `steep:lines` too few (retail's dark cracks) | rock type: `crackSeverity`, `crackMajor`, `crackNetwork`, `crackDark`; `faceScratch`, `faceCrease` | `layerCrease`, `creaseShade` |
@@ -288,7 +288,7 @@ moved, class by class, beside retail's value.
 | `shore:color`, `shore:luma` | beach (a `beach` role material, `beachWidth`), `lowReach`, `lowGrain`, `shoreEdge` | `wetSwath`, `wetGround`, `crispShore`, a surface layer on `toWater` |
 | `deep:color`, `deep:luma` | water material; `deepDepth` | colors |
 | `shelf:color`, `shelf:luma` | `shallowDepth`, `bedTint`, `bedBright`, `shallowTone` | water material |
-| `shelf:edges` too few (retail's specks and streaks on the shelf) | `bedContrast` (carries the bed's grain into the shelf tint; Green sets 0.7, and 1.0 took green-1's shelf edges from 0.08x to 0.53x retail), with `bedFlat`, `bedRelief`, `shoalRag`; the shallow-water surface layer | the water material, but its grain reaches only the deep water (the shelf is tinted by the water's mean color, `engine-frag.wgsl` `litBed`) |
+| `shelf:edges` too few (retail's specks and streaks on the shelf) | `bedContrast` (carries the bed's grain into the shelf tint; Green sets 0.7, and 1.0 took green-1's shelf edges from 0.08x to 0.53x retail), with `bedFlat`, `bedRelief`, `shoalRag`; the shallow-water surface layer. These are world-wide: green-3's and green-7's shelves overshoot at `bedContrast` .85 (round 5). For one map, try the rock type under its water: green-3's own rock type moved its shelf edges .003 to .005 (round 5, trial-054) | the water material, but its grain reaches only the deep water (the shelf is tinted by the water's mean color, `engine-frag.wgsl` `litBed`) |
 | `deep:edges` or `shelf:edges` too many | `bedRelief`, `bedFlat`, `waterSoft`, `shoalRag` | water material's fine Noise |
 | Everything a touch dark or flat | `ambient`, `lightCap`, `sunHeight` | `shadeDepth`, `flatOcclusion` |
 

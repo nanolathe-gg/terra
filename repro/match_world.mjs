@@ -12,8 +12,12 @@ export async function worldSlots(world, configs = '') {
   const [mats, rock] = await Promise.all([import('../sculpt-materials.js'), import('../sculpt-rock-presets.js')]);
   const config = rock.applyWorldRock(JSON.parse(readFileSync(join(dir, 'config', `${world}.json`), 'utf8')));
   let materials = mats.withWorldMaterials(null, config), rocks = rock.worldRocks(config);
-  ({rocks, materials} = rock.giveRockMaterials(rocks, materials, rocks.map(r => r.slot), config));
-  return {config, rocks, materials};
+  const given = rock.giveRockMaterials(rocks, materials, rocks.map(r => r.slot), config);
+  ({rocks, materials} = given);
+  // How full the map's material table and the GPU material cache are: a rock type's material is added only while both have room.
+  const layers = materials.reduce((n, m) => n + 1 + mats.materialStates(m).length, 0);
+  const cache = mats.materialCacheUsage(layers, undefined, materials.some(mats.materialStaged));
+  return {config, rocks, materials, missed: given.missed, room: {slots: materials.length, maxSlots: mats.MATERIAL_SLOTS - 1, cacheMiB: cache.bytes / 2 ** 20, budgetMiB: cache.budget / 2 ** 20}};
 }
 
 // What a material slot is for, in a few words.

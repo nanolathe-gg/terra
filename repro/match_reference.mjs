@@ -113,7 +113,11 @@ L.push('', `Landform keys: ${scene.LANDFORM_KEYS.map(k => `\`${k}\``).join(', ')
 
 L.push(`## 6. ${world}: what it has now`, '');
 L.push('### Material roles (`world.materials`)', ''); head(['role', 'material', 'kind']);
-for (const [role, key] of Object.entries(w.materials ?? {})) { const m = textures[key]; row([role, `\`${key}\``, !m ? 'missing' : m.like ? `like \`${m.like}\`, recolored` : `graph, ${m.nodes?.length ?? 0} nodes`]); }
+const materialKind = key => { const m = textures[key]; return !m ? 'missing' : m.like ? `like \`${m.like}\`, recolored` : `graph, ${m.nodes?.length ?? 0} nodes`; };
+for (const [role, key] of Object.entries(w.materials ?? {})) {
+  if (Array.isArray(key)) row([role, key.map(k => `\`${k}\``).join(', '), key.map(materialKind).join('; ')]);
+  else row([role, `\`${key}\``, materialKind(key)]);
+}
 L.push('', '### Rock types (`world.rock`)', '', `Presets: ${(w.rock?.presets ?? []).map(k => `\`${k}\``).join(', ') || 'none'}.`, '',
   'A stroke\'s `rockPreset` is a slot of the map\'s rock types (sculpt-rock-presets.js worldRocks): ' +
   ['0 the world\'s own rock (the World controls marked "rock")', '-1 rock beneath', ...[...new Set(['soil', ...(w.rock?.presets ?? [])])].map((k, i) => `${i + 1} \`${k}\``)].join(', ') + '.', '');
@@ -125,15 +129,23 @@ for (const l of w.surface ?? defaults.surface ?? []) L.push(`- \`${JSON.stringif
 L.push('');
 
 // The map lane: what a window's scene may choose, by slot number, and what each scene sets now.
-const {rocks, materials} = await worldSlots(world, configs);
+const {rocks, materials, missed, room} = await worldSlots(world, configs);
 const UNDULATION = ['undulation', 'undulationScale', 'undulationCover', 'undulationArt'];
 L.push('## 7. The map lane: slots and windows', '', 'A window\'s scene is one retail map. Its strokes choose a rock type (`rockPreset`) and a ground material (`groundPreset`)',
   'by slot number, and its `query` may set the map\'s own ground relief (' + UNDULATION.map(k => `\`${k}\``).join(', ') + ').',
   'The slots below are this checkout\'s, built the way the editor builds them; they move when the world\'s rock or material lists change,',
   'so read them again after such an edit (match.sh rewrites this file every trial).', '');
-L.push('### Rock slots (`rockPreset`)', ''); head(['slot', 'rock type', 'key', 'material slot']);
-row([-1, 'rock beneath (keeps what is there)', '', '']); row([0, 'the world\'s own rock (World controls marked "rock")', '', '']);
-for (const r of rocks) row([r.slot, r.name, r.key ? `\`${r.key}\`` : '', r.material ?? '']);
+L.push('### Rock slots (`rockPreset`)', ''); head(['slot', 'rock type', 'key', 'its rock material (slot, textures.json key)']);
+const worldRockMat = materials.find(m => m.worldRock), matName = slot => { const m = materials.find(o => o.slot === slot); return m ? `${slot}, \`${m.source ?? m.name}\`` : `${slot}`; };
+const ownRock = worldRockMat ? `the world's rock material (${matName(worldRockMat.slot)})` : 'none';
+row([-1, 'rock beneath (keeps what is there)', '', '']); row([0, 'the world\'s own rock (World controls marked "rock")', '', ownRock]);
+for (const r of rocks) row([r.slot, r.name, r.key ? `\`${r.key}\`` : '', r.material > 0 ? matName(r.material) : ownRock + (missed.includes(r.name) ? ': **its own did not fit**' : '')]);
+L.push('', `The map holds ${room.slots} of ${room.maxSlots} materials and ${room.cacheMiB.toFixed(0)} of ${room.budgetMiB.toFixed(0)} MiB of material cache. ` +
+  (missed.length ? `**No room for the rock material of ${missed.join(', ')}**: ${missed.length > 1 ? 'they show' : 'it shows'} the world's rock material.` :
+    'Every rock type that names a material shows it.'),
+  'A rock face takes its flat color from its material\'s mean and reads the material\'s brightness pattern; the material\'s own hue variation shows at',
+  'only a third (engine-frag.wgsl `rockGrain`). A textures.json material with a `color` key is recolored to that color (sculpt-materials.js',
+  '`recolorMaterial`), graph and palette alike: a copy of a rock material that keeps the rock\'s `color` draws that rock\'s color, whatever its graph says.');
 L.push('', 'Append a new rock type at the end of `world.rock.presets`: an earlier slot number would move and every stroke that names it would change.', '');
 L.push('### Material slots (`groundPreset`)', ''); head(['slot', 'name', 'textures.json key', 'what it is']);
 row([-1, 'ground beneath (keeps what is there)', '', '']);
@@ -150,7 +162,7 @@ for (const f of readdirSync(join(repo, 'repro', 'scenes')).filter(f => new RegEx
   L.push(`- **${f.replace('.json', '')}** (${sc.source?.map ?? 'unknown map'}): query \`${sc.query || ''}\`; ${strokes.length} strokes` +
     (sc.rocks ? '; its own rock list' : '') + (sc.materials ? '; its own material list' : ''));
   const kinds = new Map();
-  for (const [kind, , opt] of strokes) { const c = opt?.card ?? {}; const k = `${kind}, rock ${c.rockPreset ?? 'unset (-1)'}, ground ${c.groundPreset ?? (kind === 'paint' ? 'unset (0)' : 'unset (-1)')}`; kinds.set(k, (kinds.get(k) ?? 0) + 1); }
+  for (const [kind, , opt] of strokes) { const c = opt?.card ?? {}; const g = materials.find(m => m.slot === c.groundPreset && c.groundPreset > 0); const k = `${kind}, rock ${c.rockPreset ?? 'unset (-1)'}, ground ${c.groundPreset ?? (kind === 'paint' ? 'unset (0)' : 'unset (-1)')}${g ? ` (\`${g.source ?? g.name}\`)` : ''}`; kinds.set(k, (kinds.get(k) ?? 0) + 1); }
   for (const [k, n] of kinds) L.push(`  - ${n} x ${k}`);
 }
 L.push('');

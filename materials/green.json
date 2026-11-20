@@ -808,7 +808,7 @@
   "deposit": {"params": {"reach": 1, "round": 0.7}, "vary": {"reach": [0.8, 1.4], "haloRough": [4, 10]}}
  },
  "world": {
-    "materials": {"ground": "green-ground", "water": "green-water", "rock": "green-rock", "slope": "green-slope", "debris": "green-debris", "soil": "green-soil", "snow": "green-snow", "moss": "green-moss", "sand": "green-sand", "band": "green-band", "crystal": "crystals"},
+    "materials": {"ground": "green-ground", "water": "green-water", "rock": "green-rock", "slope": "green-slope", "debris": "green-debris", "soil": "green-soil", "snow": "green-snow", "moss": "green-moss", "sand": "green-sand", "band": "green-band", "crystal": "crystals", "extra": ["green-groundgrain"]},
     "knobDefaults": {
         "coastRamp": 0.75,
         "looseSupply": 0.08,
@@ -876,7 +876,11 @@
 
     "ridgestone",
 
-    "ridgeblock"
+    "ridgeblock",
+
+    "passrock",
+
+    "reefstone"
 
    ],
 
@@ -988,6 +992,30 @@
       "crackSeverity": 1,
       "crackMajor": 0.6,
       "debrisAmount": 0
+     }
+    },
+
+    "passrock": {
+     "label": "Mossy massif",
+     "material": "green-passrock",
+     "knobs": {
+      "faceRock": 0.55,
+      "faceGrass": 0.8
+     }
+    },
+
+    "reefstone": {
+     "label": "Smooth reef",
+     "knobs": {
+      "rockFace": 1.2,
+      "faceRock": 0.5,
+      "faceGrass": 0.8,
+      "faceLayers": 0.4,
+      "crackMajor": 0.3,
+      "faceWear": 0.15,
+      "faceBlockSize": 14,
+      "faceJoint": 0.05,
+      "faceShade": 0.8
      }
     }
 
