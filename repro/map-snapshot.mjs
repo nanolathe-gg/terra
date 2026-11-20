@@ -30,7 +30,9 @@ const RETUNES = [
   {name: 'rock column', file: 'green.json', snapshot: true, edit: g => { g.world.column.sections[0].beds[0] = [4, .1, 0]; }},
   {name: 'role materials', file: 'green.json', snapshot: true, edit: g => { g.world.materials.slope = 'green-moss'; g.world.materials.rock = 'green-band'; }},
   {name: 'library material graph', file: 'textures.json', snapshot: true, edit: t => { const m = t['green-ground']; m.nodes.find(n => n.type === 'noise').params.size *= 3; }},
-  {name: 'surface layers', file: 'defaults.json', snapshot: true, edit: d => { d.surface[1] = {...d.surface[1], name: 'Retuned cover'}; }},
+  // Green's own layer list (world.surface, a copy of the shared stack plus its own layers since 2026-11-20); retuning the shared default
+  // stack in defaults.json no longer reaches it, and the case tested nothing.
+  {name: 'surface layers', file: 'green.json', snapshot: true, edit: g => { g.world.surface[1] = {...g.world.surface[1], name: 'Retuned cover'}; }},
   {name: 'material table', file: 'green.json', snapshot: true, edit: g => { g.material.rockSlope = .7; g.material.wetBand = 30; }},
   {name: 'placement table', file: 'green.json', snapshot: true, edit: g => { g.placement.rock.slope = .3; }},
   {name: 'water table', file: 'green.json', snapshot: true, edit: g => { g.water.shallowRGB = [200, 40, 40]; }},
