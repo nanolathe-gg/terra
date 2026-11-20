@@ -72,7 +72,7 @@ Your output folder is `$R/match/terraform-wt-match-<world>/<world>/`
 | --- | --- | --- |
 | `materials/<world>.json` | `world.knobDefaults`, `world.rock`, `world.surface`, `world.materials` (with `extra`), `world.shapes`, `water` | look (every window) |
 | `materials/textures.json` | materials used only by your world, or new ones named `<world>-...` | look (every window) |
-| `repro/scenes/<world>-<n>.json` | stroke cards' `rockPreset`, `groundPreset` and shape options (Steps, gullies, cracks, curve...); the query's `undulation*` keys and the map's own `sea` and `plain` (its plain's height above the sea; a low-floored retail map gets the game's whole 0-255); the scene's own `surface` (the world's layer list, copied whole, with this map's amounts: a map holds its world's settings, owner 2026-11-19) and `materials` (its own grounds); new `paint` strokes that lay a ground, or paint a style or override (Relief, Cracks, Banding, Relaxation, Deposits, Vegetation, Rock exposure; REFERENCE.md, "Paint channels") where the retail map differs | map (that window) |
+| `repro/scenes/<world>-<n>.json` | stroke cards' `rockPreset`, `groundPreset` and shape options (Steps, gullies, cracks, curve...); the query's `undulation*` keys and the map's own `sea` and `plain` (its plain's height above the sea; a low-floored retail map gets the game's whole 0-255); the map's own water in the query (`shallowDepth`, `deepDepth`, `bedTint`, `bedBright`, `bedContrast`, `bedCracks`, `wetBand`: a river that stays light against a sea that darkens early); the scene's own `surface` (the world's layer list, copied whole, with this map's amounts: a map holds its world's settings, owner 2026-11-19) and `materials` (its own grounds); new `paint` strokes that lay a ground, or paint a style or override (Relief, Cracks, Banding, Relaxation, Deposits, Vegetation, Rock exposure; REFERENCE.md, "Paint channels") where the retail map differs | map (that window) |
 | `repro/scenes/<world>-<n>.json` | stroke points, `diameter`, `elevation`: only where the strokes do not follow the retail heights | shape (that window) |
 
 **The look lane** is the world: one answer for every window. **The map
@@ -146,8 +146,8 @@ Change nothing else:
    - **a map change:** its window's look does not rise, and the choice is
      one a map artist would make for that map (a rock type, a ground, steps,
      relief), not a patch painted to move a number.
-   - **a map's own surface layers or grounds** (a scene's `surface` or
-     `materials`): the same, and the held-out window cannot check them, so
+   - **a map's own surface layers, grounds or water** (a scene's `surface`,
+     `materials`, or its query's water keys): the same, and the held-out window cannot check them, so
      each needs a by-eye reason in the report: what this retail map shows
      that the world's list draws wrong (round 9: green-3's grades are clean
      where the world's gentle lumps draw). Copy the world's list whole and
@@ -202,6 +202,10 @@ Change nothing else:
 
 ## Rules of evidence
 
+- **One metric counts at most 3 family band widths** in a window's score
+  (`retail_gap.py`, `GAP_CAP`): red-3's waterline drew 230 thin dark
+  pixels in a million, 7 band widths on Red's narrow band, and made up half
+  its look score. The printout shows the uncapped value with "(counts 3)".
 - **Renders are deterministic.** The same files render the same bytes, so
   any score change between two trials is real, never noise (round 8 called
   a .013 rise noise).

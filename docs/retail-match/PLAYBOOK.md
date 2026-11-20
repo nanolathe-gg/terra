@@ -233,8 +233,17 @@ helps one window and hurts another.
     of that relief the art shows: lower it when the heights should roll but
     the picture shows lumps retail does not (round 2's green-5 at
     `undulation` 14 drew crumpled hummocks on its plain; `undulationArt`
-    0.3 kept the heights and smoothed the picture). The validator refuses
-    any other key in a scene's query: World controls are the world's.
+    0.3 kept the heights and smoothed the picture).
+  - **Sea and plain:** the query's `sea` and `plain` (the plain's height
+    above the sea): green-4's low-floored map uses `sea=0&plain=9`.
+  - **Water:** the query's `shallowDepth`, `deepDepth`, `bedTint`,
+    `bedBright`, `bedContrast`, `bedCracks` and `wetBand`, where this map's
+    water or damp bank plainly differs from the world's (red-2's river stays
+    light to depth 24, red-3's sea darkens from depth 8). Probe the world
+    value first: a map's own value needs a by-eye reason in the report.
+
+  The validator refuses any other key in a scene's query: World controls
+  are the world's.
 - **Try:** edit the scene, then `sh repro/match.sh <world> --window
   <world>-<n> --note "..."`, which renders only that window (about 20 s). A
   map setting can be probed first: `--probe undulation=3,6,10 --window
@@ -311,10 +320,12 @@ moved, class by class, beside retail's value.
 | `steep:luma` | `faceShade`, `shadeDepth`, `ambient`, `lightCap` | rock material Gradient |
 | `steep:edges` too many (busy faces) | rock type: `rockFace` (depth), `faceBlockSize` up, `faceJoint` down, `faceSecondary` down | `faceWear`, `faceMass` |
 | `steep:lines` too few (retail's dark cracks) | rock type: `crackSeverity`, `crackMajor`, `crackNetwork`, `crackDark`; `faceScratch`, `faceCrease`; `stepCrease` where the face is stepped | `layerCrease` (banks only), `creaseShade` |
+| Rock faces without retail's fine down-slope streaks or ribs (a knob, a buttressed ridge) | rock type: `faceScratch` ("Scratches and water grooves") with `faceScratchSize` (spacing), `faceScratchLength` and `faceScratchAngle` 0 (down the face), before a proposal | `gullies` on the map's strokes for the spurs; a rock material with vertical streaks |
 | `steep:band8` too low | rock type: `faceBed`, `faceLedge`, `faceLamina`, `faceTone` | rock material pattern |
+| `shore:luma` darker than retail (a dark bank or coast) | `wetBand`, the damp band's height above the water (rock stays damp four times as high; Red's 13 darkened red-3's coast near black, and 1 cleared every shore finding there) | a dry-bank surface layer on `toWater` |
 | `shore:color`, `shore:luma` | beach (a `beach` role material, `beachWidth`), `lowReach`, `lowGrain`, `shoreEdge` | `wetSwath`, `wetGround`, `crispShore`, a surface layer on `toWater` |
 | `deep:color`, `deep:luma` | water material; `deepDepth` | colors |
-| `shelf:color`, `shelf:luma` | `shallowDepth`, `bedTint`, `bedBright`, `shallowTone` | water material |
+| `shelf:color`, `shelf:luma` | `shallowDepth`, `deepDepth`, `bedTint`, `bedBright`, `shallowTone`; a world's material table sets the depths' defaults (Red renders 2 and 42; REFERENCE.md shows the value the page gets). Where one map's water differs (a river light to depth 24, a sea dark from depth 8), its scene's query may set its own (section 6) | water material |
 | `shelf:edges` too few (retail's specks and streaks on the shelf) | `bedContrast` (carries the bed's grain into the shelf tint; Green sets 0.7, and 1.0 took green-1's shelf edges from 0.08x to 0.53x retail), with `bedFlat`, `bedRelief`, `shoalRag`; the shallow-water surface layer. These are world-wide: green-3's and green-7's shelves overshoot at `bedContrast` .85 (round 5). For one map, try the rock type under its water: green-3's own rock type moved its shelf edges .003 to .005 (round 5, trial-054) | the water material, but its grain reaches only the deep water (the shelf is tinted by the water's mean color, `engine-frag.wgsl` `litBed`) |
 | `deep:edges` or `shelf:edges` too many | `bedRelief`, `bedFlat`, `waterSoft`, `shoalRag` | water material's fine Noise |
 | Everything a touch dark or flat | `ambient`, `lightCap`, `sunHeight` | `shadeDepth`, `flatOcclusion` |
