@@ -101,7 +101,7 @@ for (const [k, v] of new URLSearchParams(query)) {
 
 // The map lane: each window's scene.
 const UNDULATION = new Set(['undulation', 'undulationScale', 'undulationCover', 'undulationArt']);   // the map's ground node (sculpt-knobs.js UNDULATION)
-const [{SHAPE_FIELDS, LANDFORM_KEYS, SECTION_KEYS}, {worldSlots}] = await Promise.all([import('../sculpt-scene.js'), import('./match_world.mjs')]);
+const [{SHAPE_FIELDS, LANDFORM_KEYS, SECTION_KEYS}, {worldSlots, materialUse}] = await Promise.all([import('../sculpt-scene.js'), import('./match_world.mjs')]);
 const {config, rocks, materials, missed} = await worldSlots(world, configs);
 if (missed.length) warnings.push(`world.rock: no room in the map's materials for the rock material of ${missed.join(', ')}; ${missed.length > 1 ? 'they show' : 'it shows'} the world's rock material (REFERENCE.md, "Rock slots")`);
 const {toolDefaults, DRAWN_KINDS} = await import('../sculpt-scene.js');
@@ -131,6 +131,9 @@ for (const f of scenes) {
       const m = materials.find(m => m.slot === c.groundPreset);
       if (!m || m.worldWater) errors.push(`${where}: groundPreset ${c.groundPreset} is not a ground material slot (section 7 of the reference).`);
       else if (m.worldGround) errors.push(`${where}: groundPreset ${c.groundPreset} is the world's ground; choose it as 0.`);
+      // Slots are positions: a new surface layer's material or role takes a slot ahead of world.materials.extra and moves every later one
+      // (round 6's trial-032 turned green-5's ground into sand). A map lays an extra ground or a rock type's, rarely a role's or a layer's.
+      else if (/^role |surface layer/.test(materialUse(m))) warnings.push(`${where}: groundPreset ${c.groundPreset} now lays \`${m.source ?? m.name}\`, ${materialUse(m)}. If you added a surface layer or role material, the extra slots moved: renumber the scenes (section 7 of the reference).`);
     }
   });
 }

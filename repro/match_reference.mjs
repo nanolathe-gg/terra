@@ -113,7 +113,11 @@ L.push('', `Landform keys: ${scene.LANDFORM_KEYS.map(k => `\`${k}\``).join(', ')
 
 L.push(`## 6. ${world}: what it has now`, '');
 L.push('### Material roles (`world.materials`)', ''); head(['role', 'material', 'kind']);
-for (const [role, key] of Object.entries(w.materials ?? {})) { const m = textures[key]; row([role, `\`${key}\``, !m ? 'missing' : m.like ? `like \`${m.like}\`, recolored` : `graph, ${m.nodes?.length ?? 0} nodes`]); }
+const materialKind = key => { const m = textures[key]; return !m ? 'missing' : m.like ? `like \`${m.like}\`, recolored` : `graph, ${m.nodes?.length ?? 0} nodes`; };
+for (const [role, key] of Object.entries(w.materials ?? {})) {
+  if (Array.isArray(key)) row([role, key.map(k => `\`${k}\``).join(', '), key.map(materialKind).join('; ')]);
+  else row([role, `\`${key}\``, materialKind(key)]);
+}
 L.push('', '### Rock types (`world.rock`)', '', `Presets: ${(w.rock?.presets ?? []).map(k => `\`${k}\``).join(', ') || 'none'}.`, '',
   'A stroke\'s `rockPreset` is a slot of the map\'s rock types (sculpt-rock-presets.js worldRocks): ' +
   ['0 the world\'s own rock (the World controls marked "rock")', '-1 rock beneath', ...[...new Set(['soil', ...(w.rock?.presets ?? [])])].map((k, i) => `${i + 1} \`${k}\``)].join(', ') + '.', '');
@@ -158,7 +162,7 @@ for (const f of readdirSync(join(repo, 'repro', 'scenes')).filter(f => new RegEx
   L.push(`- **${f.replace('.json', '')}** (${sc.source?.map ?? 'unknown map'}): query \`${sc.query || ''}\`; ${strokes.length} strokes` +
     (sc.rocks ? '; its own rock list' : '') + (sc.materials ? '; its own material list' : ''));
   const kinds = new Map();
-  for (const [kind, , opt] of strokes) { const c = opt?.card ?? {}; const k = `${kind}, rock ${c.rockPreset ?? 'unset (-1)'}, ground ${c.groundPreset ?? (kind === 'paint' ? 'unset (0)' : 'unset (-1)')}`; kinds.set(k, (kinds.get(k) ?? 0) + 1); }
+  for (const [kind, , opt] of strokes) { const c = opt?.card ?? {}; const g = materials.find(m => m.slot === c.groundPreset && c.groundPreset > 0); const k = `${kind}, rock ${c.rockPreset ?? 'unset (-1)'}, ground ${c.groundPreset ?? (kind === 'paint' ? 'unset (0)' : 'unset (-1)')}${g ? ` (\`${g.source ?? g.name}\`)` : ''}`; kinds.set(k, (kinds.get(k) ?? 0) + 1); }
   for (const [k, n] of kinds) L.push(`  - ${n} x ${k}`);
 }
 L.push('');
