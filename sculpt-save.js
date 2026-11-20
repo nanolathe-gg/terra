@@ -94,7 +94,7 @@ export function copySavedWorld(value,config) {
 }
 
 
-// Count the overrides the existing world store already holds, compared with its built-in data.
+// Count how a map's world settings differ from its built-in world's data today (World › the change count).
 // Copied defaults in an imported world are not changes; one material/list is one stored override.
 export function worldOverrideCount(world,config) {
   const equal=sameKitData;

@@ -643,9 +643,9 @@ export function withWorldMaterials(value, config, {carried = false} = {}) {
   // lists as text (sculpt.js setSurfaceList) would see a change where there is none.
   return copyMaterials(list);
 }
-// The world's ground and its water are world settings, like its sliders: every map drawn in the world shows the same two, and a map's
-// other materials are its own. A map's list (a save's, or none for a new map) takes the world's two here, each in the slot the map
-// already gave that role. `config.worldMaterials` holds the ones the artist changed (keptWorldMaterials); the rest are the library's.
+// The world's ground and its water, like its sliders, are the map's world settings (kept with the map since 2026-11-19); its other
+// materials are its own too. A map's list (a save's, or none for a new map) takes the world's two here, each in the slot the map already
+// gave that role. `config.worldMaterials` holds the map's saved ones (keptWorldMaterials); the rest are the library's.
 export function adoptWorldMaterials(value, config, {carried = false} = {}) {
   let list = withWorldMaterials(value, config, {carried});
   for (const [role, which] of ROLES) {

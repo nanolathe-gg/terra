@@ -92,7 +92,7 @@ test('built-in tools come from the config: a stored list cannot freeze, lose or 
  assert.deepEqual(kit.tools.map(t=>[t.id,t.label]),[['hill','Hill'],['world-ridge','Ridge']],'the config’s label wins, a removed one is dropped');
  assert.deepEqual(worldKit({...config,tools:[...config.tools,{...config.tools[0],id:'knoll',label:'Knoll',shape:'hill'}]},{tools:[tool()]}).tools.map(t=>t.id),['hill','knoll','world-ridge'],'a new built-in tool reaches the world');
 });
-test('a world stores only what its artist made',()=>{
+test('a world kit records only what its artist made',()=>{
  assert.deepEqual(storedWorldKit(config,{}),{});
  const derived=worldKit(config);assert.deepEqual(storedWorldKit(config,{tools:derived.tools,rocks:derived.rocks}),{},'the built-in tools and the derived catalog stay derived');
  const own=storedWorldKit(config,world());assert.deepEqual(own.tools.map(t=>t.id),['world-ridge']);assert.deepEqual(own.rocks.map(r=>r.key),['wrock-stone']);
@@ -105,7 +105,7 @@ test('a map tool whose library shape is gone is left out of the save it loads fr
  const mapTool=(id,shape)=>({id,label:'Mine '+id,icon:'hill',color:'#778899',group:'shape',shape,card:{preset:'custom',diameter:300}});
  assert.deepEqual(copyMapTools([mapTool('map-1','hill'),mapTool('map-2','retired-shape')]).map(t=>t.id),['map-1']);
 });
-test('a saved world tool with a removed card setting loads without it; one with a setting of the wrong kind is left out (AGENTS.md rule 7)',()=>{
+test('an earlier build\'s world tool with a removed card setting loads without it; one with a setting of the wrong kind is left out (AGENTS.md rule 7)',()=>{
  const {card}=tool(),kept=worldKit(config,{tools:[tool({card:{...card,removedOption:5}})]}).tools.find(authoredWorldTool);
  assert.equal('removedOption' in kept.card,false);assert.deepEqual(kept.card,worldKit(config,{tools:[tool()]}).tools.find(authoredWorldTool).card);
  assert.deepEqual(worldKit(config,{tools:[tool({card:{...card,diameter:'wide'}}),tool({id:'world-other'})]}).tools.map(t=>t.id),['hill','world-other']);

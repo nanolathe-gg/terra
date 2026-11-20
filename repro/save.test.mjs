@@ -22,7 +22,7 @@ test('Shallow water is saved as a tone of the water; its old color and a bad ton
   for(const bad of ['#c03030',[.1,0],[2,0,0],['a',0,0]])assert.equal('shallowTone' in copySavedWorld({...value,colors:{shallowTone:bad}},config).colors,false,JSON.stringify(bad));
 });
 
-test('World home counts stored differences from pristine data and Reset preserves identity',()=>{
+test('World home counts stored differences from pristine data',()=>{
   const base={...config,surface:[{builtin:'rock',amount:1}]};
   assert.equal(worldOverrideCount({name:'Custom',base:'green',knobs:{faceWear:'0.2'},colors:{sky:'#ffffff'},surface:structuredClone(base.surface)},base),0);
   const world={name:'Custom',base:'green',knobs:{faceWear:'.5'},colors:{sky:'#abcdef'},surface:[{builtin:'rock',amount:.3}],featureSet:normalizeSet(undefined,base)};

@@ -223,11 +223,12 @@ Built (each a commit; the measurements are in their messages):
   pixel (row, coverage, in order), its color, its ground, its rock type and how much rock shows, and the facts; the panel lists them
   top first with their materials and what of each shows. The Pick card itself names the shape, rock type and materials there.
 - **Naming**: each row shows its material; the material editor names the layers a copy draws.
-- **World-kept materials**: the world keeps every role material and layer material it changed, as its ground and water.
+- **Map-kept materials**: the map keeps every role material and layer material with its world settings, as its ground and water
+  (owner, 2026-11-19: the map holds everything; docs/MAP_SCOPE_PROPOSAL.md).
 - **A material's Color** (`recolorMaterial`): moves every color step (the gradients and color constants the color is made of,
   not a Multiply's or Add's layer) by one amount, and its palette with it. In the editor's Controls, the World ground and water
   panes and each Surface row.
-- **Shared copies**: a layer binds the world's copy of its library material (its `worldLayer` is the library key), so the three
+- **Shared copies**: a layer binds the map's copy of its library material (its `worldLayer` is the library key), so the three
   snows draw one snow.
 - **Engine surfaces draw materials**: soil, the base band, both mosses, painted snow, sand dust, sand and the ice snows draw the
   world's `@soil`, `@band`, `@moss`, `@snow`, `@sand` (world.materials), library entries that are another graph with the world's

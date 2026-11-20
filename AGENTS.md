@@ -230,6 +230,9 @@ Use additional standalone checks only for the work they protect:
 - Section editor, features, passability or workspace: the corresponding
   `repro/curveedit.mjs`, `features.mjs`, `passability.mjs` or `workspace.mjs`,
   with your own `--server` and `--port`.
+- What a map keeps, Apply look or New map with this look: `repro/map-snapshot.mjs`
+  (it edits `materials/*.json` in its worktree and puts them back) and
+  `repro/look.mjs`, with your own `--server` and `--port`.
 - Drag or bake performance: `node repro/perf.mjs` when investigating or
   claiming a performance change; compare both builds under similar conditions.
 - Visual terrain work: inspect affected authored scenes at 1x. Realism reports,

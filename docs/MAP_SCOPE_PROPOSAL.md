@@ -41,10 +41,28 @@ Where this differs from sections 2 to 8, this section wins.
   - the feature styles, rock types and tools;
   - the world's engine tables (`material`, `water` and `placement`,
     `worldSettings.engine`). Retuning one of these changed a saved map's
-    pixels, so they are kept too.
+    pixels, so they are kept too. The server now sends `placement` in the
+    world config; the renderer used to read it from the raw world file, so
+    it was never kept until the review caught it. A table's keys are
+    filtered when it is applied, one level into a nested block, so a lent
+    beach's numbers are kept and a constant the data gained later takes
+    the data's value;
+  - the world's role map (`worldSettings.roles`: which library material
+    each surface role starts from, and so which optional stages it draws).
+    Without it a role a built-in world gains later, such as highland
+    ground, reached every old map. A borrowed beach is not kept; `beachFrom`
+    names it.
 
-  `repro/map-snapshot.mjs` retunes nine parts of Green and checks that a
-  saved map's save and pixels stay the same.
+  `repro/map-snapshot.mjs` retunes eleven parts of Green and checks that a
+  saved map's save and pixels stay the same. Each retune must also change
+  a new map, or the check reports it as testing nothing.
+- **Known gaps:**
+  - colors a world's data might set (`world.colors`) are kept only where the
+    map has them. No world sets any today; the renderer's built-in sun and
+    sky are code;
+  - on main as well: restoring an Undulation change (Undo, Redo, or an
+    Apply look that changes Undulation) leaves a weathered picture that
+    differs from a reload's. The authored terrain is right.
 - **Still built from data, not kept:**
   - the toolbar's built-in buttons and their presets (for new shapes only);
   - rock recipes and material starting points (for adding only);
@@ -56,8 +74,12 @@ Where this differs from sections 2 to 8, this section wins.
   - The camera key `view` no longer counts as a world setting.
 - **No world store.** It is read once to convert, then removed:
   - every world of your own, and every built-in world you changed, becomes
-    an empty 4 × 4 map named after it;
+    an empty 4 × 4 map named after it ("Green Planet (your settings)" for a
+    changed built-in world). Each map holds a full snapshot of its look;
   - a world a map brought with it (`openedFrom`) is skipped;
+  - a world that can never convert (its base world is gone, or its record
+    cannot be read) is left out with a note. Only a failure that may pass
+    (the network or the map store) keeps the store for the next boot;
   - a map made by an earlier build gets its world tools turned into map
     tools, and its rock types lose their world provenance, when it is opened
     or used as a look source (`mapOwnedKit`).
@@ -81,7 +103,15 @@ Where this differs from sections 2 to 8, this section wins.
   at its address. A placed feature whose address the new set does have
   takes the new style.
 - **No "changed" marks on world values.** Strokes' existing `edited` lists
-  are now saved in files and share links too.
+  are now saved in files and share links too. The World pane's count
+  ("N changes from Green Planet") stayed. It compares with today's built-in
+  world, so it moves when that world is retuned.
+- **Apply look in place** gives the picture a reload of the map draws:
+  - the Undulation rows rebuild the ground's undulation node;
+  - settings that are no row (Time constants, render modes) reach the
+    renderer;
+  - a role the source lacks is removed from the map's materials;
+  - a saved tool whose id now names another tool takes its own card.
 
 ## 1. What is wrong today
 

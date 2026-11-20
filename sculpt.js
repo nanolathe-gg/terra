@@ -3312,8 +3312,7 @@ async function boot() {
     if(embedded&&Number.isFinite(restoring.baseHeight))config.baseHeight=restoring.baseHeight;
     MIN_HEIGHT=config.seaLevel-90; MAX_HEIGHT=config.seaLevel+300;
     if ((!config.map && config.size!==1024) || !Number.isInteger(config.grid) || config.grid<2 || config.grid>(config.map?16384:1024) || !Number.isFinite(config.baseHeight) || !Number.isFinite(config.seaLevel)) throw new Error('Unsupported sculpt configuration.');
-    // The world: built-in (the biome itself) or a custom one based on it.
-    // Its remembered settings come before the biome's own defaults.
+    // The world: the built-in one the address names, with the map's own world settings (above) over its defaults.
     worldId=config.biomeId;
     config.featureSet=worlds[worldId]?.featureSet;
     if (needsPicker()) openNewMap(true);   // the picker before the renderer starts: Create waits for nothing (newMapReady)

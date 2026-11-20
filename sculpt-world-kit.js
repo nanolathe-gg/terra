@@ -81,8 +81,8 @@ export function storedWorldKit(config,world={}){
   return {...(tools.length?{tools}:{}),...(world.rocks!==undefined&&!same(kit.rocks,worldKit(config).rocks)?{rocks:kit.rocks}:{})};
 }
 export const optionalWorldKit=(world,config)=>storedWorldKit(config,world);
-// A built-in world's own rock types (its config's) stay the map's: editing or deleting one on a map never changes the world. Only types the
-// artist saved to the world, and every type of a world of their own, are world-owned instances.
+// A built-in world's own rock types (its config's) are the map's: editing or deleting one on a map never changes the world. Only an earlier
+// build's world kept rock types of its own (mapOwnedKit turns them into the map's).
 export const baseRockKeys=config=>new Set(worldRocks(config).map(r=>r.key));
 const worldOwned=(key,builtIn,config)=>!(builtIn&&baseRockKeys(config).has(key));
 export function materialRefSlot(ref,materials){
