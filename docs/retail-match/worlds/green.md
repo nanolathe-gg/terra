@@ -94,46 +94,49 @@ These notes are by eye, from the base crops in
 - No rock coasts on Green. Shores are a natural sand-grass edge.
 - Hills must stay grassy. Rock on a hill is cracks and patches, not a cap.
 
-## Start here (round 15)
+## Start here (round 16)
 
-Round 14 (branch `match-green-15`, 62 of 300 trials; report in
-`$R/match/terraform-wt-match-green-15/green/REPORT.md`) was reviewed and
-ported on 2026-11-20. Mean shape .1341 to .1302, look .1251 to .1149;
-held-out green-7 unchanged (.192/.102).
+Round 15 (branch `match-green-16`, 78 of 300 trials; report in its final
+message and `$R/match/terraform-wt-match-green-16/green/NOTES.md`) is
+unreviewed. Measured, trial-078 against trial-000: mean shape .130 to .104,
+look .115 to .111; held-out green-7 unchanged (.19/.102, holdout-003).
 
-- **Green-4's massifs lean west:** all nine strokes lean 180, facing 9,
-  with an even front section and the old mountain section on the back.
-  Look .198 to .149, shape .146 to .123. By eye (trial-059 pair) long lit
-  west slopes and short dark east faces, as retail's. Cost: a few small dark
-  lumps on the valley floor.
-- **Green-1's calmer shelf:** its own surface list (shoal specks 1 to .4)
-  and query bedContrast .8: look .054 to .041, shelf:light cleared. Green-1
-  now holds its own copy of the world's surface list.
-- **Measured:** green-5's lines are ridgestone's own marks: on the divide
-  rock its slope lines fall to .00018 (058), and band darkness 1 doubles
-  green-2's lines but leaves green-5's unmoved (026). Landform strokes
-  ignore the landform preset's `roughness` (027 renders as the base).
-- **World wetBand** 5 or 24 hurts every window (051/052): Green's plains sit
-  close above the sea.
+- **Green-6 (three commits):** the ridges follow retail's heights (diameter
+  85, low top arms, tall south ends; a fixture that alone cost look .083 to
+  .114, trial-026), then Gullies 100 at size 60 cut buttresses that read
+  by eye (shape .069, look .085, trial-027; steep:band8 and steep:edges
+  cleared), then the Blocky ridge rock shines (shineRock .75: steep:light
+  cleared, faces a little lighter than retail's, trial-032). Gullies at
+  50-80 on the old wide ridge only scalloped the outline.
+- **Green-2 (three commits):** the ridge runs past the east edge at half
+  height and the south erase sits 100 px lower (fixtures, shape .128 to
+  .083), and a Banding more stroke covers the new east grades (gentle:lines
+  cleared). Look .139 to .124.
+- **Green-5:** Banding more along the escarpment (look .206 to .198,
+  slope:lines 1.9 to 1.2): bands show only where Step breakup removes the
+  shelves, which is round 14's engine finding seen from the map side.
+- **Measured, not kept:** faceFill .24 (mean look .115 to .112, green-4 .149
+  to .136; green-2, 3 and 6 slightly worse, so the owner's light stays:
+  trial-048); creaseShade .2 (mean worse, green-4 +.024: trial-064);
+  reliefAmount .18 (score only, crops identical: trial-053). The gentle
+  32 px excess on green-1, 3 and 7 is hill-foot shading leaking into a
+  thin class (16-48 px from slopes), not ground texture.
 
 Leads:
 
-1. **Green-6's faces:** try round 14's green-4 idea (green-6's ridges lean
-   300: an even front section), and `spurCount` for its lobed foot.
-   faceScratch at its maximum gives only faint 1-2 px grooves. Deeper,
-   rounder grooves were tried and dropped at review: a throwaway edit (4x
-   deeper, broad profile) only changed the face's mottle
-   (`$R/match/terraform-wt-match-green-15/green/eye/groove-deep.png`:
-   retail, faceScratch 6, deep grooves). Retail's ribs are buttresses tens of
-   px wide with deep shadow between them: a shape (spurs, gullies), not
-   face marks.
-2. **Green-4:** the pale ledge streaks are lit ledge tops, not material
-   grain (055); the valley-floor lumps from the lean.
-3. **Green-1's shelf lumps:** a map may now set `bedRelief` and `bedFlat`
-   in its query (harness, 2026-11-20).
-4. **Green-5's step lines** wait on an engine look at why bands skip
-   terraced slopes and why riser lines are dark only facing away from the
-   sun (engine-bake.wgsl ~1334; proposal).
+1. **Green-4 (look .149, now the second worst):** steep luma 50 against 55
+   and brightest 123 against 114 (ours has more shadow and brighter lit
+   ledges). Its valley lumps come from heightVary 30 on the long lean back
+   (heightVary 0 removes them, shape +.03: trial-036; varyFoot 0 is far
+   worse: trial-058).
+2. **Green-5 step lines** still wait on the engine (bands skip terraced
+   slopes; trial-077 shows bands only on broken-up stretches).
+3. **Green-6's 32 px contrast** (ours 4.3, retail 6.5): neither faceShade 1
+   nor creaseShade moved it; retail's east faces are near black with cast
+   shadow.
+4. **Green-2's slope lines** run 2x retail while its gentle lines are
+   short: bandLevel is times banding, so a rock type cannot raise one
+   without the other (divide banding .3/.5: trials 044/045).
 
 ## Pilot notes (2026-11-18)
 
