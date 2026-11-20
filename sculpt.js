@@ -6,7 +6,7 @@ import {configureMap,mapGeometry,mountMapCanvas,validMapSize} from './sculpt-map
 import {mountEditorUI,groupToolControls,mountWorldControlIndex,worldGroup,worldHome,mountColumnPanel} from './sculpt-ui.js';
 import {controlRow} from './sculpt-workspace.js';
 import {copyColumn,sameColumn,columnTones,toneColor,colorTone} from './sculpt-column.js';
-import {materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,layerCopyMissing,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,roleName,worldKey,LIBRARY,materialRef,materialSlotFor} from './sculpt-materials.js';
+import {MAP_ROLES,materialHeightKey,materialStates,materialColor,recolorMaterial,setMaterial,addMaterial,copyMaterial,copyMaterials,adoptWorldMaterials,withWorldMaterials,worldMaterials,worldOwnMaterials,keptWorldMaterials,worldKept,keepStrokeMaterials,materialsInUse,deleteMaterial,surfaceMaterials,layerCopyMissing,materialTint,assignMaterial,MATERIAL_SLOTS,roleOf,roleName,worldKey,LIBRARY,materialRef,materialSlotFor} from './sculpt-materials.js';
 import {mountMaterialEditor} from './sculpt-material-editor.js';
 import {ROCK_PRESETS,ROCK_HEADLINES,ROCK_KEYS,ROCK_SLOTS,copyRockSettings,rockPresetFor,applyWorldRock,copyRocks,worldRocks,worldRockName,keepStrokeRocks,strokeRock,rocksBeneath,rocksInUse,worldRock,recipeRock,rockRecipeFor,addRock,duplicateRock,renameRock,uniqueRockName,setRock,setRockColors,deleteRock,rockRecipeText,parseRockRecipe,giveRockMaterials,dropRockMaterials,rockRef,rockSlotFor} from './sculpt-rock-presets.js';
 import {KNOBS,applyKnob,createWorldInputQueue,colorRows,pickWorldColor,strokeWaterPicks,slopeReplaced,worldPanelValues as worldPanelValuesOf,waterTone} from './sculpt-knobs.js';
@@ -239,8 +239,10 @@ function buildToolbar() {
 // The map's tools replaced (Save as tool, Delete, undo, a load or a scene): the toolbar and the cards follow, and a selected tool that is gone gives way to
 // Landform. `fresh` gives every map tool its own card again (another map's tools may have had these ids).
 function restoreMapTools(list,fresh=false) {
+  const before=new Map(mapTools.map(t => [t.id,JSON.stringify(t)]));
   mapTools=structuredClone(list);
-  for (const id of Object.keys(toolSettings)) if (id.startsWith('map-') && (fresh || !mapTools.some(t => t.id===id))) delete toolSettings[id];
+  // A tool under the same id that is now another tool (Apply look's Tools, or its undo: two maps number their tools alike) takes its own card.
+  for (const id of Object.keys(toolSettings)) if (id.startsWith('map-') && (fresh || !mapTools.some(t => t.id===id && before.get(id)===JSON.stringify(t)))) delete toolSettings[id];
   for (const t of mapTools) toolSettings[t.id]??=toolCard(t.id);
   if (!toolIds().has(tool)) { tool=LANDFORM_TOOL.id; showTool(toolSettings[tool]); }
   buildToolbar();
@@ -2436,7 +2438,7 @@ function configureStoredWorld(world,beach=world.knobs?.beachFrom){
   const settings=new Map(beach?[['beachFrom',beach]]:[]);borrowBeach(config,settings);applyEngineTables(config,world.engine);renderer.layers=new Set(config.layers);
 }
 // ---- Apply look and New map with this look (owner, 2026-11-19). A look is a save: a built-in world's (builtInLook) or a map's. ----
-const ALL_CARDS=LOOK_CARDS.map(([card])=>card),KNOB_KEYS=new Set(KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)));
+const ALL_CARDS=LOOK_CARDS.map(([card])=>card),KNOB_KEYS=new Set(KNOBS.flatMap(([,rows])=>rows.map(([key])=>key))),UNDULATION_KEYS=['undulation','undulationScale','undulationCover','undulationArt'];
 // A built-in world's look as a save would hold it: its rows' defaults, colors, materials, surface, tables, rock types, column and features.
 async function lookConfig(id) {
   if (id===config.biomeId) return structuredClone(baseWorldConfig);
@@ -2478,6 +2480,16 @@ function composeLook(B,cards) {
     if (at) mats=mats.map(x=>x.slot===at.slot?{...x,...graph,name:m.name}:x);
     else { const added=addMaterial(mats,graph,m.name); mats=added.materials.map(x=>x.slot===added.slot?{...x,...keyFieldsOf(key)}:x); }
   }
+  // The source's role map (which roles its world has) for the checked cards; a role it lacks goes, from the map's materials too (a full
+  // reset leaves no highland ground the artist added). A source from an older build names no roles and changes none.
+  const srcRoles=copyRoles(BW.roles);
+  if (srcRoles) {
+    const roles=worldRoles(config);
+    for (const k of new Set([...Object.keys(roles),...Object.keys(srcRoles)])) { if (!cards.has(roleNameCard(k))) continue; if (Object.hasOwn(srcRoles,k)) roles[k]=structuredClone(srcRoles[k]); else delete roles[k]; }
+    R.roles=roles;
+    const gone=new Set(MAP_ROLES.filter(([key,name])=>cards.has(roleCard(key))&&!Object.hasOwn(srcRoles,name)&&!source.some(m=>worldKey(m)===key)).map(([key])=>key));
+    mats=mats.map(x=>{const key=worldKey(x);if(!gone.has(key))return x;const {[key]:_,...own}=x;return own;});
+  }
   const same=(a,b)=>a.name===b.name&&JSON.stringify(copyMaterial(a))===JSON.stringify(copyMaterial(b));
   const bring=slot=>{   // a source material slot as this map's: a world material by its role, a map material by its graph (added if new)
     const m=source.find(x=>x.slot===slot); if (!m) return 0;
@@ -2494,7 +2506,7 @@ function composeLook(B,cards) {
     // A rock type a shape uses that the new list has none for (by key, then name) stays, in a free slot: no shape loses its rock. Only a
     // full list (15) sends such a shape to the world's rock.
     for (const r of old) {
-      if (matchRock(r,rocks)||!nodesNext.some(n=>n.params?.rockPreset===r.slot)) continue;
+      if (matchRock(r,rocks)||!cur.nodes.some(n=>n.params?.rockPreset===r.slot)) continue;   // used as the map was (nodesNext is moved as it goes)
       let slot=1;while(rocks.some(x=>x.slot===slot))slot++;if(slot>=ROCK_SLOTS)continue;
       const {worldKey:_,...plain}=r;rocks.push({...plain,slot,key:rocks.some(x=>x.key&&x.key===r.key)?null:r.key});
       nodesNext=nodesNext.map(n=>n.params?.rockPreset===r.slot&&!n.rockKept?{...n,rockKept:true,rockFrom:r.slot,params:{...n.params,rockPreset:slot}}:n);
@@ -2527,6 +2539,12 @@ function composeLook(B,cards) {
     mapDataNext.featureSet=normalizeSet(next,config);
   }
   copyRocks(rocks);mats=assertKitMaterials(mats);   // room for every rock type and material, or nothing changes
+  // The ground's undulation is a node the Undulation rows write (sculpt-knobs.js applyKnob): it takes the composed rows' values, added or
+  // updated as a row change makes it, so the terrain is what a reload of the map draws.
+  if (UNDULATION_KEYS.some(k=>cards.has(cardOfKey(k)))) {
+    const g=groundDefaultsIn(new Map(UNDULATION_KEYS.map(k=>[k,R.knobs[k]??baseWorldConfig.defaults?.[k]]).filter(([,v])=>v!==undefined&&v!==null).map(([k,v])=>[k,String(v)]))),i=nodesNext.findIndex(n=>n.kind==='ground');
+    if (i>=0) nodesNext=nodesNext.map((n,j)=>j===i?{...n,...g}:n); else if (g.amplitude>0) nodesNext=[{kind:'ground',...g,seed:seed^0x9e37},...nodesNext];
+  }
   const knobs={};for (const [,rows] of KNOBS) for (const [key] of rows) { if (key==='beachFrom'||ROCK_KEYS.includes(key)) continue; const v=R.knobs[key]??baseWorldConfig.defaults?.[key]; if (v!==undefined&&v!==null) knobs[key]=String(v); }
   return {...cur,nodes:nodesNext,column,rock,rocks,materials:mats,surface,tools,mapData:mapDataNext,world:{knobs,colors:structuredClone(R.colors),stored:R,beachFrom:R.knobs.beachFrom},terrainKey:++historySerial};
 }
@@ -2583,12 +2601,16 @@ async function openLookDialog() {
   try { for (const m of byRecent(mapStore?await mapStore.list():[])) if (m.id!==tabMapId) mapsGroup.append(new Option(`${m.name} · ${config.biomes?.[m.biome]||m.biome}`,'map:'+m.id)); } catch (_) {}
   select.replaceChildren(worldsGroup,...(mapsGroup.children.length?[mapsGroup]:[]),new Option('A map file…','file'));
   for (const b of $('look-cards').querySelectorAll('input')) b.checked=true;$('look-dialog').querySelector('input[name=look-shapes][value=keep]').checked=true;
-  $('look-dialog').showModal();readLook();
+  lookSourceBefore=select.value;$('look-dialog').showModal();readLook();
 }
 $('world-apply').onclick=openLookDialog;
-$('look-source').onchange=()=>{ if ($('look-source').value==='file') $('look-file').click(); readLook(); };
+// "A map file…" opens the chooser; closing it without a file goes back to the source before, so choosing the file entry again opens it again.
+let lookSourceBefore='';
+$('look-source').onfocus=()=>{ lookSourceBefore=$('look-source').value; };
+$('look-source').onchange=()=>{ if ($('look-source').value==='file') $('look-file').click(); else lookSourceBefore=$('look-source').value; readLook(); };
+$('look-file').oncancel=()=>{ if ($('look-source').value!=='file'||!lookSourceBefore) return; $('look-source').value=lookSourceBefore; readLook(); };
 $('look-file').onchange=async()=>{ const file=$('look-file').files[0];$('look-file').value='';if(!file)return;const serial=++lookReading;
-  try { const B=await mapLook(JSON.parse(await file.text())); if (serial===lookReading) lookLoaded=B; } catch (err) { lookLoaded=null; $('look-note').textContent=err.message; return; }
+  try { const B=await mapLook(JSON.parse(await file.text())); if (serial===lookReading) lookLoaded=B; } catch (err) { if (serial===lookReading) { lookLoaded=null; $('look-note').textContent=err.message; } return; }
   syncLookNote(); };
 $('look-cards').onchange=syncLookNote;$('look-dialog').querySelector('.look-shapes').onchange=syncLookNote;
 $('look-cancel').onclick=()=>$('look-dialog').close();
@@ -2760,6 +2782,15 @@ function worldUndoState(){
 function restoreWorldState(w){
   if(w.stored){configureStoredWorld(w.stored,w.beachFrom);if(w.beachFrom==null)experiment.delete('beachFrom');else experiment.set('beachFrom',w.beachFrom);}
   let any=false;
+  // The world's settings that are no row (a render mode, a Time constant: Tools and Light & weather in Apply look) follow the restored world
+  // too, so the picture is what a reload of the map draws (AGENTS.md rule 12).
+  // Only the world data's own settings: the view switches a save also holds (palette, fill, relief) are this browser's.
+  if(w.stored)for(const key of new Set([...Object.keys(baseWorldConfig.defaults||{}),...Object.keys(baseWorldConfig.engineDefaults||{})])){
+    if(KNOB_KEYS.has(key)||ROCK_KEYS.includes(key)||key==='beachFrom')continue;
+    const v=config.defaults?.[key]??config.engineDefaults?.[key],now=renderer.variant.get(key);
+    if(v==null||String(now)===String(v))continue;
+    worldInputQueue.put('knob:0:'+key,{type:'knob',slot:0,key,value:String(v),restore:true});any=true;
+  }
   for(const [key,value] of Object.entries(w.knobs||{}))if(String(renderer.variant.get(key)??config.defaults?.[key])!==value){
     worldInputQueue.put('knob:0:'+key,{type:'knob',slot:0,key,value,restore:true});any=true;
     const input=$('knob-'+key);if(input){input.value=value;const out=input.closest('[data-knob]')?.querySelector('output');if(out)out.textContent=value;}   // the row shows it, as a rock row's undo does
