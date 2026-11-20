@@ -90,7 +90,7 @@ export const worldPictureKey = (world, context, options) => pictureKey(world.var
 // {id, key, world (worldSnapshot), nodes, frame (toolFrame), rocks, context, refSpacing, options, done(error, image)}. A newer job for a tool replaces a queued one. The renderer and
 // engine are made on the first job and released when the queue drains, so nothing stays on the GPU between rounds.
 export class ToolPictures {
-  constructor({idle = () => true, wait = ms => new Promise(r => setTimeout(r, ms))} = {}) { this.queue = new Map(); this.running = false; this.disposed = false; this.idle = idle; this.wait = wait; this.stats = {drawn: 0, ms: 0}; }
+  constructor({idle = () => true, wait = ms => new Promise(r => setTimeout(r, ms))} = {}) { this.queue = new Map(); this.running = false; this.disposed = false; this.idle = idle; this.wait = wait; this.stats = {drawn: 0, ms: 0, peakBytes: 0}; }
   request(main, job) { if (this.disposed) return; this.queue.set(job.id, {...job, main}); if (!this.running) queueMicrotask(() => this.run()); }
   pending(id) { return this.queue.has(id); }
   cancel() { this.queue.clear(); }
@@ -136,7 +136,7 @@ export class ToolPictures {
           Object.assign(request, {gridOrigin: [x0 * SPACING, y0 * SPACING], gridWidth: x1 - x0 + 1, gridHeight: y1 - y0 + 1, gridSpacing: SPACING, fields, masks: out.masks});
           const rendered = await r.renderChunk(request, {...job.options, quality: 'full', scale: f.scale});
           const image = await encodePicture(rendered.canvas, TOOL_PICTURE.width, TOOL_PICTURE.height, {x: 0, y: 0, width: f.width / f.scale, height: f.height / f.scale});
-          this.stats.drawn++; this.stats.ms += performance.now() - t0;
+          this.stats.drawn++; this.stats.ms += performance.now() - t0; this.stats.peakBytes = Math.max(this.stats.peakBytes, r.stats?.().peakBytes ?? 0);
           if (!this.disposed) job.done(null, image);
         } catch (error) { if (!this.disposed) job.done(error); }
         await this.wait(0);

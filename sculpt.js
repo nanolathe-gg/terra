@@ -1951,7 +1951,8 @@ async function picturesNow() {
   if (mapPictureDue) { const drawn=await drawMapPicture(); if (drawn) picturesChanged(); else if (drawn===null) { picturesLater(3000); return; } }
   queueToolPictures();
 }
-// The map's picture: its play area baked at a coarse level through the view's own renderer, in tiles of at most MAP_PICTURE_TILE px (one bake of
+// The map's picture: its play area baked at a coarse level through the view's own renderer as the export draws it (the Surface section's
+// design view set aside; never while the view is Clay), in tiles of at most MAP_PICTURE_TILE px (one bake of
 // a whole large map does not fit the renderer's budget), then drawn down to MAP_PICTURE. Between tiles it gives way: an edit, or (unless the
 // artist asked, Download file) any input or view work, stops it, and the next quiet moment starts it again. Measured (M-series Mac, Metal):
 // a 4 x 4 map is one tile, 24-72 ms; a 16 x 16 map is 16 tiles, 1.0-1.2 s in all, at most 94 ms a tile.
@@ -1962,8 +1963,8 @@ async function drawMapPicture(asked=false) {
   const canvas=new OffscreenCanvas(Math.ceil(width/fit.level),Math.ceil(height/fit.level)),g=canvas.getContext('2d',{alpha:false});
   try {
     for (let y=0;y<height;y+=MAP_PICTURE_TILE) for (let x=0;x<width;x+=MAP_PICTURE_TILE) {
-      if (edits!==pictureEdits || !asked && !editorQuiet()) return null;   // gave way: picturesNow tries again
-      const bitmap=await mapCanvas.debugBake({x,y,width:Math.min(MAP_PICTURE_TILE,width-x),height:Math.min(MAP_PICTURE_TILE,height-y)},fit.level);
+      if (edits!==pictureEdits || !asked && !editorQuiet() || $('clay').checked) return null;   // gave way (or the view is Clay): picturesNow tries again
+      const bitmap=await mapCanvas.debugBake({x,y,width:Math.min(MAP_PICTURE_TILE,width-x),height:Math.min(MAP_PICTURE_TILE,height-y)},fit.level,true);   // as the export draws it
       g.drawImage(bitmap,x/fit.level,y/fit.level); bitmap.close?.();
     }
     const image=await encodePicture(canvas,fit.width,fit.height); canvas.width=canvas.height=1;
@@ -1980,9 +1981,10 @@ function toolPictureNodes(id) {
   let list; try { list=scene(tools); } catch (error) { const t=toolById(id); if (!t || tools.some(x => x.id===id)) throw error; list=scene([...tools,{...t,card:toolCard(id)}]); }
   return keepStrokeTools(keepStrokeMaterials(keepStrokeRocks(list,mapRocks),mapMaterials),toolIds());
 }
+// Always in the Art view: Clay is how the artist looks at the map, not how its tools draw.
 function queueToolPictures() {
   const main=mapCanvas?.renderer; if (!ready || !main) return;
-  const world=worldSnapshot(main,worldKeys(config)),context=shapeContext(),options=currentDrawOptions(),worldKey=worldPictureKey(world,context,options);
+  const world=worldSnapshot(main,worldKeys(config)),context=shapeContext(),options={...currentDrawOptions(),clay:false},worldKey=worldPictureKey(world,context,options);
   toolPictures??=new ToolPictures({idle:editorQuiet});
   for (const t of shapeTools().slice(1)) {
     if (toolUnavailable(t)) { pictureStats.skipped[t.id]='unavailable'; continue; }
@@ -2060,8 +2062,9 @@ function loadSketch(s,carry=false) {
   shapeClipboard=null;   // copied shapes name this map's rocks and materials: they do not paste into another map
   // Reject damaged saves before committing any pending edit to the old map.
   worldInputQueue.flush();
-  // Its pictures show at once; a tool's whose key no longer matches (another build, another world) is drawn again when the editor is idle.
-  { const p=copyPictures(s.pictures); toolPictures?.cancel(); pictures={map:p?.map??null,tools:{...(p?.tools??{})}}; mapPictureDue=!p?.map; if (ready) picturesLater(); }
+  // Its pictures show at once; a tool's whose key no longer matches (another build, another world) is drawn again when the editor is idle,
+  // and a map carried into another world (a copy for it) draws its own map picture.
+  { const p=copyPictures(s.pictures); toolPictures?.cancel(); pictures={map:p?.map??null,tools:{...(p?.tools??{})}}; mapPictureDue=carry||!p?.map; if (ready) picturesLater(); }
   if(!carry&&rock)setRockSettings(rock);
   cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather();
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; varySeed=s.varySeed!==false; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
@@ -3480,9 +3483,11 @@ window.sculptDebug.savedMap=() => mapStore&&tabMapId?mapStore.get(tabMapId):Prom
 window.sculptDebug.replaceSavedMap=s => { if(!mapStore||!tabMapId)return Promise.resolve(false); clearTimeout(autosaveTimer); keepSaved=true; return mapStore.put(tabMapId,s,mapMeta(tabMapId,s)).then(() => true); };
 window.sculptDebug.saveNow=() => Promise.resolve(saveWorking());
 // The save's pictures (sculpt-thumbnails.js) for the checks: what is drawn, what is queued and how long the map's took; clearPictures forgets them.
-window.sculptDebug.pictures=() => ({map:pictures.map?.image??null,tools:Object.fromEntries(Object.entries(pictures.tools).map(([id,p]) => [id,p.image])),mapDue:mapPictureDue,queued:toolPictures?.queue.size??0,running:Boolean(toolPictures?.running),timer:pictureTimer!==null,mapMs:[...pictureStats.map],toolsDrawn:pictureStats.tools,toolMs:toolPictures?.stats.ms??0,skipped:{...pictureStats.skipped},quiet:{ready,loading,stroke:Boolean(stroke),moving:Boolean(moving),hidden:document.hidden,preview:sculptRegion.previewActive(),gpu:mapCanvas?.gpuWorkPending(),previewWork:mapCanvas?.previewWorkPending(),foreground:mapCanvas?.foregroundPending()}});
+window.sculptDebug.pictures=() => ({map:pictures.map?.image??null,tools:Object.fromEntries(Object.entries(pictures.tools).map(([id,p]) => [id,p.image])),mapDue:mapPictureDue,queued:toolPictures?.queue.size??0,running:Boolean(toolPictures?.running),timer:pictureTimer!==null,mapMs:[...pictureStats.map],toolsDrawn:pictureStats.tools,toolMs:toolPictures?.stats.ms??0,toolPeakBytes:toolPictures?.stats.peakBytes??0,skipped:{...pictureStats.skipped},quiet:{ready,loading,stroke:Boolean(stroke),moving:Boolean(moving),hidden:document.hidden,preview:sculptRegion.previewActive(),gpu:mapCanvas?.gpuWorkPending(),previewWork:mapCanvas?.previewWorkPending(),foreground:mapCanvas?.foregroundPending()}});
 window.sculptDebug.clearPictures=() => { toolPictures?.cancel(); pictures={map:null,tools:{}}; mapPictureDue=true; };
 window.sculptDebug.picturesNow=() => picturesNow();
+// Each input of a tool picture's key, written as the key reads it, to find one that is not stable across a reopen.
+window.sculptDebug.pictureKeyParts=(id='hill') => { const main=mapCanvas.renderer,w=worldSnapshot(main,worldKeys(config)),nodes=toolPictureNodes(id),parts={variant:w.variant,grounds:[...w.grounds],colors:w.colors,surface:w.surface,context:shapeContext(),options:{...currentDrawOptions(),clay:false},nodes,rocks:[...new Map(rocksInUse(nodes,mapRocks).map(r => [r.slot,r]))]}; return Object.fromEntries(Object.entries(parts).map(([k,v]) => [k,{key:pictureKey(v),text:JSON.stringify(v,(key,value) => value&&typeof value==='object'&&!Array.isArray(value)?Object.fromEntries(Object.keys(value).sort().map(k => [k,value[k]])):value)}])); };
 window.sculptDebug.tabMap=() => tabMapId;
 window.sculptDebug.pagedShapeCompare=async rect => {
   const eng=await createShapeEngine({device:renderer.device,grid:worldGrid,spacing,baseHeight:config.baseHeight,sea:config.seaLevel,minH:MIN_HEIGHT,maxH:MAX_HEIGHT});
