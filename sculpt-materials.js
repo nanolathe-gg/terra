@@ -707,17 +707,6 @@ export function keptWorldMaterials(stored, config) {
   }
   return kept;
 }
-// The store after an edit: this look's own, beside what the world keeps for the library materials its other looks name.
-export function mergeWorldMaterials(stored, own, config) {
-  const mine = m => { const key = worldKey(m); return key && m.replaces === worldLibraryKey(config, key); };
-  return [...(Array.isArray(stored) ? stored : []).filter(m => object(m) && 'replaces' in m && !mine(m)), ...own];
-}
-// The world's own materials by world key, to compare two worlds: a map's list (its world-keyed materials that differ from the
-// library's) or, with `stored`, this browser's store (the entries kept for this world's looks).
-export function worldOwnFor(list, config, {stored = false} = {}) {
-  const own = stored ? (Array.isArray(list) ? list : []).filter(m => object(m) && worldKey(m) && m.replaces === worldLibraryKey(config, worldKey(m))) : worldOwnMaterials(list, config);
-  return Object.fromEntries(own.map(m => [worldKey(m), JSON.stringify({name: m.name, ...copyMaterial(m)})]));
-}
 // The materials a map hands its world (a save's world settings, a world file): every one with a world key.
 export const worldKept = list => (list ?? []).filter(m => worldKey(m));
 // A new map's materials: the world's two.

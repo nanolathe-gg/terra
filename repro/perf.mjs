@@ -219,7 +219,6 @@ function instrument(path,source){
   const replace=(before,after,count=1)=>{const found=source.split(before).length-1;if(found!==count)throw Error(`LP0 hook drift in ${path}: ${before.slice(0,70)} (${found}, expected ${count})`);source=source.split(before).join(after);};
   if(path==='/sculpt.js'){
     if(!source.includes('function worldChanged('))replace('function setKnob(key, value) {',"function setKnob(key, value) { __perf.appliedSerial=__perf.serial;__perf.mark('knob-applied',{key,serial:__perf.appliedSerial});");
-    replace('saveWorlds();',"__perf.call('saveWorlds',()=>saveWorlds());",(source.match(/saveWorlds\(\);/g)||[]).length);
     replace('syncWorldControls();',"__perf.call('syncWorldControls',()=>syncWorldControls());",(source.match(/syncWorldControls\(\);/g)||[]).length);
   }
   if(path==='/sculpt-canvas.js'){
@@ -358,7 +357,7 @@ const capture=async(t0,anchors=[],extra={})=>{
   const pageWait=[],apart=[],previewOwn=[];
   for(const o of a.observations)if(o.all!==null){const sum=unionMs(o.preps.flatMap(pageIntervals),o.t,o.all);pageWait.push(sum);apart.push(Math.max(0,o.all-o.t-sum));}
   for(const e of data.events)if(e.type==='bake-end'&&e.level>1)previewOwn.push(Math.max(0,e.ms-unionMs(pageIntervals(e.prep),e.t-e.ms,e.t)));
-  const calls={};for(const name of ['history.replaceState','saveWorlds','applyKnobs','syncWorldControls','setColors'])calls[name]=distribution(data.handlers.map(h=>h.calls[name]||0));
+  const calls={};for(const name of ['history.replaceState','applyKnobs','syncWorldControls','setColors'])calls[name]=distribution(data.handlers.map(h=>h.calls[name]||0));
   if(extra.specStartOverride)data.specStart=extra.specStartOverride;const specStats={built:(data.specEnd?.built||0)-(data.specStart?.built||0),ms:(data.specEnd?.ms||0)-(data.specStart?.ms||0),start:data.specStart,end:data.specEnd};
   const after=anchors.at(-1)?.t??t0,ended=data.events.filter(e=>e.type==='bake-end'&&e.t>=after),firstFinal=data.events.find(e=>e.type==='bake-start'&&e.level<=1&&e.t>=after),scopeAfter=data.stages.filter(e=>e.name==='GPU error scope'&&e.t>=after);
   const afterAnchor={anchorMs:after,firstFinalStartMs:firstFinal?firstFinal.t-after:null,finalAttempts:ended.filter(e=>e.level<=1).length,previewAttempts:ended.filter(e=>e.level>1).length,finalBakeWallMs:ended.filter(e=>e.level<=1).reduce((n,e)=>n+Math.min(e.ms,e.t-after),0),previewBakeWallMs:ended.filter(e=>e.level>1).reduce((n,e)=>n+Math.min(e.ms,e.t-after),0),errorScopeWaitMs:{...distribution(scopeAfter.map(e=>e.ms)),totalMs:scopeAfter.reduce((n,e)=>n+e.ms,0)},nativeStages:[...new Set(data.inputs.map(e=>e.nativeStage).filter(Boolean))]};

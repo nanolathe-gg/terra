@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {NODES, LIBRARY, MAX_NODES, MATERIAL_SLOTS, copyMaterial, copyMaterials, blankMaterial, makeNode, orderNodes, nodeTypes, compileMaterial, programKey, programSource, stagePlan,
-  materialReliefBound, materialRenderKey, soloMaterial, colorSources, materialColor, recolorMaterial, controlSpec, controlRange, nodeParams, withWorldMaterials, worldOwnFor, worldMaterials, adoptWorldMaterials, worldOwnMaterials, keptWorldMaterials, mergeWorldMaterials, worldKept, addMaterial, duplicateMaterial, setMaterial,
+  materialReliefBound, materialRenderKey, soloMaterial, colorSources, materialColor, recolorMaterial, controlSpec, controlRange, nodeParams, withWorldMaterials, worldMaterials, adoptWorldMaterials, worldOwnMaterials, keptWorldMaterials, worldKept, addMaterial, duplicateMaterial, setMaterial,
   assignMaterial, deleteMaterial, strokeMaterial, keepStrokeMaterials, materialRef, materialSlotFor, materialsInUse, materialUsers, materialText, parseMaterialText, reseedMaterial, materialTint} from '../sculpt-materials.js';
 import {graphPositions, fitGraph, graphGrid, cardHeight, CARD} from '../sculpt-material-graph.js';
 import {savedWorld, copySavedWorld} from '../sculpt-save.js';
@@ -263,26 +263,6 @@ test('the world’s ground and water belong to the world: a map takes them, and 
   assert.deepEqual(worldKept(taken).map(m => m.slot), [2, 4]);
 });
 
-test('what the world keeps follows the library material a look names, so looks that share one share the edit and others keep their own', () => {
-  const snow = {materials: {ground: 'ice-ground', water: 'ice-water'}}, bergs = {materials: {ground: 'ice-bergs-ground', water: 'ice-water'}};
-  const edit = (cfg, role, seed) => worldOwnMaterials(worldMaterials(cfg).map(m => m[role] ? {...m, seed} : m), cfg);
-  let store = mergeWorldMaterials(undefined, edit(snow, 'worldGround', 7), snow);
-  assert.deepEqual(store.map(m => [m.replaces, m.seed]), [['ice-ground', 7]]);
-  assert.deepEqual(keptWorldMaterials(store, bergs), [], 'the other look names its own ground and keeps it');
-  assert.equal(worldMaterials({...bergs, worldMaterials: keptWorldMaterials(store, bergs)}).find(m => m.worldGround).source, 'ice-bergs-ground');
-  // An edit of the shared water on the other look joins the store without displacing the first look's ground, and both looks see it.
-  store = mergeWorldMaterials(store, edit(bergs, 'worldWater', 5), bergs);
-  assert.deepEqual(store.map(m => [m.replaces, m.seed]), [['ice-ground', 7], ['ice-water', 5]]);
-  assert.deepEqual(keptWorldMaterials(store, snow).map(m => [m.replaces, m.seed]), [['ice-ground', 7], ['ice-water', 5]]);
-  assert.deepEqual(keptWorldMaterials(store, bergs).map(m => m.replaces), ['ice-water']);
-  // Back to the library's on one look removes only that look's own; an unmarked entry (a world file's) applies to any look;
-  // a damaged entry is dropped.
-  assert.deepEqual(mergeWorldMaterials(store, [], bergs).map(m => m.replaces), ['ice-ground']);
-  const loose = worldMaterials(snow).filter(m => m.worldGround).map(m => ({...m, seed: 9}));
-  assert.equal(keptWorldMaterials(loose, bergs)[0].seed, 9);
-  assert.deepEqual(keptWorldMaterials([{worldGround: true, name: 'Broken', nodes: 'no'}, 4, null], snow), []);
-});
-
 test('materials round-trip through the clipboard text, the saved world and a world file', () => {
   const list = addMaterial(worldMaterials(config), {...LIBRARY['green-ground'], controls: [{label: 'Mottle', node: LIBRARY['green-ground'].nodes[1].id, param: 'size'}]}, 'Meadow').materials;
   const pasted = parseMaterialText(materialText(list[2])); assert.equal(pasted.name, 'Meadow'); assert.deepEqual(copyMaterial(pasted), copyMaterial(list[2]));
@@ -354,20 +334,6 @@ test('a map carried into another world takes its surfaces unless the artist edit
   assert.equal(moved.find(m => m.worldRock).source, 'green-rock'); assert.equal(moved.find(m => m.worldSlope).source, 'green-slope');
   const edited = moon.map(m => m.worldRock ? {...m, seed: m.seed + 1} : m);
   assert.equal(adoptWorldMaterials(edited, green).find(m => m.worldRock).source, 'moon-rock', 'an edited rock material stays the artist\'s');
-});
-
-test('a carried map\'s surface the new world does not name stops being a world surface', () => {
-  const desert = worldMaterials({materials: {ground: 'desert-ground', water: 'desert-water', high: 'desert-cap'}});
-  const green = {materials: {ground: 'green-ground', water: 'green-water'}};
-  assert.ok(desert.some(m => m.worldHigh));
-  const carried = adoptWorldMaterials(desert, green, {carried: true});
-  assert.equal(carried.length, desert.length, 'slots stay where they are');
-  assert.equal(carried.some(m => m.worldHigh), false);
-  assert.ok(carried.some(m => m.source === 'desert-cap'), 'the material stays as the map\'s own');
-  assert.equal(worldOwnFor(carried, green).worldHigh, undefined, 'the map\'s world draws as Green\'s');
-  assert.ok(adoptWorldMaterials(desert, green).some(m => m.worldHigh), 'a map reopened in its world keeps it');
-  const edited = desert.map(m => m.worldHigh ? {...m, seed: (m.seed ?? 0) + 1} : m);
-  assert.ok(adoptWorldMaterials(edited, green, {carried: true}).some(m => m.worldHigh), 'an edited one stays the artist\'s');
 });
 
 test('a world’s highland material joins a new map, keeps its own role and leaves when assigned away', async () => {
