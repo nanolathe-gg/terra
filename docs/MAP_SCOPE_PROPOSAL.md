@@ -74,9 +74,12 @@ Where this differs from sections 2 to 8, this section wins.
   2026-11-19: "Fold into Apply look"). The dialog opens on the map's own
   built-in world with every card checked, which is a full reset; another
   world, whole, is a world switch (a fork); no card with "Reset every
-  shape" resets the shapes. A world switch now takes the other world's rock
-  types and tools too: to keep this map's, apply Rock types or Tools from
-  the map left behind (it stays in Maps).
+  shape" resets the shapes. Rock types and Tools replace the map's lists,
+  but a rock type or saved tool a shape uses stays when the new list has
+  none for it (a full list of 15 rock types or 24 tools is the exception),
+  and Features keeps a placed feature's style where the new set has none
+  at its address. A placed feature whose address the new set does have
+  takes the new style.
 - **No "changed" marks on world values.** Strokes' existing `edited` lists
   are now saved in files and share links too.
 

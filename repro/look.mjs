@@ -55,6 +55,8 @@ try {
   assert.notDeepEqual(partial.rocks.map(r => r.name), before.rocks.map(r => r.name), 'Rock types came from Painted Desert');
   assert.notEqual(partial.worldSettings.knobs.sunHeight, before.worldSettings.knobs.sunHeight, 'Light & weather came from Painted Desert');
   assert.equal(partial.worldSettings.knobs.groundPatch, before.worldSettings.knobs.groundPatch, 'Ground stayed');
+  const rockName = (x, n) => x.rocks.find(r => r.slot === n.params.rockPreset)?.name;
+  assert.equal(rockName(partial, partial.nodes.find(n => n.kind === 'landform')), 'Broken slopes', 'a rock type a shape uses stays when the new list lacks it');
   assert.deepEqual(partial.materials.find(m => m.worldGround), before.materials.find(m => m.worldGround), 'the ground material stayed');
   assert.match(await ev(`document.getElementById('undo').title`), /applying a look/);
   await click('#undo'); await sleep(300); await ready();

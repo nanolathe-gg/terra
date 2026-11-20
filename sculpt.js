@@ -27,7 +27,7 @@ import {mountSurfacePanel,BUILTIN_LABELS} from './sculpt-surface-panel.js';
 import {goTo, bringIntoView} from './sculpt-find.js';
 import {mountPick} from './sculpt-pick.js';
 import {mapOwnedKit,worldKit,storedWorldKit,baseRockKeys,sameKitData,assertKitMaterials,authoredWorldTool,instantiateWorldKit,addWorldRockInstance,resolvedWorldCard,worldToolUnavailable} from './sculpt-world-kit.js';
-import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,toolMaterialSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,markEdited,copyMapTools,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
+import {TOOL_ICONS,LANDFORM_TOOL,FIXED_TOOLS,toolShape,worldTools,toolRockSlot,toolMaterialSlot,strokeTool,keepStrokeTools,inferStrokeTools,carryStrokes,markEdited,copyMapTools,nextMapToolId,addMapTool,deleteMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
 const editorUI=mountEditorUI();
 let syncWorldControls=()=>{},panelPicks='',syncToolGroups=()=>{},pathEditing=false,pathPoint=-1,pathIndex=0,pathAdding=false,drawMode='new';
 // Pick (sculpt-pick.js): whether the Pick tool is in hand (it stands in for `tool`, which it leaves as it was), and its card.
@@ -2485,21 +2485,39 @@ function composeLook(B,cards) {
     const held=mats.find(x=>!worldKey(x)&&same(x,m)); if (held) return held.slot;
     const added=addMaterial(mats,copyMaterial(m),m.name); mats=added.materials; return added.slot;
   };
-  let rocks=structuredClone(mapRocks),column=cur.column,rock=cur.rock,nodesNext=markEdited(cloneNodes(cur.nodes),n=>nodeDefaults(n));
+  let rocks=structuredClone(mapRocks),rockMoved=slot=>slot,column=cur.column,rock=cur.rock,nodesNext=markEdited(cloneNodes(cur.nodes),n=>nodeDefaults(n));
   const srcRocks=(copyRocks(B.rocks)??[]).map(({worldKey:_,...r})=>r);
   const matchRock=(r,list)=>r&&(list.find(x=>r.key&&x.key===r.key)??list.find(x=>x.name===r.name));
   if (cards.has('rocks')) {
     const old=rocks;
     rocks=srcRocks.map(r=>{const {material,...rest}=r,slot=material>0?bring(material):0;return {...rest,...(slot>0?{material:slot}:{})};});
-    nodesNext=nodesNext.map(n=>{const p=n.params;if(!(p?.rockPreset>0))return n;const hit=matchRock(old.find(r=>r.slot===p.rockPreset),rocks);return {...n,params:{...p,rockPreset:hit?.slot??0}};});
+    // A rock type a shape uses that the new list has none for (by key, then name) stays, in a free slot: no shape loses its rock. Only a
+    // full list (15) sends such a shape to the world's rock.
+    for (const r of old) {
+      if (matchRock(r,rocks)||!nodesNext.some(n=>n.params?.rockPreset===r.slot)) continue;
+      let slot=1;while(rocks.some(x=>x.slot===slot))slot++;if(slot>=ROCK_SLOTS)continue;
+      const {worldKey:_,...plain}=r;rocks.push({...plain,slot,key:rocks.some(x=>x.key&&x.key===r.key)?null:r.key});
+      nodesNext=nodesNext.map(n=>n.params?.rockPreset===r.slot&&!n.rockKept?{...n,rockKept:true,rockFrom:r.slot,params:{...n.params,rockPreset:slot}}:n);
+    }
+    const kept=new Map();for (const n of nodesNext) if (n.rockKept) kept.set(n.rockFrom,n.params.rockPreset);
+    rockMoved=slot=>slot>0?kept.get(slot)??matchRock(old.find(r=>r.slot===slot),rocks)?.slot??0:slot;   // an old slot's rock type in the new list
+    nodesNext=nodesNext.map(n=>{if(n.rockKept){const {rockKept:_,rockFrom:__,...m}=n;return m;}const p=n.params;if(!(p?.rockPreset>0))return n;return {...n,params:{...p,rockPreset:rockMoved(p.rockPreset)}};});
     column=B.column&&!sameColumn(copyColumn(B.column),defaultColumn)?copyColumn(B.column):null;rock=copyRockSettings(B.rock)??rock;
     mats=dropRockMaterials(mats,old.map(r=>r.material).filter(m=>m>0&&!rocks.some(r=>r.material===m)),{rocks,nodes:nodesNext,config,keep:toolLays});
   }
   let tools=structuredClone(mapTools);
   if (cards.has('tools')) {
     const rockSlot=slot=>slot>0?matchRock(srcRocks.find(r=>r.slot===slot),rocks)?.slot??0:slot;
-    tools=(copyMapTools(B.tools)??[]).map(t=>({...t,card:{...t.card,...(t.card.rockPreset!==undefined?{rockPreset:rockSlot(t.card.rockPreset)}:{}),...(t.card.groundPreset>0?{groundPreset:bring(t.card.groundPreset)}:{})}}));
+    const own=tools;tools=(copyMapTools(B.tools)??[]).map(t=>({...t,card:{...t.card,...(t.card.rockPreset!==undefined?{rockPreset:rockSlot(t.card.rockPreset)}:{}),...(t.card.groundPreset>0?{groundPreset:bring(t.card.groundPreset)}:{})}}));
+    // A saved tool a shape was drawn with stays (under a new id when the source uses its id for another tool), so no shape falls back to
+    // Landform; only a full list (MAP_TOOLS_MAX) lets one go.
+    for (const t of own) {
+      if (!nodesNext.some(n=>n.tool===t.id)||tools.some(x=>x.label===t.label&&x.shape===t.shape&&x.id===t.id)||tools.length>=MAP_TOOLS_MAX) continue;
+      const id=tools.some(x=>x.id===t.id)?nextMapToolId(tools,nodesNext):t.id;
+      tools.push({...t,id,card:{...t.card,...(t.card.rockPreset>0?{rockPreset:rockMoved(t.card.rockPreset)}:{})}});if(id!==t.id)nodesNext=nodesNext.map(n=>n.tool===t.id?{...n,tool:id}:n);
+    }
   }
+  if (cards.has('rocks')&&!cards.has('tools')) tools=tools.map(t=>t.card.rockPreset>0?{...t,card:{...t.card,rockPreset:rockMoved(t.card.rockPreset)}}:t);   // the map's tools follow their rock types
   const mapDataNext=structuredClone(mapData());   // the map's own as it is now (a new map's name is set after its first history step)
   if (cards.has('features')) {
     // The source's feature styles; a placed feature whose style it has none for at that place (a variant address is recipe id x 16,
