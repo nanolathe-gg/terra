@@ -60,12 +60,28 @@ Changes to the owner's first outline (2026-11-19). Strike any of them.
 | 2-3 paths | The scene's own stroke points. |
 | 2-4 heights | `windowHeights` of the scene (the displayed heights, 2 px samples). |
 | 4 Time | The Time pass's heights before and after, read back from the engine. |
-| 4 material mask | The final render's colors grouped into flat classes: a stand-in, since the engine has no mask view and adding one for the trailer would be a second render path. |
+| 4 material mask | The page's `material` view (and water from the final picture) grouped into four flat classes: a stand-in, since the engine has no mask view and adding one for the trailer would be a second render path. |
 | 5 solid | Clay renders (the engine's own, no materials) at coarse and fine voxel sizes. |
 | 6 final | The engine's render of the window. |
 | 7-8 editor | Screen capture of the editor on our own server. |
 | 9 game | A slate until there is real footage. |
 | 10 logo | An engine render of a letter scene. |
+
+## State of the rough cut (2026-11-19)
+
+Unfinished, in order of importance:
+
+- **The handoff is not there yet.** The explainer ends on the engine's
+  picture of the hero map, but the editor clips then open on a fresh map at
+  60% zoom. Next: open the hero scene in the editor at 1x on the same
+  window, so the explainer's last frame and the editor's first match.
+- **The Height drag in shot 8 shows no visible change** (synthetic slider
+  input, and a help popup covers the slider). The material graph is on
+  screen for about a second.
+- The explainer runs 30 s against the 28 s target; the editor clips play
+  faster than real time (stop-motion capture); the section panel is drawn in
+  the explainer's own style, not the editor's.
+- The in-game shot is a slate, and there is no audio.
 
 ## Rendering the rough cut
 
