@@ -930,7 +930,7 @@
     "ridgestone": {
      "label": "Terraced greenstone",
      "knobs": {
-      "rockFace": 2,
+      "rockFace": 2, "stepCrease": 1,
       "faceRock": 1,
       "rockFaceFrom": 0.2,
       "faceGrass": 0.45,
