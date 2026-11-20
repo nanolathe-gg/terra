@@ -4,12 +4,12 @@
 
 `repro/scenes/green-<n>.json`; retail data in `$R/repro-r7/green-<n>/`.
 
-| Window | Retail map | What it tests | Before round 1 | After round 9's port | After round 10's port |
+| Window | Retail map | What it tests | Before round 1 | After round 10's port | After round 11's port |
 | --- | --- | --- | --- | --- | --- |
 | green-1 | pc games' evad river delta | broken hills (rock type `evad`) on a rolling plain by the sea | shape .22, look .10 | shape .135, look .054 | shape .135, look .054 |
-| green-2 | great divide | long gentle grass slopes, a ridge | shape .16, look .20 | shape .16, look .185 | shape .128, look .159 |
+| green-2 | great divide | long gentle grass slopes, a ridge | shape .16, look .20 | shape .128, look .159 | shape .128, look .159 |
 | green-3 | the barrier reef | islands (rock type `reefstone`) and reef shallows | shape .08, look .09 | shape .08, look .091 | shape .08, look .091 |
-| green-4 | the pass | a rocky massif with grass in its folds (rock type `passrock`) | shape .63, look .23 | shape .39, look .174 | shape .39, look .174 |
+| green-4 | the pass | a rocky massif with grass in its folds (rock type `passrock`) | shape .63, look .23 | shape .39, look .174 | shape .39, look .169 |
 | green-5 | plains and passes | a terraced ridge on a rolling plain (`hill` strokes with Steps, rock `ridgestone`) | shape .18, look .70 | shape .126, look .209 | shape .126, look .209 |
 | green-6 | wretched ridges | two ridges of dark blocky rock (rock `ridgeblock`) | shape .24, look .10 | shape .18, look .083 | shape .18, look .083 |
 | green-7 | two continents | open water and coast: **held out** | shape .19, look .12 | shape .19, look .102 | shape .19, look .102 |
@@ -40,7 +40,7 @@ A rock type changes only the windows whose strokes use its slot (PLAYBOOK.md,
 | --- | --- | --- |
 | green-1 | 2 | `evad` |
 | green-3 | 8 (five land strokes), 2 (three water strokes) | `reefstone` (round 6), `evad` |
-| green-4 | 7 | `passrock` (round 6; material `green-passrock`) |
+| green-4 | 7 | `passrock` (round 6; material `green-passrock`; faceBed 8, blocks 6, no gloss since round 11), with ground `green-clump` (slot 15) |
 | green-5 | 5 | `ridgestone` (Terraced greenstone, round 2; stepCrease 1 and deeper cracks, 2026-11-19) |
 | green-6 | 6 | `ridgeblock` (Blocky ridge, round 3; material `green-darkrock`) |
 | green-2, green-7 | none set (0) | the world's own rock (the rock keys in `knobDefaults`) |
@@ -93,52 +93,36 @@ These notes are by eye, from the base crops in
 - No rock coasts on Green. Shores are a natural sand-grass edge.
 - Hills must stay grassy. Rock on a hill is cracks and patches, not a cap.
 
-## Start here (round 11)
+## Start here (round 12)
 
-Round 10 (branch `match-green-11`, 51 of 300 trials; report in
-`$R/match/terraform-wt-match-green-11/green/REPORT.md`) was reviewed and
-ported on 2026-11-20. Its one keep: green-2's ridge stroke takes a concave
-back section (y = x^2). Shape .161 to .128, look .185 to .159; the north
-flank's profile error against retail halves (18.6 to 9.8 units). By eye
-the flank is gentler and lighter like retail's, but loses the dark hatch
-retail draws on it (gentle lines .0004 to 0, retail .0018). Round 8 had
-dropped the same curve for that loss; shape comes first.
+Round 11 (branch `match-green-12`, 51 of 300 trials; report in
+`$R/match/terraform-wt-match-green-12/green/REPORT.md`) was reviewed and
+ported on 2026-11-20. Its keep: green-4's cards lay `green-clump` (round
+10's clump graph, extra slot 15) on passrock with thicker beds, small blocks
+and no gloss. Look .174 to .169; steep:color and steep:edges cleared; by eye
+vivid flat clumps in a mosaic of small gray blocks, like retail's pass. The
+validator now reports a JSON key written twice in one object (round 11's
+trial-039 was shadowed by one).
 
-The harness now explains that profile steps stop at 8 (shoreline steps take
-12) and warns when a stroke asks for more; round 10 spent two trials on
-Steps 12 and 16, which render as 8. The playbook notes that a material's
-palette list names `palette.json`'s `indexed` entries.
+For the owner's eye: `bandJag` .4 (round 11's trial-043) brings green-2's
+slope hatch closer by eye (mean look .128 to .125, held-out unchanged) but
+was held by the keep rule (slope lines rose to 2.3x retail).
 
 Leads:
 
-1. **Green-4's clumps:** round 10 built `green-clump`, a material of its
-   own laid by green-4's cards (its graph is in
-   `$R/match/terraform-wt-match-green-11/green/trial-011/candidate.diff`,
-   palette entries 168, 170, 172, 166, 167, 173). It cleared steep:color and
-   by eye made the clumps vivid and flat like retail's, at +.003 look, so
-   the map-lane rule held it. Pair it with a rock change that keeps the
-   face's edges, or put it to the owner's eye.
-2. **Gentle-grade contour lines** (green-2 and green-5, gentle lines 0
-   against retail's .0018-.0023): bandLevel up to 1 draws nothing visible.
-   A lined material laid as a map ground, a surface layer, and
-   `bandSoftness` are untried.
-3. **The shelf's streaks:** green-shoal's elongated scatter did not show
-   through the bed tint (round 10's 004/007); find out why before tuning.
-4. **Green-5's ledges:** retail draws a short dark ledge about every 10 px;
-   ours has 8 steps (the cap) with large shadows.
-5. **Green-6's lit faces:** shineRock .7 puts the highlights at retail's 123
-   but lightens the face (round 10's 036); `shineRockSharp` at a modest
-   shineRock is untried.
-6. **Per-map ground grain:** world-wide grain, warmth and dither changes help
-   green-1 and green-3 and hurt green-2 (round 10's 038-050).
+1. **Gentle-grade contour lines** stay out of reach of data (round 11's
+   001-007, 022-024, 037-038, 048). Untried: a surface-layer rule drawing a
+   lined material, and a lined ground painted on green-2.
+2. **The shelf's streaks** show through the bed tint only compressed (the
+   tint's light ratio is clamped to .25-2 and raised to bedContrast) and
+   under the dense dark specks: try a thinned-speck copy of green-shoal with
+   large streaks.
+3. **Green-6's lit vertical ribs:** shine sharpness (round 11's 008-012)
+   brightens the whole face; the ribs are relief down the fall line.
+4. **Green-4** still clamps 8.7% of its cells above 255.
 
-Engine proposals carried for the owner: a map's own plain and sea height
-(rounds 8-10); a lit-face highlight control (rounds 9-10); per-map surface
-layer amounts and ground grain (rounds 9-10); more than 8 profile steps, or
-a step spacing in height units (round 10; today's limit is a documented
-design); Time's cut at the art share; a material's palette on level ground;
-vegetation overrides that spare rock; `bandLevel` per rock type; a hatch
-spacing floor on gentle grades.
+Engine proposals carried for the owner are listed with the overnight work
+(rounds 8-11).
 
 ## Pilot notes (2026-11-18)
 
