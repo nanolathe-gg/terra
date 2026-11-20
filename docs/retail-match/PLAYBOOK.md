@@ -196,6 +196,16 @@ helps one window and hurts another.
     `["paint", [[60, 300], [380, 320]], {"card": {"diameter": 300,
     "amount": 100, "groundPreset": 12}}]`. Append new strokes at the end:
     an inserted one shifts the seeds of every stroke after it.
+  - **Painted styles and overrides:** a `paint` stroke's `paintChannel`
+    scales a world result under the brush: Relief, Cracks and Banding
+    (styles, 8-13), Ground lumps (16/17), and the signed overrides of
+    Time and the surface (18-25: Relaxation, Deposits, Vegetation, Rock
+    exposure). REFERENCE.md lists them. Paint one where the retail map
+    plainly differs from the world's result, and keep the stroke clear of
+    what it should not touch: round 7's Relaxation: less on green-1's
+    coastal plain calmed Time's creases there (kept), but over the whole
+    window it reached the hills (trial-030), and Vegetation: more on
+    green-5 greened the ridge's rock (trial-033).
   - **Shape options:** Steps (`terraces`, `ledge`, `terraceJitter`,
     `breakup`), `gullies`, `cracks`, `talus`, the section `curve` and the
     rest of section 5 of the reference.
