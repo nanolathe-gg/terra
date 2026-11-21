@@ -1992,8 +1992,8 @@ fn coastPlates(@builtin(global_invocation_id) g: vec3u) {
     }
     let seamed = edge < seam;
     F[px] = select(shade, u.plSeam, seamed); F[pp] = 1.0;
-    if (wet) { F[ph] = clamp(max(raw, sea - 3.2 + lift), u.minH, u.maxH); }
-    else if (!seamed) { F[ph] = clamp(raw + lift * u.plHeight, u.minH, u.maxH); }
+    // Submerged slabs mark the authored bed; the shore profile sets its depth.
+    if (!wet && !seamed) { F[ph] = clamp(raw + lift * u.plHeight, u.minH, u.maxH); }
     return;
   }
   if (u.plMat != 2u) { return; }
