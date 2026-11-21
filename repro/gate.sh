@@ -1,5 +1,5 @@
 #!/bin/sh
-# The world-name gate of docs/TERRAIN_ENGINE.md "Share, don't copy", on code with comments stripped.
+# The world-name gate of AGENTS.md rule 7 (code branches on a feature, never on a world's name), on code with comments stripped.
 #   repro/gate.sh            prints the world-named identifiers still in the engine path (the list may only shrink)
 # Exit 1 if a file names `biome`, `biomeId` or `worldId`, or a world's name as a string.
 cd "$(dirname "$0")/.." || exit 2

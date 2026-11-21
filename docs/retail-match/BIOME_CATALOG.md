@@ -39,7 +39,7 @@ could not be found by eye at 1x; **faint** means they could be found only by loo
 
 Each world's flat ground and open water (export art, 512 px) against its retail reference: the largest channel's mean color difference,
 fine grain (luminance minus a 4x blur, standard deviation) and 32 px block spread (standard deviation of block means), ours / retail
-(`~/terraform-assets/agent-biome-match/tools/swapstats.py`). Pass: color within 4, grain ratio 0.8-1.25, block spread ratio 0.5-2 or within
+(an agent script kept outside the repository). Pass: color within 4, grain ratio 0.8-1.25, block spread ratio 0.5-2 or within
 0.5. These thresholds were set after the fact, from the one failure visible in a swap sheet (Archipelago at sea+2: 13.9 and 2.69 / 0.75).
 
 | World | Ground: color, grain, spread | Water: color, grain, spread | Result |
@@ -76,7 +76,7 @@ surfaces, water, world numbers), not the new tools or rock types.**
 "In band" misleads where a window's own retail value lies outside the family band (Archipelago window 2's retail brightness is 170.9,
 above the band's 164.3; ours went from 83.3 to 178.5, closer but out of band). The measure to read is closeness to each window's own retail
 value: the metrics within a quarter band of it, and the median distance in band units
-(`~/terraform-assets/agent-biome-match/tools/benchclose.py <base> <now> <world>...`):
+(an agent script kept outside the repository):
 
 | World | Close to its own retail, start -> today | Median distance, start -> today |
 | --- | --- | --- |
@@ -99,7 +99,7 @@ score, the worst of the eight at 0.35, did not change in the round. Also scored 
 ### Blind A/B, one judge (2026-11-15)
 
 Six pairs of 256 px patches per world, cut at the same place from three retail windows and our renders of them, sides randomized; a fresh
-model judge with no context picked the original in each pair (sheets and key in `/private/tmp/claude-501/abx*`, outside the repository).
+model judge with no context picked the original in each pair (sheets and key kept outside the repository).
 Indistinguishable is 3 of 6; 0-1 or 5-6 means the judge separates them.
 
 | World | Original picked | Judge's main cue |

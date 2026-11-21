@@ -4,12 +4,13 @@ For everyday development, run `repro/check.sh` (fast Node unit tests and the
 world-name gate), or a relevant test directly, such as
 `node --test repro/paths.test.mjs`. The default needs no Python, Go, GPU,
 browser, generated configs or retail assets. Integration tests have explicit
-`.config`, `.build`, `.export`, `.features`, `.assets` or `.gpu` filename suffixes and run on demand:
+`.config`, `.build`, `.export`, `.features`, `.assets`, `.digest` or `.gpu` filename suffixes and run on demand:
 
 ```sh
 repro/check.sh quick --test repro/paths.test.mjs
 repro/check.sh browser --server http://127.0.0.1:<yours> --port <cdp> --worlds green
 repro/check.sh engine --scene repro/shape-scenes/green-landform.json
+repro/check.sh digest
 repro/check.sh export
 repro/check.sh features
 repro/check.sh config
@@ -72,10 +73,8 @@ the retail crops stay outside git.
    them: `Green Planet`, `Red Planet`, `Archipelago`, `Lunar`, `Lava`,
    `Desert`, `Crystal`, `Ice`):
 
-   ```
-   cd /private/tmp/nanolathe-neural-campaign-corpus
-   go run ./tools/neural-terrain/export -planet Lunar -include-campaign -out /private/tmp/nanolathe-map-editor/retail-moon
-   ```
+   This uses the retail map exporter from the parent Nanolathe project's
+   tools (not in this repository), writing to `$R/retail-<world>`.
 
 2. Cut a window, or take a section (Zhon has no retail maps; its four
    1024-px "low savannah rivers" sections stand in):
@@ -117,8 +116,8 @@ the retail crops stay outside git.
    `render.mjs` runs the editor's engine under Node on Dawn
    (`headless.mjs`: no server, no browser, about a second a scene); it
    needs Dawn's Node binding, npm's `webgpu`, installed outside the
-   repository (`TERRAFORM_WEBGPU` names its `node_modules`, default
-   `/private/tmp/nanolathe-map-editor/node-webgpu/node_modules`). The
+   repository (`TERRAFORM_WEBGPU` names its `node_modules`; see `headless.mjs` for
+   the default). The
    pixels and heights are the page's: `--chrome --server <yours> --port
    <cdp>` renders the same scene in headless Chrome and writes the same
    bytes. `--chrome` needs `--server`: no script that runs under Node by
@@ -152,57 +151,14 @@ the retail crops stay outside git.
    set, and `retail_sources.py` the retail maps and map editor sections on
    this machine. docs/RETAIL_ROUND.md is the round these serve.
 
-`demo/` holds scenes for tools that have no retail crop (the cross-section
-control, card C1): `profile-plateau`, `-escarpment`, `-hill-mountain`,
-`-terraced-dome`, `-lake` (and `-lake-red`, `-lake-terraced`, `-shallow`), `-desert-apron` and `-lip`. They are
-rendered one at a time with `render.mjs` (`all.sh` only runs `scenes/`), and
-set the new shape options in `options.card` in the units of their sliders
-(`faceCurve` -100..100, shares as percent, widths in px).
+## Demo scenes
 
-`demo/masks-*.json` (card C5, painted masks): `masks-green` (rock patches on a hill,
-moss, a wet band by a lake), `masks-ice` (snow and rock paint) and `masks-moon` (a
-boulder field painted denser on the left; the World sliders stay at 0, since denser
-paint supplies its own stones). `masks-desert` (two mesas and a hill) is the
-landform-only companion. A paint stroke is
-`["paint", points, {"card": {"paintChannel": n, ...}}]` with `paintChannel` 1 rock,
-2 snow or ice, 3 wet ground, 4 moss, 5 denser scatter and 6 sparser scatter; 7
-erases all masks and style.
-
-The line-feature demos (card C4) are `ridge-moon` (Crater-button craters, one
-with radiating spurs, and a tapering crescent ridge with spurs), `ridge-red`
-(branching rugged mountain ridges) and `ridge-lava` (low winding hill ridges
-and a radiating lump); their options are Spurs and Crest taper. (The crater's
-rim sectors, rim gaps and crest variation were retired with the Crater tool on
-November 6, docs/LANDFORM_RETIREMENT.md.)
-
-Local style (card C5 stage 2): `paintChannel` 8/9 relief stronger/weaker, 10/11
-cracks more/fewer, 12/13 banding more/less, 14/15 face rock more/less (Strength
-is how far). A landform keeps one of them for its own footprint, Local vegetation
-(`styleVegetation`, percent, -100..100, 0 none). `demo/masks-style.json` shows the
-paint channels on a Green hill and a plateau pair.
-
-The fissure demos (card C4 stage 2) are `fissure-desert` (jagged cuts with
-branches across a mesa's cap and face), `fissure-ice` (one branching crevasse
-through a snow shore), `fissure-green` (cuts across a hill with its own painted
-rock) and `fissure-red` (a polygonal fracture network on a low platform; Mode 1).
-
-Rock types instead of variants: world variants are gone (2026-11-15). The retail sub-looks they held are
-rock types a world defines in `world.rock.recipes` (Green `evad` Broken slopes, Ice `slate`, `streaked` and
-`blueice`, Desert `triad` Gray butte rock, Moon `pitted` and `cracked`), and the scenes that used a variant
-choose that rock type on their strokes (`"card": {"rockPreset": <slot>}`; green-1, green-3, ice-1, ice-2,
-desert-2). Zhon's brown river water and Green and Desert's Modern looks were dropped.
-
-Ice's shore (card E5): the Water button's preset in Ice turns on frost-crystal shore plates (plate
-material 2: needles in parallel runs, straight seams, thinning toward deep water; the
-floe shelf of plate material 0 was dropped with the JS shape engine). ice-2's bergs and ice-3's box
-are landforms with Facets (Facet shape Prisms, one prism a click, Surface Rock, Face roughness,
-Corner cuts and Outline jitter; ice-2's flat top tilts with its section below Level tops 100), as
-the Crystals button draws them in Ice; the Blue ice rock type gives the bergs their blue ice.
-
-Ice blocks, frost lines and facets (card G6): the Ice world's raised ground is lit by its blurred height and
-snow-capped, its faces carry smooth fibres down the slope and its foot a hatched apron (`iceSoft`, `iceSnow`,
-`iceFall`, `iceApron`; ice-3 is the window; the rock types Snowless slate, Crystal-streaked ice and Blue ice set the last three to 0). The frost
-band carries fine blue hairlines (`iceFrost`). A landform takes optional **Facets** (`iceFacets`, 0 off, with
-`iceFacetSize` px, `facetForm` angular facets, stepped columns or prisms, `crystalStep` and `facetSurface`; not with shore
-features): at Facet shape Angular facets and Surface Rock part of it is tiled into tilted planes fitted to its own
-surface, partly buried, in its own material. `demo/ice-facets.json` is the ice-1 ridge with facets 70, size 44.
+`demo/` holds scenes for features that have no retail window: cross-section
+profiles (`profile-*`), painted masks and local style (`masks-*`), ridges and
+spurs (`ridge-*`), fissures (`fissure-*`), Ice facets, sand ripples, bedded
+mesas, lean and facing, and per-feature overrides. Render one at a time with
+`render.mjs` (`all.sh` only runs `scenes/`). Strokes set shape options in
+`options.card`, in the units of their sliders. A paint stroke is
+`["paint", points, {"card": {"paintChannel": n}}]`: 1 rock, 2 snow or ice,
+3 wet ground, 4 moss, 5 denser and 6 sparser scatter, 7 erases all masks and
+style, and 8-15 raise or lower relief, cracks, banding and face rock.

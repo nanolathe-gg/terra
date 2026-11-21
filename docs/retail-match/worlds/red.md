@@ -58,7 +58,7 @@ pairs.
   crack web on the shelf (`bedCracks`), and red-3's shelf is too bright (92
   against 65) where red-2's is a little dark (90 against 100).
 
-## Known before round 1 (docs/BIOME_CATALOG.md "Red Planet";
+## Known before round 1 (docs/retail-match/BIOME_CATALOG.md "Red Planet";
 `$R/agent-biome-match/out/catalog/red/catalog.md`)
 
 - Retail Red is lit from due west; `sunTilt` 0 is set for that. The

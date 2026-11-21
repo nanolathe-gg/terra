@@ -48,7 +48,7 @@ commit only on your branch, and do not land, merge or push.
 ```sh
 git worktree add ../terraform-wt-match-<world> -b match-<world> main
 cd ../terraform-wt-match-<world>
-export PYTHON=/Users/daniel/src/terraform/.venv/bin/python   # numpy, scipy, Pillow
+export PYTHON=<main checkout>/.venv/bin/python   # numpy, scipy, Pillow
 sh repro/match.sh <world>             # the bases, trial-000 and holdout-000; about a minute
 ```
 
@@ -290,3 +290,12 @@ refuse report files from a delegated agent), put the whole report in your
 final message instead; the reviewer saves it there. Keep running notes in
 `<out>/NOTES.md` as you go: round 6 ran out of working memory at 94 trials,
 and its notes carried the round.
+
+## Earlier retail gaps
+
+The H cards (2026-10-30 to 2026-11-03) listed the retail looks they could
+not reach from numbers alone: Archipelago's shelf halo, Green's block cells
+and rim fissures, Red's mud polygons, Ice's shelf colors, Moon's uphill
+folds and others. That list is the "Small leftovers" row of
+`docs/TERRAIN_ENGINE.md` at commit `3ee2584d`. Read it before a round on
+those worlds.
