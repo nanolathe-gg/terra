@@ -66,7 +66,7 @@ function worldExample(group, key) {
   return {world: 'green', strokes: full, base: {flatShadow: 1, flatOcclusion: .6, sunHeight: 34}};
 }
 
-const shores = new Set(['fingers','fingerSize','fingerVary','fingerInlet','layerPx','layerRiser','stepReference','layerVary','layerCircle','lavaSpread','lavaCircleVary','layerJag','shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','plateVary','crystalShoreSeam','waterDeep','waterShore']);
+const shores = new Set(['fingers','fingerSize','fingerVary','fingerInlet','layerPx','layerRiser','stepReference','layerVary','layerCircle','lavaSpread','lavaCircleVary','layerJag','shorePlates','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateSteps','plateMaterial','frostNeedles','plateVary','crystalShoreSeam','waterDeep','waterShore']);
 const impact = new Set(['ejecta','buckling','secondaries','secondaryDistance','rimGaps','rimGapWidth','rimGapDepth']);
 const facet = new Set(['iceFacets','iceFacetSize','facetForm','facetSurface','crystalStep','crystalTiers','crystalFacet','crystalSizeVar','crystalSides','crystalStretch','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']);
 function shapeExample(key, kind) {
@@ -74,7 +74,7 @@ function shapeExample(key, kind) {
     const terraces = key.startsWith('layer') || key.startsWith('lava') || key === 'stepReference';
     const plates = key.startsWith('plate') || ['shorePlates','frostNeedles','crystalShoreSeam'].includes(key);
     const circular = ['layerCircle','lavaCircleVary'].includes(key);
-    return {world: key === 'frostNeedles' ? 'ice' : plates ? 'crystal' : 'green', tool: 'deep', base: {diameter: 315, elevation: -55, heightReference: 1, combine: 1, fingers: terraces ? 0 : 95, terraces: terraces ? 5 : 0, ledge: 65, stepReference: circular ? 2 : 1, shorePlates: Number(plates), plateMaterial: key === 'frostNeedles' ? 2 : 1, plateWaterPx: 96, plateLandPx: 84, plateSize: 36, plateGap: 30, plateHeight: 85, plateVary: 40},
+    return {world: key === 'frostNeedles' ? 'ice' : plates ? 'crystal' : 'green', tool: 'deep', base: {diameter: 315, elevation: -55, heightReference: 1, combine: 1, fingers: terraces || plates ? 0 : 95, terraces: terraces ? 5 : 0, ledge: 65, stepReference: circular ? 2 : 1, shorePlates: Number(plates), plateMaterial: key === 'frostNeedles' ? 2 : 1, plateWaterPx: 96, plateLandPx: 84, plateSize: 36, plateGap: 30, plateHeight: 85, plateSteps: 3, plateVary: 40},
       knobs: {shoreRock: 65, shoreShelf: 45, deepDepth: 38}};
   }
   if (facet.has(key)) return {world: 'crystal', tool: 'crystal', base: {diameter: 250, iceFacets: 90, iceFacetSize: 54, facetForm: ['crystalStep','crystalFacet','crystalSizeVar'].includes(key) ? 1 : 2, facetSurface: 1, crystalVariation: 45, crystalTiers: 75}};

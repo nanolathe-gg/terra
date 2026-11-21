@@ -74,6 +74,7 @@
     "plateSize": 28,
     "plateGap": 2,
     "plateHeight": 3,
+    "plateSteps": 0,
     "plateMaterial": 1,
     "crystalGrain": 0,
     "crystalFace": 1,
