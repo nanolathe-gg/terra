@@ -126,7 +126,8 @@ function cleanParams(value, config, kind, overrides = false) {
     if (k === 'trunkColor' || k === 'accentColor') { if(hex(v))out[k]=v.toLowerCase();continue; }
     if (k === 'species') { if (SPECIES.includes(v)) out[k] = v; continue; }
     if (k === 'cells') { const c = cellsOf(v); if(c) out[k] = c.join('x'); continue; }
-    if (k in (FORMS[kind] || {}) && (typeof v !== 'number' || !Number.isFinite(v))) continue;
+    const numeric = k in (FORMS[kind] || {}) || (kind === 'vent' && (k === 'holeAspect' || k === 'rimLayers'));
+    if (numeric && (typeof v !== 'number' || !Number.isFinite(v))) continue;
     const safety = {...VARIATION, ...PATTERN, canopyLift:[0,0.65],reachVariation:[0,0.6],thickVariation:[0,0.6],height:[1,256],width:kind==='tree'?[0.05,2]:[0.05,100],size:[0.05,3],reach:kind==='tree'?[1,256]:[0.05,4],thick:[0.1,8],shadowLen:[0,4],pieces:[1,8],arms:[1,16],forks:[2,5],holeAspect:[1,3.5],rimLayers:[0,1]};
     const limits = overrides ? FORMS[kind]?.[k] || EXTRA_NUMBERS[k] || safety[k] : safety[k];
     if (typeof v === 'number' && Number.isFinite(v)) out[k] = limits ? number(v, limits[0], limits[1], limits[2] ?? limits[0]) : number(v, -10000, 10000, 0);
