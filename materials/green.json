@@ -1053,7 +1053,8 @@
      "label": "Gentle divide",
      "knobs": {
       "bandLevel": 2,
-      "bandFill": 1
+      "bandFill": 1,
+      "faceMass": 0
      }
     }
 
