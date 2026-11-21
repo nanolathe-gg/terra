@@ -48,7 +48,7 @@ commit only on your branch, and do not land, merge or push.
 ```sh
 git worktree add ../terraform-wt-match-<world> -b match-<world> main
 cd ../terraform-wt-match-<world>
-export PYTHON=/Users/daniel/src/terraform/.venv/bin/python   # numpy, scipy, Pillow
+export PYTHON=<main checkout>/.venv/bin/python   # numpy, scipy, Pillow
 sh repro/match.sh <world>             # the bases, trial-000 and holdout-000; about a minute
 ```
 
