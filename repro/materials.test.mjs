@@ -353,7 +353,7 @@ test('a world’s highland material joins a new map, keeps its own role and leav
 
 test('the add-node menu names real types, and other editors’ names find them', () => {
   const page = readFileSync(new URL('../index.html', import.meta.url), 'utf8'), list = page.slice(page.indexOf('id="node-list"'), page.indexOf('</div>', page.indexOf('id="node-list"')));
-  const entries = [...list.matchAll(/<button[^>]*data-type="([^"]+)"(?: data-kind="([^"]+)")?(?: data-keywords="([^"]*)")?>([^<]+)<\/button>/g)].map(([, type, kind, words, label]) => ({type, kind, words: words ?? '', label}));
+  const entries = [...list.matchAll(/<button[^>]*data-type="([^"]+)"(?: data-kind="([^"]+)")?(?: data-keywords="([^"]*)")?><canvas[^>]*><\/canvas>([^<]+)<\/button>/g)].map(([, type, kind, words, label]) => ({type, kind, words: words ?? '', label}));
   assert.ok(entries.length >= 25);
   for (const e of entries) { assert.ok(NODES[e.type], e.label); if (e.kind) assert.ok(Object.hasOwn(NODES[e.type].kinds ?? {}, e.kind), `${e.label}: ${e.kind}`); }
   const find = q => entries.filter(e => (e.label + ' ' + e.words).toLowerCase().includes(q)).map(e => `${e.type}:${e.kind ?? ''}`);

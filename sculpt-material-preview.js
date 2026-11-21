@@ -1,9 +1,8 @@
 // The material editor's pictures: the terrain renderer itself over small authored fixtures (a level plain or a deep sea for the tile,
-// a shore and a hill for the material on terrain), every node's own output for the graph's cards, and the library drawer's swatches. One
-// renderer serves them all, a job at a time, and only the latest request of each kind is kept, so a drag never queues work. Swatches wait
-// in their own queue behind the picture and the thumbnails.
+// a shore and a hill for the material on terrain), each node's output for the graph and add menu, and the library drawer's swatches.
+// One renderer serves them all, a job at a time. The picture and graph thumbnails take priority over the menu and library.
 import {TerrainRenderer} from './sculpt-renderer.js';
-import {MATERIAL_REPEAT, soloMaterial} from './sculpt-materials.js';
+import {MATERIAL_REPEAT, copyMaterial, makeNode, snippetNodes, soloMaterial} from './sculpt-materials.js';
 import {MASK_KEYS} from './sculpt-scene.js';
 
 export const TILE = MATERIAL_REPEAT, TERRAIN = 384, SWATCH = 96;
@@ -27,6 +26,52 @@ function terrainWeather(region, request) {
   }
   return {wear, deposit, fx: level, fy: level};
 }
+
+// Menu thumbnails are fixed examples. Filters get inputs and settings that make their effect visible.
+function nodeSample({type, kind, snippet}) {
+  const nodes = [];
+  const add = (type, props) => {
+    const node = makeNode(type, nodes, props);
+    nodes.push(node);
+    return node.id;
+  };
+  const pattern = (kind = 'smooth', size = 22) => add('noise', {kind, params: {size}});
+  if (snippet) {
+    const height = snippet === 'moss-in-hollows' ? pattern('cells') : null;
+    const made = snippetNodes(snippet, nodes), output = made.at(-1);
+    if (height) {
+      made.find(node => node.type === 'cavity').in.in = height;
+      output.in.a = height;
+    }
+    return {material: copyMaterial({nodes: [...nodes, ...made]}), id: output.id};
+  }
+
+  const stops = [[0, .12, .07, .17], [.55, .59, .27, .21], [1, .97, .82, .51]];
+  let props;
+  switch (type) {
+    case 'noise': props = {params: {size: 16}}; break;
+    case 'warp': props = kind === 'push' ? {in: {by: pattern()}, params: {amount: 24}} : {params: {amount: 9}}; break;
+    case 'levels': props = {in: {in: pattern()}, params: {low: .25, high: .75, terracing: .9}}; break;
+    case 'combine': props = {in: {a: pattern('cells'), b: pattern('waves', 13)}, params: {amount: kind === 'multiply' ? 1 : .55}}; break;
+    case 'heightblend': {
+      const ha = pattern('cells'), hb = pattern('waves', 15);
+      const a = add('gradient', {in: {in: ha}, stops});
+      const b = add('constant', {kind: 'color', stops: [[0, .24, .50, .52]]});
+      props = {in: {a, b, ha, hb}};
+      break;
+    }
+    case 'gradient': props = {in: {in: pattern('billow')}, stops}; break;
+    case 'adjust': props = {in: {in: add('gradient', {in: {in: pattern('cells')}, stops})}, params: {hue: 110}}; break;
+    case 'blur': props = {in: {in: pattern('facets')}, params: {radius: kind === 'directional' ? 12 : 4, direction: 35}}; break;
+    case 'slopeblur': props = {in: {in: pattern('facets'), slope: pattern()}, params: {distance: 24}}; break;
+    case 'light': props = {in: {in: pattern('cells', 16)}, params: {strength: 5}}; break;
+    case 'cavity': props = {in: {in: pattern('cracks', 20)}, params: {radius: 3, strength: 5}}; break;
+    case 'constant': props = {stops: [[0, .24, .50, .52]]}; break;
+  }
+  const id = add(type, {kind, ...props});
+  return {material: copyMaterial({nodes}), id};
+}
+
 export class MaterialPreview {
   constructor() { this.jobs = new Map(); this.swatches = []; this.serial = 0; this.pictureSerial = 0; this.running = false; this.renderer = null; this.timer = null; }
   // A picture of `material` beside `companion` (the map's water when the material is ground, its ground when it is water).
@@ -42,6 +87,8 @@ export class MaterialPreview {
   }
   // Each node's output, by node id (Uint8ClampedArray RGBA, THUMB px square).
   thumbnails(main, material, done) { this.post({kind: 'thumbnails', main, material: structuredClone(material), done, serial: ++this.serial}); }
+  // One example output for an Add node entry, using the graph's thumbnail renderer.
+  sample(main, entry, done) { this.post({kind: 'sample', main, entry, done}); }
   // A swatch for the library drawer: the middle SWATCH px of the material's repeat, level and lit (water as a deep sea), palette included.
   // done(error, canvas). Queued in order; cancelSwatches drops the ones not started.
   swatch(main, material, done) { if (this.disposed) return; this.swatches.push({kind: 'swatch', main, material: structuredClone(material), done}); if (!this.running) queueMicrotask(() => this.run()); }
@@ -59,12 +106,17 @@ export class MaterialPreview {
     if (this.running || this.disposed) return; this.running = true;
     try {
       while ((this.jobs.size || this.swatches.length) && !this.disposed) {
-        const kind = this.jobs.has('picture') ? 'picture' : this.jobs.has('thumbnails') ? 'thumbnails' : 'swatch';
+        const kind = ['picture', 'thumbnails', 'sample'].find(kind => this.jobs.has(kind)) ?? 'swatch';
         const job = kind === 'swatch' ? this.swatches.shift() : this.jobs.get(kind); this.jobs.delete(kind);
         try {
           const r = await this.host(job.main);
           if (this.disposed) return;
-          if (kind === 'thumbnails') { const pictures = await r.groundCache.thumbnails(job.material, MATERIAL_REPEAT); if (!this.disposed) job.done(null, pictures); continue; }
+          if (kind === 'thumbnails' || kind === 'sample') {
+            const {material, id} = kind === 'sample' ? nodeSample(job.entry) : job;
+            const pictures = await r.groundCache.thumbnails(material, MATERIAL_REPEAT);
+            if (!this.disposed) job.done(null, id ? pictures.get(id) : pictures);
+            continue;
+          }
           const water = job.material.worldWater === true, sea = r.config.seaLevel, base = r.config.baseHeight, pool = MATERIAL_REPEAT;
           let shown = job.solo ? soloMaterial(job.material, job.solo) : job.material;
           if (job.draft) shown = {...shown, dither: {...shown.dither, amount: 0}};
