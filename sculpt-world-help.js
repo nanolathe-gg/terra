@@ -175,6 +175,7 @@ export const WORLD_HELP = {
   stepSoftPx: 'Spreads the hard shallow-to-deep boundary over more art pixels.',
   shelfWander: 'Varies the depth at which shallow water becomes deep around a shoreline.',
   bedFlat: 'Favors the shallow bed’s fine relief lighting over the lighting of the whole bank or slope.',
+  slabShallows: 'Gradually confines the visible underwater bed to the shore slab band. At full strength, the deep-water material begins as soon as the slabs end.',
   shoalRag: 'Cuts larger notches into the boundary between shallow and deep water.',
   shoalShoreSoft: 'Blurs the crisp dry-to-wet waterline over more art pixels.',
   lavaCrust: 'Builds a surface crust of rounded pillows across slopes and raised ground.',

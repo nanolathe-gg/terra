@@ -129,7 +129,7 @@ export function groupToolControls(fields,buildRow){
  ['spurCount','Spurs',['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb','crestVary']],
  ['iceFacets','Facets',['iceFacets','facetForm','facetSurface','iceFacetSize','crystalStep','crystalTiers','crystalFacet','crystalSizeVar','crystalSides','crystalStretch','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']],
  ['','Impact',['ejecta','buckling','secondaries','secondaryDistance']],
- ['','Shore',['fingers','fingerSize','fingerVary','fingerInlet','riverDepth','shorePlates','plateMaterial','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateVary','frostNeedles','crystalShoreSeam','waterDeep','waterShore','surf']],
+ ['','Shore',['fingers','fingerSize','fingerVary','fingerInlet','riverDepth','shorePlates','plateMaterial','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateSteps','plateVary','frostNeedles','crystalShoreSeam','waterDeep','waterShore','surf']],
  ['','Cut',['fissureWidth','fissureJag','fissureTaper','fissureCrack','fissureDark'],true],
  ['fissureBranches','Branches',['fissureBranches','fissureBranchLen','fissureBranchSpread']],['fissureNetwork','Fracture network',['fissureNetwork','fissureCell']]
  ];
@@ -192,7 +192,7 @@ export const WORLD_HOMES={
  'Sand/':'sandCrown sand sandLee wind sandDust sandGrass sandLight ripple rippleHeight',
  'Water & shores/Depths & edges':'deepDepth waterSoft crispShore deepEdge stepSoftPx shelfWander shoalRag shoalShoreSoft',
  'Water & shores/Shore & beach':'coastRamp beachWidth apron shoreEdge bankRock wetBand frostGaps frostGapReach frostGapSize frostGapDepth',
- 'Water & shores/Water bed':'bedTint bedBright bedContrast bedRelief bedCracks bedCrackSize bedFlat',
+ 'Water & shores/Water bed':'slabShallows bedTint bedBright bedContrast bedRelief bedCracks bedCrackSize bedFlat',
  'Rain & erosion/':'wetSwath wetGround',
  'Light & shine/Sun & shade':'faceFill flatShadow flatOcclusion lightCap shadeDepth sunTilt ambient creaseShade',
  'Light & shine/Shine':'shineOutside shineSlopeGate shineStretch shineWhite shineGround shineGroundSharp shineGroundRough shineGroundScale shineSlope shineSlopeSharp shineSlopeRough shineSand shineSandSharp shineSandRough shineCrystal shineCrystalSharp shineCrystalRough shineGate shineHeadroom',

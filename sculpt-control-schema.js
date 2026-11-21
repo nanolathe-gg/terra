@@ -51,6 +51,7 @@ export function shapeControlAvailable(key,kind,p){
   const front=sampleKnots(k.knots),back=sampleKnots(k.back);return front.some((v,i)=>v!==back[i]);
  }
  if(key==='facing')return p.lean>0;
+ if(key==='plateSteps')return plates&&slab&&p.plateHeight>0;
  if(['plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam','plateVary'].includes(key))return plates&&(key==='frostNeedles'?!slab:key==='crystalShoreSeam'||key==='plateVary'?slab:true);
  // A landform's coast pass and its facets are one pass over its result; shore features take it.
  if(kind==='landform'&&['iceFacets','iceFacetSize','facetForm','facetSurface',...LANDFORM_FACET_KEYS].includes(key)&&landformShore(landformSteps(p)))return false;

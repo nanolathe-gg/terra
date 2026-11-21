@@ -114,7 +114,7 @@ function shapeMaskWrites(kind, q, sat) {
 // The uniform struct, in one list so the WGSL and the writer cannot drift apart: [name, type] with type f (f32), u (u32), i (i32).
 const NODE_FIELDS = [
   ...['fcMode', 'fcSurface'].map(k => [k, 'u']), ...['fcL', 'fcStrength', 'fcStep', 'fcShare'].map(k => [k, 'f']), ...['cgSize', 'cgFacet', 'cgSizeVar', 'cgSmooth', 'cgTiers', 'cgStep', 'cgVar', 'bgRough', 'bgJit'].map(k => [k, 'f']),
-  ...['plMat'].map(k => [k, 'u']), ...['plWater', 'plLand', 'plSize', 'plGap', 'plHeight', 'plSeam', 'plVary', 'plNeedles', 'frGapSize', 'frGapDepth', 'frGaps', 'frGapReach'].map(k => [k, 'f']),
+  ...['plMat'].map(k => [k, 'u']), ...['plWater', 'plLand', 'plSize', 'plGap', 'plHeight', 'plSteps', 'plSeam', 'plVary', 'plNeedles', 'frGapSize', 'frGapDepth', 'frGaps', 'frGapReach'].map(k => [k, 'f']),
   ...['grid', 'kind', 'nseg', 'seed', 'framed', 'nwrites', 'segBase', 'mwBase', 'bsrc', 'bdst', 'blurR', 'pw', 'ph', 'direct', 'curveBase', 'backBase', 'cvLip', 'sSteps', 'coPutW', 'coMoved', 'coSrc', 'coScal', 'coN', 'coSNI', 'coSNJ', 'combine', 'alongBase'].map(k => [k, 'u']),
   ...['rx0', 'ry0', 'rx1', 'ry1', 'ox', 'oy', 'coStep', 'coSI0', 'coSJ0', 'coBx0', 'coBy0', 'coBx1', 'coBy1'].map(k => [k, 'i']),
   ...['spacing', 'baseH', 'sea', 'minH', 'maxH', 'radius', 'amount', 'amountPct', 'rough', 'softness', 'leanK', 'bearX', 'bearY', 'leanSide', 'wK', 'wLo', 'wHi', 'amp', 'faceVar', 
@@ -533,6 +533,8 @@ function coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facet = 0
   // Lobe variety grows a few fingers up to about three times the usual length: their reach grows with it, so a spit is not cut off flat.
   const fReach = fingerReach(q, radius), fLimit = fReach + spacing * 3, lReach = layers ? coastLayerReach(q) : 0, reach = Math.max(fingers ? fLimit : 0, lReach, beach ? BEACH_REACH : 0, plates ? Math.max(plWater, plLand) + 2 * spacing : 0);
   const m = Math.ceil(reach / spacing) + 12, box = expand(region, m, grid), blurR = Math.max(1, Math.round(10 * refSpacing / spacing));
+  const plMat = plates ? (q.plateMaterial >= 1.5 ? 2 : 1) : 0, plSteps = clamp(q.plateSteps ?? 0, 0, 8);
+  const treadR = plMat === 1 && plSteps > 0 && q.plateHeight > 0 ? Math.ceil(Math.max(plWater, plLand) / spacing) + 1 : 0;
   const n = Math.max(1, Math.round(q.shoreLayers)), W = Math.max(4, q.layerPx), vary = clamp(q.layerVary, 0, 1), scal = layers && Math.round(q.layerStyle) === 1;
   const Rc = Math.max(8, q.layerCircle), cv = clamp(q.lavaCircleVary || 0, 0, 1), C = Rc * 1.3;
   const extra = [];
@@ -549,9 +551,9 @@ function coastSetup(q, geom, region, radius, inv, seed, shoreShape, c, facet = 0
     sites = {i0, j0, ni: i1 - i0 + 1, nj: j1 - j0 + 1};
   }
   return {
-    box, readR: m + (fingers ? blurR : 0) + 2, fingers, layers, plates, beach, scal, blurR, maxCells: Math.ceil(reach / spacing) + 4, sites, siteFloats: sites.ni * sites.nj * 4, sideR: Math.ceil(Math.max(fingers ? fLimit : 0, plates ? Math.max(plWater, plLand) + 2 * spacing : 0) / spacing) + 2, extra,
+    box, readR: m + (fingers ? blurR : 0) + 2, treadR, fingers, layers, plates, beach, scal, blurR, maxCells: Math.ceil(reach / spacing) + 4, sites, siteFloats: sites.ni * sites.nj * 4, sideR: Math.ceil(Math.max(fingers ? fLimit : 0, plates ? Math.max(plWater, plLand) + 2 * spacing : 0) / spacing) + 2, extra,
     u: {
-      plMat: plates ? (q.plateMaterial >= 1.5 ? 2 : 1) : 0, plWater, plLand, plSize: q.plateSize, plGap: q.plateGap, plHeight: q.plateHeight, plSeam: q.crystalShoreSeam ?? .5, plVary: q.plateVary ?? 0, plNeedles: q.frostNeedles ?? 0,
+      plMat, plWater, plLand, plSize: q.plateSize, plGap: q.plateGap, plHeight: q.plateHeight, plSteps, plSeam: q.crystalShoreSeam ?? .5, plVary: q.plateVary ?? 0, plNeedles: q.frostNeedles ?? 0,
       frGapSize: Math.max(3, c.frost?.gapSize ?? 3), frGapDepth: c.frost?.gapDepth ?? 0, frGaps: c.frost?.gaps ?? 0, frGapReach: c.frost?.gapReach ?? 0,
       coPutW: 1, coFar: 1e5 + 2 * spacing, coLimit: fLimit, coFReach: fReach, coFAmt: q.fingers * clamp(radius / 140, .35, 1),
       cfSize: q.fingerSize ?? 1, cfVary: clamp(q.fingerVary || 0, 0, 1), cfInlet: clamp(q.fingerInlet || 0, 0, 1),
@@ -762,7 +764,7 @@ export async function createShapeEngine({device, grid, spacing, baseHeight, sea,
         add('coastLayers', wide, node);
       }
       // Shore plates run after the coast pass on the heights it left, with every crossing of the sea the footprint touches (not only the ones this node moved).
-      if (c.plates) { field(0); add('coastPlates', wide, node); }
+      if (c.plates) { add('coastPlates', wide, {...node, coSrc: field(0)}); }
       // The beach is last, on the heights the others left; its field is the coast of those heights.
       if (c.beach) { add('coastBeach', wide, {...node, coSrc: field()}); }
     };
@@ -1200,7 +1202,8 @@ export function createPagedFields(opts) {
   // The ring the node list needs: 4 (the hill's blur) plus how far, beyond a page's core, the cells the shape reads reach going back through the nodes.
   // It follows the engine's own rectangles (rects in the shape run), page by page and clipped to the world, with one difference for coast nodes (H10).
   // A smooth node reads the prefix height `smoothR` cells beyond its footprint, and the next one reads that, so those add. A coast node reads the land/sea
-  // side of the prefix at its seeds (cells of its own footprint) and the prefix height of its own cell. Stamps and layers are local (layers cut heights on
+  // side of the prefix at its seeds (cells of its own footprint) and the prefix height of its own cell. Slab treads also read height across the slab band,
+  // so their treadR expands H before traversing earlier nodes. Stamps and layers are local (layers cut heights on
   // land and never across sea level: a land cell keeps sea + level * sm(0, 5, d) over the sea, equal to it only at a seed), so heights pass through them;
   // fingers and plates move the waterline away from the stroke, by `sideR` cells. Two rectangles go back through the nodes: H, where heights must be
   // exact, and S, where sides must be exact. A coast node needs its seeds present within its reach of H (the buffer must hold them: K, coverage) and within
@@ -1216,7 +1219,7 @@ export function createPagedFields(opts) {
     for (const n of nodes()) {
       const p = prepare(n, geom, c);
       if (p.smoothR && p.region) ns.push({smooth: true, read: p.smoothR, reg: p.region});
-      else if (p.coast) ns.push({smooth: false, read: p.coast.readR, side: p.coast.sideR, local: p.coast.blurR + 2, reg: p.region, box: p.coast.box});
+      else if (p.coast) ns.push({smooth: false, read: p.coast.readR, tread: p.coast.treadR, side: p.coast.sideR, local: p.coast.blurR + 2, reg: p.region, box: p.coast.box});
     }
     const top = worldGrid - 1, clipW = r => ({x0: Math.max(0, r.x0), y0: Math.max(0, r.y0), x1: Math.min(top, r.x1), y1: Math.min(top, r.y1)});
     let deepest = 0;
@@ -1231,7 +1234,11 @@ export function createPagedFields(opts) {
           continue;
         }
         const seeds = grow(a.reg, 2), hitH = meet(H, a.box);
-        if (hitH) { const e = meet(clipW(grow(hitH, a.read)), seeds); if (e) { K = span(K, e); S = span(S, meet(clipW(grow(hitH, a.local)), seeds)); } }
+        if (hitH) {
+          const e = meet(clipW(grow(hitH, a.read)), seeds);
+          if (e) { K = span(K, e); S = span(S, meet(clipW(grow(hitH, a.local)), seeds)); }
+          if (a.tread > 0) H = span(H, meet(clipW(grow(hitH, a.tread)), a.box));
+        }
         const hitS = a.side > 0 && S ? meet(S, grow(a.reg, a.side)) : null;
         if (hitS) { const e = meet(clipW(grow(hitS, a.side)), seeds); if (e) K = span(K, e); const l = meet(clipW(grow(hitS, a.local)), seeds); if (l) S = span(S, l); }
       }
