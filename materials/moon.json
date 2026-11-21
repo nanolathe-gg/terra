@@ -547,6 +547,7 @@
  "world": {
     "materials": {"ground": "moon-ground", "water": "moon-water", "rock": "moon-ground", "slope": "moon-ground", "debris": "moon-ground", "extra": ["moon-mare"], "soil": "moon-ground", "snow": "moon-snow", "moss": "moon-moss", "sand": "moon-ground", "band": "moon-band", "crystal": "crystals"},
     "knobDefaults": {
+        "fillFollow": 1,
         "fineRelief": 1.5,
         "fineLevel": 0.3,
         "fineSize": 6,
@@ -564,8 +565,8 @@
         "crackDark": 0.6,
         "sunTilt": 0,
         "sunHeight": 31,
-        "faceFill": 0.01,
-        "ambient": 0.215,
+        "faceFill": 0.16,
+        "ambient": 0.05,
         "slopeMarks": 0,
         "wrinkles": 0,
         "moonCups": 0,
