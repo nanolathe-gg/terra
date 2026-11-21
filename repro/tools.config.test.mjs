@@ -31,6 +31,13 @@ test('every world defines valid library shapes and cards', async () => {
   for (const w of WORLDS) for (const entry of ENTRIES) for (const key of Object.keys(toolDefaults(configs[w], entry))) assert.ok(CARD_KEYS.has(key), `${w} ${entry}: ${key}`);
 });
 
+test('a default Red ramp reaches the default plateau elevation', () => {
+  const ramp = toolDefaults(configs.red, 'ramp');
+  const plateau = toolDefaults(configs.red, 'plateau');
+  assert.equal(ramp.heightReference, plateau.heightReference);
+  assert.equal(ramp.elevation, plateau.elevation);
+});
+
 test('every world\'s toolbar is valid, its rocks are presets it ships', () => {
   for (const [name, config] of Object.entries(configs)) {
     const tools = worldTools(config), rocks = worldRocks(applyWorldRock(structuredClone(config)));

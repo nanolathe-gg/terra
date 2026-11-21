@@ -1210,7 +1210,7 @@
    "plateau": {},
    "hill": {"wander": 34, "widthVary": 30, "heightVary": 10},
    "mountain": {"wander": 8},
-   "ramp": {},
+   "ramp": {"elevation": 130},
    "valleyV": {},
    "valleyU": {},
    "valleyT": {},
