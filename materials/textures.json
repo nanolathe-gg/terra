@@ -356,14 +356,14 @@
   "seed": 0,
   "nodes": [
    {"id":"fine","type":"noise","kind":"smooth","name":"Very fine grain","params":{"size":1,"detail":0,"layers":0,"seed":3},"in":{"in":null},"x":0,"y":0},
-   {"id":"sand","type":"gradient","name":"Cream sand tone","params":{"ease":0},"in":{"in":"fine"},"stops":[[0,0.82,0.82,0.72],[0.5,0.93,0.92,0.84],[1,1,1,0.95]],"x":236,"y":0},
+   {"id":"sand","type":"gradient","name":"Cream sand tone","params":{"ease":0},"in":{"in":"fine"},"stops":[[0,0.83,0.83,0.735],[0.5,0.91,0.91,0.84],[1,0.986,0.986,0.939]],"x":236,"y":0},
    {"id":"fleck","type":"noise","kind":"smooth","name":"Colored fleck grain","params":{"size":1,"detail":0,"layers":0,"seed":7},"in":{"in":null},"x":0,"y":150},
-   {"id":"fleckc","type":"gradient","name":"Pink and yellow flecks","params":{"ease":0},"in":{"in":"fleck"},"stops":[[0,1,0.82,0.92],[0.3,0.97,0.97,0.97],[0.6,1,1,0.9],[1,1.04,1.04,1.04]],"x":236,"y":150},
+   {"id":"fleckc","type":"gradient","name":"Pink and yellow flecks","params":{"ease":0},"in":{"in":"fleck"},"stops":[[0,1,0.845,0.94],[0.33,1,0.93,0.96],[0.67,1,1,0.925],[1,1.022,1.022,1.022]],"x":236,"y":150},
    {"id":"mix","type":"combine","kind":"multiply","name":"Flecks over sand","params":{"amount":1,"offset":0},"in":{"a":"sand","b":"fleckc","mask":null},"x":472,"y":75},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"mix","height":null,"shine":null},"x":708,"y":75}
   ],
   "controls": [{"label":"Grain size","node":"fine","param":"size","min":1,"max":4},{"label":"Sand colors","node":"sand","param":"stops"}],
-  "palette": [65,64,17,81,82,66,18,83,80,84,255],
+  "palette": [65,64,17,81,82,66,18,83,84,16,255],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
  "archipelago-water": {
@@ -371,18 +371,15 @@
   "seed": 0,
   "nodes": [
    {"id":"step-1","type":"warp","kind":"turbulence","name":"Pattern distortion","params":{"amount":1,"size":4,"layers":0,"axis":0,"seed":0},"in":{"in":null},"x":0,"y":38},
-   {"id":"step-2-pattern","type":"noise","kind":"waves","name":"Mottling / streaks","params":{"size":1.9,"detail":0.35,"layers":0,"seed":0,"length":3.5,"direction":45,"crests":0.9},"in":{"in":"step-1"},"x":236,"y":38},
-   {"id":"step-2-broad","type":"noise","kind":"smooth","name":"Broad variation","params":{"size":16,"detail":0,"layers":0,"seed":12},"in":{"in":null},"x":236,"y":188},
-   {"id":"step-2","type":"combine","kind":"mix","name":"Mottling / streaks","params":{"amount":0,"offset":0},"in":{"a":"step-2-pattern","b":"step-2-broad","mask":null},"x":472,"y":113},
-   {"id":"step-3","type":"noise","kind":"smooth","name":"Fine grain","params":{"size":1.1,"detail":0,"layers":0,"seed":1},"in":{"in":null},"x":708,"y":-37},
-   {"id":"step-4","type":"levels","name":"Pattern levels","params":{"low":0.15,"high":0.95,"gamma":1.8,"invert":0},"in":{"in":"step-2"},"x":708,"y":113},
-   {"id":"step-5","type":"gradient","name":"Pattern colors","params":{"ease":1},"in":{"in":"step-4"},"stops":[[0,0.1,0.3,0.47],[0.6,0.12,0.33,0.5],[1,0.29,0.52,0.7]],"x":944,"y":113},
-   {"id":"step-6","type":"gradient","name":"Grain colors","params":{"ease":0},"in":{"in":"step-3"},"stops":[[0,0.8,0.85,0.9],[1,1.2,1.15,1.1]],"x":944,"y":-37},
-   {"id":"step-7","type":"combine","kind":"multiply","name":"Multiply grain","params":{"amount":1,"offset":0},"in":{"a":"step-5","b":"step-6","mask":null},"x":1180,"y":38},
-   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"step-7","height":null,"shine":null},"x":1416,"y":38}
+   {"id":"step-2-pattern","type":"noise","kind":"waves","name":"Mottling / streaks","params":{"size":1.9,"detail":0.39,"layers":0,"seed":0,"length":2.55,"direction":45,"crests":0.26},"in":{"in":"step-1"},"x":236,"y":38},
+   {"id":"ripples-patches","type":"noise","kind":"smooth","name":"Loose patches of flecks","params":{"size":24,"detail":0.14,"layers":1,"seed":173},"x":235,"y":186},
+   {"id":"ripples-density","type":"combine","kind":"add","name":"Gather the ripples into patches","params":{"amount":0.29,"offset":0.5},"in":{"a":"step-2-pattern","b":"ripples-patches"},"x":472,"y":38},
+   {"id":"step-4","type":"levels","name":"Pattern levels","params":{"low":0.12,"high":0.88,"gamma":1.62,"invert":0},"in":{"in":"ripples-density"},"x":708,"y":38},
+   {"id":"step-5","type":"gradient","name":"Pattern colors","params":{"ease":1},"in":{"in":"step-4"},"stops":[[0,0.10588,0.29412,0.46667],[0.52,0.10588,0.29412,0.46667],[0.7,0.18431,0.41961,0.59216],[0.86,0.18431,0.41961,0.59216],[1,0.24706,0.48235,0.63922]],"x":944,"y":38},
+   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"step-5","height":null,"shine":null},"x":1180,"y":38}
   ],
   "controls": [{"label":"Water colors","node":"step-5","param":"stops"}],
-  "palette": [137,138,135,136,134,133,139,140],
+  "palette": [137,135,134],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
  "moon-ground": {
@@ -792,30 +789,27 @@
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
  "archipelago-rock": {
-  "name": "Archipelago rock grain",
+  "name": "West-lit island rock",
   "seed": 0,
   "nodes": [
-   {"id":"mid","type":"constant","name":"Middle","params":{"value":0.5},"x":0,"y":0},
-   {"id":"band1","type":"noise","kind":"smooth","name":"Grain 2 px","params":{"size":2,"detail":0,"layers":0,"seed":111},"x":0,"y":80},
-   {"id":"add1","type":"combine","kind":"add","name":"Add 2 px","params":{"amount":0.1735,"offset":0.5},"in":{"a":"mid","b":"band1","mask":null},"x":240,"y":80},
-   {"id":"band3","type":"noise","kind":"smooth","name":"Grain 8 px","params":{"size":8,"detail":0,"layers":0,"seed":113},"x":0,"y":160},
-   {"id":"add3","type":"combine","kind":"add","name":"Add 8 px","params":{"amount":0.141,"offset":0.5},"in":{"a":"add1","b":"band3","mask":null},"x":240,"y":160},
-   {"id":"band4","type":"noise","kind":"smooth","name":"Grain 16 px","params":{"size":16,"detail":0,"layers":0,"seed":114},"x":0,"y":240},
-   {"id":"add4","type":"combine","kind":"add","name":"Add 16 px","params":{"amount":0.533,"offset":0.5},"in":{"a":"add3","b":"band4","mask":null},"x":240,"y":240},
-   {"id":"band5","type":"noise","kind":"smooth","name":"Grain 32 px","params":{"size":32,"detail":0,"layers":0,"seed":115},"x":0,"y":320},
-   {"id":"add5","type":"combine","kind":"add","name":"Add 32 px","params":{"amount":1.1692,"offset":0.5},"in":{"a":"add4","b":"band5","mask":null},"x":240,"y":320},
-   {"id":"band6","type":"noise","kind":"smooth","name":"Grain 64 px","params":{"size":64,"detail":0,"layers":0,"seed":116},"x":0,"y":400},
-   {"id":"add6","type":"combine","kind":"add","name":"Add 64 px","params":{"amount":1.9,"offset":0.5},"in":{"a":"add5","b":"band6","mask":null},"x":240,"y":400},
-   {"id":"band0","type":"noise","kind":"pixel","name":"Pixel grain","params":{"seed":110},"x":0,"y":480},
-   {"id":"add0","type":"combine","kind":"add","name":"Add 1 px","params":{"amount":0.1008,"offset":0.5},"in":{"a":"add6","b":"band0","mask":null},"x":240,"y":480},
-   {"id":"levels","type":"levels","name":"Spread","params":{"low":0.2751,"high":0.7249,"gamma":1,"invert":0},"in":{"in":"add0"},"x":480,"y":80},
-   {"id":"colors","type":"gradient","name":"Colors","stops":[[0,0.1506,0.0902,0.0878],[0.0188,0.281,0.163,0.1623],[0.1613,0.3222,0.2513,0.1951],[0.3274,0.3112,0.2822,0.2614],[0.4799,0.3586,0.3454,0.2705],[0.6077,0.3905,0.3881,0.2675],[0.6571,0.4614,0.4405,0.3757],[0.6959,0.4702,0.4706,0.3482]],"params":{"ease":0},"in":{"in":"levels"},"x":720,"y":80},
-   {"id":"relief","type":"levels","name":"Grit height","params":{"low":0.2751,"high":0.7249,"gamma":1,"invert":0},"in":{"in":"add6"},"x":480,"y":200},
-   {"id":"material","type":"output","name":"Material","params":{"relief":1},"in":{"color":"colors","height":"relief","shine":null},"x":960,"y":80}
+   {"id":"warp","type":"warp","kind":"turbulence","name":"Break up the grit","params":{"amount":1.1,"size":7,"layers":0,"axis":0,"seed":27},"in":{"in":null},"x":0,"y":70},
+   {"id":"bumps","type":"noise","kind":"gradient","name":"Fine grit","params":{"size":2.22,"detail":0.1,"layers":0,"seed":111},"in":{"in":"warp"},"x":236,"y":0},
+   {"id":"pebbles","type":"noise","kind":"smooth","name":"Small rounded grains","params":{"size":5.7,"detail":0,"layers":0,"seed":41},"in":{"in":"warp"},"x":236,"y":144},
+   {"id":"height","type":"combine","kind":"add","name":"Rock microrelief","params":{"amount":0.37,"offset":0.5},"in":{"a":"bumps","b":"pebbles","mask":null},"x":472,"y":0},
+   {"id":"small-pits","type":"scatter","name":"Weathered pits","params":{"spacing":4.9,"radius":1.55,"coverage":0.46,"jitter":1.52,"hardness":0.11,"profile":1.18,"sizeVariation":0.52,"toneVariation":0.33,"elongation":0.17,"direction":6,"directionVariation":0.87,"seed":97},"in":{"in":"warp"},"x":236,"y":296},
+   {"id":"pits-height","type":"combine","kind":"subtract","name":"Pits in the rock","params":{"amount":0.69,"offset":0},"in":{"a":"height","b":"small-pits","mask":null},"x":708,"y":83},
+   {"id":"pit-surface","type":"blur","kind":"gaussian","name":"Prepared pit height","params":{"radius":0},"in":{"in":"pits-height"},"x":944,"y":76},
+   {"id":"lit","type":"light","name":"Light from the lower left","params":{"direction":208,"strength":3.15},"in":{"in":"pit-surface"},"x":1180,"y":0},
+   {"id":"cavity","type":"cavity","name":"Soft hollows","params":{"radius":1.22,"strength":2.7},"in":{"in":"pit-surface"},"x":1180,"y":144},
+   {"id":"shade","type":"combine","kind":"add","name":"Light and hollows","params":{"amount":0.21,"offset":0.5},"in":{"a":"lit","b":"cavity","mask":null},"x":1416,"y":0},
+   {"id":"deep-pits","type":"levels","name":"Only the deeper hollows","params":{"low":0.14,"high":0.46,"gamma":0.78,"invert":1},"in":{"in":"cavity"},"x":1416,"y":174},
+   {"id":"pit-shadow","type":"combine","kind":"subtract","name":"Darken the deepest hollows","params":{"amount":0.166,"offset":0},"in":{"a":"shade","b":"deep-pits","mask":null},"x":1652,"y":0},
+   {"id":"colors","type":"gradient","name":"Warm brown rock","params":{"ease":0},"in":{"in":"pit-shadow"},"stops":[[0,0.178,0.143,0.119],[0.17,0.245,0.206,0.168],[0.33,0.322,0.284,0.231],[0.5,0.367,0.329,0.277],[0.68,0.4023,0.3626,0.3057],[1,0.4474,0.4077,0.3492]],"x":1888,"y":0},
+   {"id":"material","type":"output","name":"Material","params":{"relief":0.68},"in":{"color":"colors","height":"pit-surface","shine":null},"x":2124,"y":0}
   ],
-  "controls": [{"label":"Colors","node":"colors","param":"stops"}],
-  "palette": [61,60,27,59,58,57,91,56,90,70,54,69],
-  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
+  "controls": [{"label":"Bump size","node":"bumps","param":"size","min":2,"max":9},{"label":"Rock colors","node":"colors","param":"stops"}],
+  "palette": [59,58,57,56,55,91,90,89,71,70,69,68],
+  "dither": {"amount":0.5,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
  "crystal-rock": {
   "name": "Crystal rock grain",
@@ -1142,31 +1136,9 @@
   "palette": [62,61,28,186,26,59,184,25,183,24,182],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
- "archipelago-slope": {
-  "name": "Archipelago slope cover",
-  "seed": 0,
-  "nodes": [
-   {"id":"mid","type":"constant","name":"Middle","params":{"value":0.5},"x":0,"y":0},
-   {"id":"band1","type":"noise","kind":"smooth","name":"Grain 2 px","params":{"size":2,"detail":0,"layers":0,"seed":101},"x":0,"y":80},
-   {"id":"add1","type":"combine","kind":"add","name":"Add 2 px","params":{"amount":0.1735,"offset":0.5},"in":{"a":"mid","b":"band1","mask":null},"x":240,"y":80},
-   {"id":"band3","type":"noise","kind":"smooth","name":"Grain 8 px","params":{"size":8,"detail":0,"layers":0,"seed":103},"x":0,"y":160},
-   {"id":"add3","type":"combine","kind":"add","name":"Add 8 px","params":{"amount":0.141,"offset":0.5},"in":{"a":"add1","b":"band3","mask":null},"x":240,"y":160},
-   {"id":"band4","type":"noise","kind":"smooth","name":"Grain 16 px","params":{"size":16,"detail":0,"layers":0,"seed":104},"x":0,"y":240},
-   {"id":"add4","type":"combine","kind":"add","name":"Add 16 px","params":{"amount":0.533,"offset":0.5},"in":{"a":"add3","b":"band4","mask":null},"x":240,"y":240},
-   {"id":"band5","type":"noise","kind":"smooth","name":"Grain 32 px","params":{"size":32,"detail":0,"layers":0,"seed":105},"x":0,"y":320},
-   {"id":"add5","type":"combine","kind":"add","name":"Add 32 px","params":{"amount":1.1692,"offset":0.5},"in":{"a":"add4","b":"band5","mask":null},"x":240,"y":320},
-   {"id":"band6","type":"noise","kind":"smooth","name":"Grain 64 px","params":{"size":64,"detail":0,"layers":0,"seed":106},"x":0,"y":400},
-   {"id":"add6","type":"combine","kind":"add","name":"Add 64 px","params":{"amount":1.9,"offset":0.5},"in":{"a":"add5","b":"band6","mask":null},"x":240,"y":400},
-   {"id":"band0","type":"noise","kind":"pixel","name":"Pixel grain","params":{"seed":100},"x":0,"y":480},
-   {"id":"add0","type":"combine","kind":"add","name":"Add 1 px","params":{"amount":0.1008,"offset":0.5},"in":{"a":"add6","b":"band0","mask":null},"x":240,"y":480},
-   {"id":"levels","type":"levels","name":"Spread","params":{"low":0.2751,"high":0.7249,"gamma":1,"invert":0},"in":{"in":"add0"},"x":480,"y":80},
-   {"id":"colors","type":"gradient","name":"Colors","stops":[[0,0.1506,0.0902,0.0878],[0.0188,0.281,0.163,0.1623],[0.1613,0.3222,0.2513,0.1951],[0.3274,0.3112,0.2822,0.2614],[0.4799,0.3586,0.3454,0.2705],[0.6077,0.3905,0.3881,0.2675],[0.6571,0.4614,0.4405,0.3757],[0.6959,0.4702,0.4706,0.3482]],"params":{"ease":0},"in":{"in":"levels"},"x":720,"y":80},
-   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"colors","height":null,"shine":null},"x":960,"y":80}
-  ],
-  "controls": [{"label":"Colors","node":"colors","param":"stops"}],
-  "palette": [61,60,27,59,58,57,91,56,90,70,54,69],
-  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
- },
+ "archipelago-olive-rock": {"name": "Olive weathered rock", "like": "archipelago-rock", "color": "#78764e"},
+ "archipelago-red-rock": {"name": "Rose mineral rock", "like": "archipelago-rock", "color": "#b86d67"},
+ "archipelago-slope": {"name": "Archipelago slope rock", "like": "archipelago-rock", "color": "#60574a"},
  "archipelago-debris": {
   "name": "Archipelago debris",
   "seed": 0,
@@ -1607,7 +1579,7 @@
  },
  "archipelago-soil": {"name": "Archipelago soil", "like": "red-ground", "color": "#3c3125"},
  "archipelago-snow": {"name": "Archipelago snow", "like": "ice-ground", "color": "#f6f2e8"},
- "archipelago-moss": {"name": "Archipelago moss", "like": "archipelago-slope", "color": "#453e30"},
+ "archipelago-moss": {"name": "Archipelago moss", "like": "archipelago-rock", "color": "#453e30"},
  "archipelago-sand": {"name": "Archipelago sand", "like": "archipelago-debris", "color": "#655e51"},
  "archipelago-band": {"name": "Archipelago base band", "like": "desert-ground", "color": "#4d4536"},
  "crystal-soil": {"name": "Crystal soil", "like": "red-ground", "color": "#302826"},
@@ -1665,7 +1637,7 @@
  "rock-breccia": {"name": "Angular breccia", "like": "rock-granite", "color": "#7c7c7d"},
  "rock-basalt-blue": {"name": "Jointed basalt", "like": "rock-basalt", "color": "#304c5f"},
  "rock-limestone-cream": {"name": "Pitted limestone", "like": "rock-limestone", "color": "#c8c8a0"},
- "archipelago-mound": {"name": "Mound rock", "like": "archipelago-rock", "color": "#6a6849"},
+ "archipelago-mound": {"name": "Mound rock", "like": "archipelago-rock", "color": "#655648"},
  "crystal-litcrust": {"name": "Lit crystal crust", "like": "crystal-rock", "color": "#4d3e62"},
  "desert-triad": {"name": "Gray caprock", "like": "desert-rock", "color": "#918495"},
  "desert-outcrop": {"name": "Dark outcrop", "like": "desert-rock", "color": "#615465"},
