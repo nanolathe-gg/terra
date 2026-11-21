@@ -172,7 +172,9 @@ export class VoxelSurface {
       // with a long geometry draw. Drain the solid and let input cancel
       // before queuing the draw. Coarse 4+ sources are already short;
       // those and native 256px tiles stay one submission.
-      const drains=r.voxelScale<4&&rect.width*rect.height/(scale*scale)>128*1024;
+      // Where a wait costs far more than the work (slowCompletion: Firefox's 100 ms), the drains would add two of them to every large tile
+      // (measured: 14 tiles, 1.4 s after one stroke), so the solid and the draw go as one submission there.
+      const drains=!r.slowCompletion&&r.voxelScale<4&&rect.width*rect.height/(scale*scale)>128*1024;
       let marchReads=null;
       const marchPool=encoder=>{
         const bind=this.device.createBindGroup({layout:this.drawLayout,entries:[0,1,2,3,4,5,7,8].map(binding=>({binding,resource:marchReads[binding]}))});

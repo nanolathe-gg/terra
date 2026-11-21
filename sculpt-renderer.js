@@ -168,6 +168,11 @@ export class TerrainRenderer {
     const requiredLimits = {maxBufferSize: adapter.limits.maxBufferSize, maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize};
     const device = this.device = await adapter.requestDevice({requiredFeatures: features, requiredLimits});
     if (digestGuardRequested()) this.guard = installDigestGuard(device);   // tests and debug runs only: before any resource is made
+    // The round trip of an empty submission (slowCompletion), measured while start-up goes on: Firefox 160 on a Mac answers every completion
+    // on a 100 ms timer (measured; Chrome 0.1 ms), so a wait that only orders work costs it a tenth of a second. The first of four waits can
+    // land anywhere in that timer's period, and any can queue behind start-up work or meet an early poll, so the median of the last three is kept.
+    this.completionMs = null;
+    (async () => { const t = []; for (let i = 0; i < 4; i++) { const s = performance.now(); device.queue.submit([]); await device.queue.onSubmittedWorkDone(); t.push(performance.now() - s); } this.completionMs = t.slice(1).sort((a, b) => a - b)[1]; })().catch(() => {});
     device.lost.then(info => {
       if(info.reason==='destroyed'||this.recovering)return;
       if(this.config.onDeviceLost?.(info)){this.recovering=true;return;}
@@ -543,6 +548,8 @@ export class TerrainRenderer {
 
 
   // What the startup generation took, in ms: the noise (CPU), the palette lookup and the materials (GPU), and the wall time of all three.
+  // True where waiting for the GPU costs far more than the work waited for (completionMs); null (not measured yet) counts as fast.
+  get slowCompletion() { return this.completionMs > 30; }
   get startupParts() { return {noise: this.noiseMs, total: this.generationMs}; }
 
   // GPU time of one pass from timestamp queries, read back without
