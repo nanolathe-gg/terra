@@ -20,3 +20,20 @@ The editor server is the usual development one, started from this worktree:
 Edits in the explainer are the scene's `trailer.steps` (a node moved, card
 numbers eased), applied in order; the layers after them render the final
 state, so the explainer's last frame is the engine's own picture of that map.
+
+## The three concepts (2026-11-21)
+
+With `A=~/terraform-assets/agent-trailer/v2`:
+
+| Step | Command |
+| --- | --- |
+| World stills | `for w in green red archipelago moon lush lava desert crystal ice; do node trailer/stills.mjs trailer/worlds/$w.json $A/worlds/$w --steps; done` (add `--tiles --cells` for Green's tile count) |
+| Ridge stills | `for f in trailer/sections/*.json; do node trailer/stills.mjs $f $A/sections/$(basename $f .json); done` |
+| Logo | `node trailer/stills.mjs trailer/logo-desert.json $A/logo` |
+| Retail sections | Copy the chosen PNGs from `~/terraform-assets/green-planet-sections/png/{hills,flat}` into `$A/retail/` (never into the repository). |
+| Cuts A and B | `node trailer/render-explainer.mjs $A $A/out/worlds.mp4 --port <cdp> --page 'cuts.html?cut=worlds'` (and `cut=sections`) |
+| Cut C | `node trailer/capture-realtime.mjs --server http://127.0.0.1:<yours> --port <cdp> --out $A/out/realtime-raw.mp4`, then join a slate and the end card with ffmpeg. |
+
+`stills.mjs` turns a world's own tools (Canyon, Cone, Atoll...) into the
+library shape and card its toolbar button starts from, because scenes name
+only library shapes.

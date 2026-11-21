@@ -13,7 +13,7 @@ const port = Number(opt('--port', 0)), stills = opt('--stills', ''), page = opt(
 const [layers, out] = args.map(a => resolve(a));
 if (!layers || !out || !port) { console.error('usage: node trailer/render-explainer.mjs <layers-dir> <out.mp4> --port <cdp>'); process.exit(2); }
 const here = dirname(fileURLToPath(import.meta.url));
-const types = {'.html': 'text/html', '.json': 'application/json', '.png': 'image/png', '.f32': 'application/octet-stream', '.js': 'text/javascript', '.mjs': 'text/javascript'};
+const types = {'.htm': 'text/html', '.html': 'text/html', '.json': 'application/json', '.png': 'image/png', '.f32': 'application/octet-stream', '.js': 'text/javascript', '.mjs': 'text/javascript'};
 const server = createServer(async (req, res) => {
   const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^\/+/, '');
   const file = path.startsWith('layers/') ? join(layers, path.slice(7)) : join(here, path);

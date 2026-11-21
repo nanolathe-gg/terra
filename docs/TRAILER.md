@@ -67,7 +67,45 @@ Changes to the owner's first outline (2026-11-19). Strike any of them.
 | 9 game | A slate until there is real footage. |
 | 10 logo | An engine render of a letter scene. |
 
-## State of the rough cut (2026-11-19)
+
+## Three concepts (2026-11-21)
+
+The owner asked for alternatives aimed at four points: it is for Total
+Annihilation and exported maps play in the game; artists are in control
+but anybody can use it; it looks great and works in real time; it beats
+pasting pre-rendered pieces. Each concept is a 30-second prototype that
+ends on the same card (the TERRA logo, "A map editor for Total
+Annihilation", "Exports .ufo maps that play in the game"). The river tool is
+left out (owner, 2026-11-21), and Terra's shapes are natural ones (smooth,
+meandering paths), not zig-zags (owner, 2026-11-21).
+
+| Concept | What it shows | Points it covers |
+| --- | --- | --- |
+| A. Every world (`cuts.html?cut=worlds`) | Green built stroke by stroke, then the eight other worlds, each from its own signature tools (Cone and Vent, Atoll, Hoodoos, Ice cliff...), then a 3x push into 1x pixels. | Looks great; artist control through each world's presets; TA in the title and end card. |
+| B. Sections vs Terra (`cuts.html?cut=sections`) | TA's own Green Planet map-editor sections pasted along a ridge path the way a map maker would, their squares shown; then Terra draws the same ridge, bends it, and shows it on Painted Desert and Ice. | Better than pasting ready-made pieces; artist control; easy. |
+| C. One take, real time (`capture-realtime.mjs`) | The real editor at 1x on Painted Desert: butte, hoodoos, gray dome, a curving ridge, the butte widened with Size, then the Export pane. A clock badge runs throughout. | Real time; easy; Export for TA. |
+
+**Real and stand-in.** Every Terra picture is the engine's own render (A,
+B) or a screen capture of the editor (C). Concept B's section half uses
+the retail Green Planet sections (decoded from `worlds.hpi` into
+`~/terraform-assets/green-planet-sections`, read-only). That is the owner's
+call of 2026-11-21: compare against the real thing, not an illustration.
+The section images and every frame made from them stay outside Git; the
+repository holds only the code that composes them. In-game footage is still
+a gap in all three: only the owner can capture TA.
+
+**Measured.** Concept C's take lasts 21.54 s against 21.52 s of wall clock,
+at 57 delivered frames a second; its Size drag changed 213,926 canvas
+pixels. The Green scene of concept A exports 1,070 distinct 32-px tiles
+out of 4,420 (level ground reuses its own tiles by design).
+
+**Section placement in B.** The ridge runs northwest to southeast, the
+direction the elongated Green sections are drawn in, and the pieces are
+the closest matches (Green27, 17, 18, 28), centered on the path and
+snapped to 32 px. The caption claims only what the frames show: fixed
+shapes and directions, joined at the edges of their squares.
+
+## State of the first rough cut (2026-11-19)
 
 Unfinished, in order of importance:
 

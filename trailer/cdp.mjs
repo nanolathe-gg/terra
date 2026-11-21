@@ -17,10 +17,11 @@ export async function browser({port, width, height, profile}) {
   }
   if (!ws) { chrome.kill(); throw new Error(`cdp: no Chrome on port ${port}`); }
   await new Promise(r => ws.onopen = r);
-  let id = 0; const wait = new Map(), logs = [];
+  let id = 0; const wait = new Map(), logs = [], listeners = new Map();
   ws.onmessage = e => {
     const m = JSON.parse(e.data);
     if (m.id) { wait.get(m.id)?.(m); wait.delete(m.id); }
+    if (m.method) for (const fn of listeners.get(m.method) ?? []) fn(m.params);
     if (m.method === 'Runtime.exceptionThrown') logs.push(m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text);
     if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error') logs.push(m.params.args.map(a => a.value ?? a.description).join(' ').slice(0, 300));
   };
@@ -35,7 +36,8 @@ export async function browser({port, width, height, profile}) {
   const shot = async (format = 'jpeg') => Buffer.from((await send('Page.captureScreenshot', {format, quality: 92})).result.data, 'base64');
   const mouse = (type, x, y, down = false) => send('Input.dispatchMouseEvent', {type, x, y, button: down || type !== 'mouseMoved' ? 'left' : 'none', buttons: down ? 1 : 0, clickCount: 1});
   const close = async () => { try { ws.close(); } catch {} chrome.kill(); await sleep(500); };
-  return {send, ev, shot, mouse, logs, close};
+  const on = (method, fn) => listeners.set(method, [...(listeners.get(method) ?? []), fn]);
+  return {send, ev, shot, mouse, logs, close, on};
 }
 
 // An ffmpeg that takes JPEG or PNG frames on stdin at a fixed rate and writes an H.264 file the Mac and the web play.
