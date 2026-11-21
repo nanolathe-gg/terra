@@ -19,7 +19,7 @@ Means of the tuning windows at the base (main 50328b75): shape .27, look .33.
 | --- | --- | --- |
 | red-1 | 4 on every stroke (round 2) | `softface` (faceRock 0, rockFaceFrom .5): no rock shown, face construction only from slope .5 |
 | red-2 | 2 on the knob stroke (round 1); 5 on the NW corner rise (round 3); the rest unset | `darkknob` (crust -.3, rockFace 2, faceTone .05, faceScratch 3 down the face); `chunks` (crackSeverity 1, facets 1.5, spacing 48, crackFrom .12, faceRock 0) |
-| red-3 | none set | the world's own rock |
+| red-3 | none set | the world's own rock (draws `red-bank` since round 4) |
 | red-4 | none set | the world's own rock |
 
 `rubble` (slot 3) reaches no window. red-2 paints Rock (channel 1, amount
@@ -72,7 +72,61 @@ pairs.
   spider, king of the hill and red river.
 - Retail's plain sits at 85 with the sea 5-38 below it.
 
-## Start here (round 4)
+## Start here (round 5)
+
+Round 4 (branch `match-red-4`, 77 of 300 trials; report in the round's final
+message, notes in `$R/match/terraform-wt-match-red-4/red/NOTES.md`, fitting
+scripts named there) started at main e22c27d1: trial-000 mean shape .13, look
+.22 (red-1 .11/.07, red-2 .14/.09, red-3 .14/.50), held-out red-4 .10/.50.
+It ended at trial-049: shape .12, look .10 (red-1 .11/.07, red-2 .14/.06,
+red-3 .12/.16); red-4 .10/.33 (holdout-005). Kept:
+
+- the world rock draws a new coast-bank material, `red-bank` (rust ground,
+  3.5 px lumps and 52 px cells lit from the west, thin dark cell borders),
+  in place of red-rock's dark 8-64 px blotches; darkknob draws it too (its
+  knob reads even and fine). red-rock is now unused by Red's role table;
+- `red-crumple` draws thin dark cracks between lighter plates (red-2's
+  upland);
+- red-3's sea rebuilt with a sloped floor (`fixture:`), fitted to the retail
+  heights by coordinate descent; plain 30, undulation 5;
+- red-3's own water: deepDepth 30, bedBright 1.0.
+
+Leads:
+
+1. **Sea-coast water as the world's.** red-3's own water (deepDepth 30,
+   bedBright 1.0) takes held-out red-4 from .33 to .22 (holdout-004,
+   diagnostic only). As world defaults it costs red-1 .01 and red-2 .07
+   (trial-050) unless red-2 sets bedBright 1.1 in its query and red-1 keeps
+   18/1.1. The reviewer's call: one sea look for the world, ponds and rivers
+   as maps' own water.
+2. **The deep side of a hard shelf step never mottles.** With deepEdge 1 the
+   step comes from `sharpDeepStep` (engine-frag.wgsl), which reads the bed
+   depth only; the depth mottle (`colorDepth` noise) reaches only the ramp.
+   deepEdge 0 draws retail's 32 px mottle in the deep but blurs the shelf
+   edge (trial-025); see the round's proposal.
+3. **Red-3's bank** still reads darker and blotchier than retail's broad,
+   lit, lumpy rough ground with thin polygon cracks (crop trial-049
+   red-3/slope.png). Tried: wider Rock paint (060: gentle edges .10x to
+   .56x, flat edges 2.4x), Ground lumps paint on the bank (062: look .16 to
+   .14, slope edges 1.7x to 2x), red-crumple ground there (074: flat edges
+   4.9x), red-bank's light amounts (038/039), rockFace (027-029), world
+   cracks (058). Retail's bank roughness is in the heights (rough_8px .58,
+   ours .17): a coast stroke option for cell-scale height roughness would be
+   the lever.
+4. **Red-2's fixture**: retail's plain sits 35 above the river (crop.json),
+   ours 24. plain=35 alone breaks the banks and knob (trial-057: shape .21);
+   a refit of the lake strokes at plain 24 against scaled heights did not
+   help (069). Rebuild the lake with plain 35 and its strokes together.
+5. **Red-2's bank** of fine concentric lines: contour band spacing (063,
+   064), banding (055/056), no Steps (068) and routeSmooth (010/011) do not
+   draw it.
+6. **The knob** still lacks a lit crest and a dark east lee: faceFill (066,
+   067) and darkknob rockFace 1 (077) made red-2 worse.
+7. Edge direction on red-3: the north-facing waterlines and the SW bay's
+   narrow shelf step add horizontal edges (`hzone.py` in the round's
+   scratch notes); the plain's share stays the palette dither's.
+
+## Start here (round 4, done)
 
 Round 3 (branch `match-red-3`, 66 of 300 trials; report in the round's final
 message, notes in `$R/match/terraform-wt-match-red-3/red/NOTES.md`) first
