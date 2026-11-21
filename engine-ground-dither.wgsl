@@ -12,10 +12,15 @@
 const WARM=64u;
 const WARM_ROWS_FLAG=0x10000u;
 var<workgroup> metrics:array<vec3f,32>;
+// The repeat's width, read through workgroup memory: Safari 27 counts textureDimensions of a write-only storage texture as varying between
+// invocations, so a wave loop bounded by it failed to compile ("call to 'workgroupBarrier' requires uniform control flow", iPadOS Safari 27.2,
+// 2026-11-21). workgroupUniformLoad's value is uniform by definition.
+var<workgroup> pigmentWidth:u32;
 fn diffusionMetric(v:vec3f,gamma:f32)->vec3f {return pow(clamp(v/255.0,vec3f(0),vec3f(1)),vec3f(gamma));}
 @compute @workgroup_size(128)
 fn diffuseMaterial(@builtin(local_invocation_index) lane:u32){
- let r=u.ground[job.x & groundMask];let width=textureDimensions(pigmentOut).x;let stride=width+WARM+2u;let rows=min(job.w & 0xffffu,width-job.z);let store=(job.w & WARM_ROWS_FLAG)==0u;
+ if(lane==0u){pigmentWidth=textureDimensions(pigmentOut).x;}
+ let r=u.ground[job.x & groundMask];let width=workgroupUniformLoad(&pigmentWidth);let stride=width+WARM+2u;let rows=min(job.w & 0xffffu,width-job.z);let store=(job.w & WARM_ROWS_FLAG)==0u;
  let weights=r.weights.rgb;
  let right=mix(7.0/16.0,9.0/17.0,r.spread);let left=mix(3.0/16.0,2.0/17.0,r.spread);
  let down=mix(5.0/16.0,6.0/17.0,r.spread);let diag=mix(1.0/16.0,0.0,r.spread);
