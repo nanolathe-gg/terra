@@ -1008,7 +1008,8 @@ fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32) -> f32 {
     let wander = ((shelfNoise(q + 17.0) * 0.55 + shelfNoise(q * 2.7 + 5.0) * 0.3 + shelfNoise(q * 7.0 + 29.0) * 0.15) - 0.5) * 2.0 * u.shelfWander;
     // The wander fades in with depth, so the shore side of the band keeps its own width.
     let d = depth - jitter * 4.0 * max(grad, 0.05);
-    return smoothstep(-0.5, 0.5, (d - (at + wander * smoothstep(1.0, at, depth))) / (max(grad, 0.04) * max(u.stepSoftPx, 1.0)));
+    let wanderAt = waterRamp(min(1.0, at * 0.25), at, depth);
+    return smoothstep(-0.5, 0.5, (d - (at + wander * wanderAt)) / (max(grad, 0.04) * max(u.stepSoftPx, 1.0)));
 }
 
 // Shallow water as the bed under it (card E1): the ground colour already lit at
@@ -2211,7 +2212,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             }
             colorDepth = mix(bedDepth, sum / 8.0, 0.75);
         }
-        var mottle = ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * smoothstep(2.0, 8.0, bedDepth);
+        // Thin optical ramps need less depth noise so pigment in shallow pools stays coherent.
+        let depthNoise = min(1.0, abs(u.deepDepth - u.shallowDepth) / 10.0);
+        var mottle = ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * (smoothstep(2.0, 8.0, bedDepth) * depthNoise);
         if (u.lowGrain < 1.0) { mottle *= lowGrain; }
         colorDepth += mottle;
         // A deep or shallow stroke's water choices (card E1), painted into the
