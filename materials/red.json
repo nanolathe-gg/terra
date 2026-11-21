@@ -1116,7 +1116,17 @@
 
       "faceRind": 1,
 
-      "rockFace": 2
+      "rockFace": 2,
+
+      "faceTone": 0.05,
+
+      "faceDetailPatch": 0,
+
+      "faceScratch": 3,
+
+      "faceScratchSize": 3,
+
+      "faceScratchLength": 60
 
      }
 
