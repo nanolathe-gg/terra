@@ -1228,9 +1228,9 @@
    {"id":"add0","type":"combine","kind":"add","name":"Add 1 px","params":{"amount":0.6332,"offset":0.5},"in":{"a":"add6","b":"band0","mask":null},"x":240,"y":560},
    {"id":"levels","type":"levels","name":"Spread","params":{"low":-0.3261,"high":1.3261,"gamma":1,"invert":0},"in":{"in":"add0"},"x":480,"y":80},
    {"id":"colors","type":"gradient","name":"Colors","stops":[[0,0.7259,0.7949,0.9416],[0.1672,0.8275,0.8588,1.0],[0.3577,0.7992,0.8871,1.0],[0.4959,0.8431,0.9373,1.0],[0.6347,0.8915,0.9526,0.9997],[0.8256,0.9154,0.9559,1.0],[0.9475,0.9303,0.9578,0.9992],[1,0.9737,0.9824,0.9949]],"params":{"ease":0},"in":{"in":"levels"},"x":720,"y":80},
-   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"colors","height":null,"shine":null},"x":960,"y":80}
+   {"id":"material","type":"output","name":"Material","params":{"relief":4},"in":{"color":"colors","height":"add2","shine":null},"x":960,"y":80}
   ],
-  "controls": [{"label":"Colors","node":"colors","param":"stops"}],
+  "controls": [{"label":"Colors","node":"colors","param":"stops"},{"label":"Relief","node":"material","param":"relief"}],
   "palette": [98,113,224,97,128,48,112,96,80],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
@@ -1528,6 +1528,25 @@
  "ice-slate": {"name": "Snow and slate", "like": "ice-rock", "color": "#336d8b"},
  "ice-streaked": {"name": "Crystal ice", "like": "ice-rock", "color": "#d4f4ff"},
  "ice-blueice": {"name": "Glacier ice", "like": "ice-rock", "color": "#bedcfc"},
+ "ice-fractured-glacier": {
+  "name": "Fractured glacier ice",
+  "seed": 0,
+  "nodes": [
+   {"id":"warp","type":"warp","name":"Bend frost grain","x":0,"y":60,"params":{"amount":0.6,"size":7,"layers":1,"seed":9},"kind":"turbulence"},
+   {"id":"lines","type":"noise","name":"Diagonal grains","x":240,"y":35,"params":{"size":2.8,"detail":0.2,"layers":1,"length":14,"direction":133,"crests":0.25,"seed":19},"kind":"waves","in":{"in":"warp"}},
+   {"id":"frost","type":"noise","name":"Rounded frost grains","x":240,"y":214,"params":{"size":3.1,"detail":0.28,"layers":0,"seed":12},"kind":"billow","in":{"in":"warp"}},
+   {"id":"grain","type":"combine","name":"Break up the fine bands","x":470,"y":35,"params":{"amount":0.25,"offset":0.5},"kind":"add","in":{"a":"lines","b":"frost"}},
+   {"id":"tone","type":"gradient","name":"Blue frost tones","x":700,"y":35,"params":{"ease":0.15},"stops":[[0,0.36000000000000004,0.49,0.84],[0.5,0.69,0.76,1],[1,0.9,0.94,1]],"in":{"in":"grain"}},
+   {"id":"material","type":"output","name":"Material","x":940,"y":35,"params":{"relief":4},"in":{"color":"tone","height":"grain"}}
+  ],
+  "controls": [
+   {"label":"Grain width","node":"lines","param":"size"},
+   {"label":"Grain angle","node":"lines","param":"direction"},
+   {"label":"Frost tones","node":"tone","param":"stops"}
+  ],
+  "palette": [120,135,106,102,101,100,225,99,98,97,224,128,48,96,255],
+  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
+ },
  "ice-rubble": {"name": "Frost rubble", "like": "ice-rock", "color": "#778db3"},
  "lava-dome": {
   "name": "Dark dome rock",
