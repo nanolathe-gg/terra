@@ -903,7 +903,9 @@
 
     "reefstone",
 
-    "divide"
+    "divide",
+
+    "reefbank"
 
    ],
 
@@ -917,9 +919,9 @@
 
       "faceLayers": 0.2,
 
-      "faceRock": 0.35,
+      "faceRock": 0.9,
 
-      "faceGrass": 0.8,
+      "faceGrass": 0.5,
 
       "crackMajor": 1,
 
@@ -1056,6 +1058,11 @@
       "bandFill": 1,
       "faceMass": 0
      }
+    },
+
+    "reefbank": {
+     "label": "Reef channel banks",
+     "knobs": {"faceLayers": 0.2, "faceRock": 0.35, "faceGrass": 0.8, "crackMajor": 1, "rockFace": 1.2, "faceWear": 0.5, "faceBlockSize": 11, "faceJoint": 0.05, "crackMinor": 0.2, "crackHairline": 0.1}
     }
 
    }
