@@ -97,16 +97,18 @@ These notes are by eye, from the base crops in
 ## Start here (round 16)
 
 Round 15 (branch `match-green-16`, 78 of 300 trials; report in its final
-message and `$R/match/terraform-wt-match-green-16/green/NOTES.md`) is
-unreviewed. Measured, trial-078 against trial-000: mean shape .130 to .104,
+message and `$R/match/terraform-wt-match-green-16/green/NOTES.md`) was
+reviewed and ported on 2026-11-20 without the ridgeblock shine (below). Measured, trial-078 against trial-000: mean shape .130 to .104,
 look .115 to .111; held-out green-7 unchanged (.19/.102, holdout-003).
 
 - **Green-6 (three commits):** the ridges follow retail's heights (diameter
   85, low top arms, tall south ends; a fixture that alone cost look .083 to
   .114, trial-026), then Gullies 100 at size 60 cut buttresses that read
   by eye (shape .069, look .085, trial-027; steep:band8 and steep:edges
-  cleared), then the Blocky ridge rock shines (shineRock .75: steep:light
-  cleared, faces a little lighter than retail's, trial-032). Gullies at
+  cleared). The round also kept the Blocky ridge rock shining (shineRock
+  .75: steep:light cleared, trial-032); the review dropped it: by eye the
+  whole rock turns pale gray (trial-078 against trial-027 green-6 pairs),
+  where retail's is dark. Gullies at
   50-80 on the old wide ridge only scalloped the outline.
 - **Green-2 (three commits):** the ridge runs past the east edge at half
   height and the south erase sits 100 px lower (fixtures, shape .128 to
