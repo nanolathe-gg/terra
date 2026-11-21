@@ -55,10 +55,13 @@ class HeadlessCanvas {
 
 // Where the engine's relative fetches go: the server's files (`server`, a development server base URL), or the checkout's sources with the generated files
 // (the world configs, the catalog) that go run ./cmd/terraform --dump-configs writes with the same Go code the server runs.
+// TERRAFORM_SOURCE_OVERLAY names a folder whose files win over both: a retail match oracle trial's patched shaders (repro/match.sh --patch),
+// fetched files only (the .wgsl shaders and JSON tables; modules are imported, not fetched).
 function fileSource(configs) {
+  const overlay = process.env.TERRAFORM_SOURCE_OVERLAY || '';
   return async path => {
     const name = decodeURIComponent(path.replace(/^\.?\//, '').split(/[?#]/)[0]);
-    for (const file of [join(configs, name), join(REPO, name)]) if (!name.includes('..') && existsSync(file)) return new Response(readFileSync(file), {status: 200});
+    for (const file of [...(overlay ? [join(overlay, name)] : []), join(configs, name), join(REPO, name)]) if (!name.includes('..') && existsSync(file)) return new Response(readFileSync(file), {status: 200});
     return new Response('not found', {status: 404});
   };
 }
