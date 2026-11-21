@@ -824,7 +824,7 @@
         "reliefScale": 14,
         "reliefLumps": 0.3,
         "lightCap": 1.25,
-        "ambient": 0.3,
+        "ambient": 0.15,
         "shineWhite": 1,
         "shineStretch": 2,
         "shineRock": 0.22,
