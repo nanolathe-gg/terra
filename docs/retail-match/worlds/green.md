@@ -38,13 +38,13 @@ A rock type changes only the windows whose strokes use its slot (PLAYBOOK.md,
 
 | Window | Rock slot used | Rock type |
 | --- | --- | --- |
-| green-1 | 2 | `evad` |
-| green-3 | 8 (five land strokes), 2 (three water strokes) | `reefstone` (round 6), `evad` |
+| green-1 | 2 | `evad` (round 17: faceRock .9, faceGrass .5) |
+| green-3 | 8 (five land strokes), 10 (three water strokes) | `reefstone` (round 6), `reefbank` (round 17: the old evad numbers, so evad could bare more rock on green-1) |
 | green-4 | 7 | `passrock` (round 6; material `green-passrock`; faceBed 8, blocks 6, no gloss since round 11), with ground `green-clump` (slot 15; groundEdge 30 since round 16) |
 | green-5 | 5 | `ridgestone` (Terraced greenstone, round 2; stepCrease 1 and deeper cracks, 2026-11-19; round 16: material `green-passrock` (shared with passrock), faceGrass .15, moonFolds 0) |
 | green-6 | 6 | `ridgeblock` (Blocky ridge, round 3; material `green-darkrock`) |
 | green-2 | 9 (ridge stroke) | `divide` (round 12: bandLevel 2, bandFill 1; round 16: faceMass 0) |
-| green-7 | none set (0) | the world's own rock (the rock keys in `knobDefaults`) |
+| green-7 | none set (0) | the world's own rock (the rock keys in `knobDefaults`; since round 17 the same numbers as `evad`) |
 
 Re-check with `grep -o '"rockPreset": [-0-9]*' repro/scenes/green-<n>.json`
 after any shape-lane edit.
@@ -94,77 +94,61 @@ These notes are by eye, from the base crops in
 - No rock coasts on Green. Shores are a natural sand-grass edge.
 - Hills must stay grassy. Rock on a hill is cracks and patches, not a cap.
 
-## Start here (round 17)
+## Start here (round 18)
 
-Round 16 (branch `match-green-17`, 95 of 300 trials; report in its final
+Round 17 (branch `match-green-18`, 66 of 300 trials; report in its final
 message, notes and evidence pictures in
-`$R/match/terraform-wt-match-green-17/green/NOTES.md` and `evidence/`).
-Measured, trial-090 against trial-000: mean shape .104 (unchanged), look
-.111 to .090; held-out green-7 unchanged at .19/.102 (holdout-004), but none
-of the keeps reaches it (its hills use rock slot 0 and no keep touched the
-world's own rock or its list), so "unchanged" means not reached.
+`$R/match/terraform-wt-match-green-18/green/NOTES.md` and `evidence/`).
+Measured, trial-064 against trial-000: mean shape .104 to .094, look .090
+to .093 (the two fixtures below cost look; every other keep lowered it).
+Held-out green-7: look .102 to .078, shape unchanged (holdout-001/002).
 
-- **Green-5 (.198 to .078, four commits on ridgestone):** moonFolds 0 (the
-  world's folds at spacing .5 run closer than a pixel on its flanks and only
-  smudge them darker; trial-006), faceGrass .15 (the ridge is bare gray
-  rock; trial-013), the pale massif rock `green-passrock` (trial-014;
-  without it the final state scores .150, trial-073), faceLayers back at 1.5
-  after a dip to .2 (trials 015/016). Net ridgestone change: material,
-  faceGrass .45 to .15, moonFolds 0. Cleared steep:color, steep:light,
-  slope:edges, slope:lines; gentle:light and slope:light (lit grass at 164,
-  128 luma) are new.
-- **Green-2 (.124 to .117):** divide faceMass 0 (trial-024): finer, darker
-  crevices on the painted face; steep:lines cleared.
-- **Green-4 (.149 to .148):** its strokes' groundEdge 30 (trial-085) ends
-  the clump ground before the plain, so the speck apron at the massif's foot
-  is gone (flat edges equal retail's).
-- **Measured, not kept:** world moonFolds 0 (green-5 -.05, green-2 +.08:
-  trial-005); worms .3 (green-2 .117 to .0995, every other window worse:
-  trial-040); gentlelumps amount 0/.5 (green-7's gentle edges clear, but its
-  look rises on edge-orientation shares: trials 028/069, holdout-002/003);
-  divide faceLayers 1.6 (green-2 .0996 but the score is non-monotonic in
-  faceLayers, .117/.0996/.137 at 1/1.6/2, and slope lines shrink only 2.05x
-  to 1.70x: trials 051/052).
+- **World rock (slot 0) = evad's broken-slope numbers** (trial-020): the
+  knolls on green-7 lost their soil-terrace rings and read like retail's
+  broken hills (evidence g7-hill-base.png, g7-hill-h001.png). Every other
+  rock type now names the old values of the keys it used to inherit, so
+  nothing else moved. `evad` is now identical to slot 0; the Broken hill
+  tool still names it.
+- **evad faceRock .35 to .9, faceGrass .8 to .5** (trial-013): gray rock
+  patches on green-1's hill rims. green-3's three channel strokes keep the
+  old evad numbers as their own rock type `reefbank` (slot 10): more rock
+  there put streaks on the shelf (trial-007).
+- **fixture green-1: hills lean 203 to 100** (trial-002): the slope
+  histogram follows retail (shape .146 to .088); the shape lead is closed.
+  Look rose .041 to .065, recovered to .046 by **map: undulationArt .15**
+  (trial-031).
+- **fixture green-3: the NW island stops short of the top edge**
+  (trial-035): heights now follow, gentle:band32 cleared, but look .071 to
+  .087 (the north face catches the light: steep edges .033 vs .018).
 
 Leads:
 
-1. **Green-4 (.148, worst):** every passrock knob tried sits at a local
-   optimum (faceStrata, faceRock/faceGrass, faceLedge, faceWet, a darker
-   material: trials 017-019, 036, 059-062). Its window luma 56 against 62
-   and the missing pure-black shadows (retail 8% at 0,0,0) point at the
-   light, which is the owner's.
-2. **Palette:** retail's grass dithers 168 (36%) with 72 (21%); ours draws
-   169 (13%) that retail barely uses. A material is reduced to its own list
-   before the light (engine-common.wgsl), but the lit color is dithered again
-   over the whole art palette (engine-output.wgsl), and 169 appears there:
-   dropping it from the grass lists left its share at 12.5% (trial-037),
-   while round 15's dropping 165 did move the brightest flat pixel.
-3. **Green-2's slope:** the soil terraces (faceLayers) make the 8 px lumps
-   and also break the contour lines; without them the lines run 3x retail
-   (trial-049), and banding low enough to lighten them removes them
-   (trial-084). The world's line darkness .45 (`world.column.bands`) with
-   divide faceLayers 0 draws a closer hatch without lumps (trial-092,
-   slope:band8 cleared), but the darkness is the world's and costs green-5
-   .078 to .091 (trial-091): a rock type cannot set it.
-4. **Green-5 step lines** and **green-6's shadowed faces** still wait on the
-   engine (round 15's notes; a convexity layer draws blobs, not lines:
-   trial-032).
+1. **The light carries most of what is left** (the owner's): steep and
+   slope brightest 1% overshoot retail on green-1/3/4/7 and undershoot on
+   green-6; green-6's black shadow sides; gentle:band32 on green-1/7 sits
+   next to the hills' shaded faces. faceShade (trial-059) and shineRock
+   (trial-045) do not reach it without side effects.
+2. **green-7's slope and shore edges** fell with the world rock (slope
+   .0177 to .0043, retail .0135): faceLayers .2 drew those edges as ring
+   lines. A tuning window that uses slot 0 would be needed to tune it; none
+   does, so judge any change on green-1's evad first.
+3. **Shelf grain on green-1:** bedContrast .9 (trial-055) and shoal specks
+   .8 (trial-056) each clear shelf:edges, but the first draws blotches and
+   both raise the window's look a little.
+4. **green-5 gentle:lines** (8.1, the largest finding) is one strip of
+   crevices at the ridge's west foot in retail (evidence
+   g5-gentle-lines-r.png), not a hatch over the plain; world bandLevel
+   floods the plain before it draws them (trials 036/037).
+5. **Fixture candidates the shape score punishes:** green-4's NE massif
+   sits about 130 px west of retail's (trial-044, shape .12 to .17);
+   green-5's west escarpment 70 px east (trial-052, shape .12 to .19). The
+   shape score reads slope and roughness histograms, not where the land is.
 
-The review of round 16 (2026-11-20) built none of its four engine proposals:
-- **Line darkness per rock type:** trial-092's hatch (evidence/z92.png) still
-  reads as sparse dark lines beside retail's dense faint hatch, by eye, and
-  scored .120 against the kept .117. Darkness alone would not add the
-  density; find what draws the hatch's spacing first.
-- **Output dither re-picking grass indices:** the owner kept the palette
-  output stage (decision 25). Report the 169 share; don't tune toward it.
-- **Self-shadow depth per rock type:** this is the light, the owner's call,
-  asked alongside round 15's faceFill .24. closeShadow 1 hurt green-4
-  (trial-094).
-- **A terrace-foot fact:** three earlier tries at the same finding failed
-  (stepCrease, Steps 12, the convexity layer); it needs a throwaway proof
-  before a design.
-A scene's own surface list now names materials, not `@roles`: the validator
-refuses `@rock` there (round 16's convexrock layer with `@rock` drew nothing).
+Code reads this round: slope cover's material relief is not lit (trial-057
+rendered as before; bake light into its color instead, trial-058);
+`bankRock` needs bank slope .3-.8 at sea+3 (engine-frag.wgsl), which
+Green's gentle coasts never reach (trials 041/042); `lumpRelief` reaches
+only ground-lump paint (trial-050).
 
 ## Pilot notes (2026-11-18)
 
