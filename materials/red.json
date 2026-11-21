@@ -1085,7 +1085,7 @@
         "bedCrackSize": 42,
         "wetBand": 2,
         "crispShore": 0.5,
-        "lightCap": 1,
+        "lightCap": 1.2,
         "deepDepth": 18
       },
       "engineDefaults": {
