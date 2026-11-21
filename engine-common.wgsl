@@ -105,7 +105,7 @@ struct Rock {
     absorbDepth: f32,
     shadowTint: f32,
     material: i32,        // its surface material's slot (grain, art height, shine), 0 the world's rock material (u.rockGround)
-    pad2: f32,
+    crackFrom: f32,       // slope where cracks take their whole hierarchy and the blocks step (facets); majors start at .35 of it
     pad3: f32,
     // Rock surfaces, per recipe (moved from the world uniforms so a shape's rock can carry them): cracks, contour bands, moon pits,
     // cups, ribs and folds, ice crystal strokes, crests, snow caps, fibres and aprons.

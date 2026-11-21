@@ -649,9 +649,8 @@ fn crackShade(c: Crack, width: f32, sun: vec2f, wall: f32) -> vec2f {
     return vec2f(max(core, shadow), lit) * c.open;
 }
 
-// H23: how far a crack's kinks and bends carry, and how far the cracks reach onto gentle slopes (0: steep faces only, 1: onto gentle ground), the same on every world.
+// H23: how far a crack's kinks and bends carry, the same on every world. How far the cracks reach onto gentle slopes is each rock's crackFrom.
 const CRACK_JAGGED = 0.6;
-const CRACK_REACH = 0.6;
 // H23: the elongation of the crack cells along the fall line, the same on every world.
 const CRACK_LENGTH = 2.0;
 
@@ -668,7 +667,7 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
     let hairShare = max(max(u.rock[rs & rockMask].crackHairline, 0.6 * boost), frost);
     let blockShare = max(u.rock[rs & rockMask].crackBlocks, 0.6 * boost);
     if (mask <= 0.0 || severity <= 0.0 || h < u.sea + 1.0) { return vec4f(0.0); }
-    let start = mix(0.95, 0.10, CRACK_REACH);
+    let start = u.rock[rs & rockMask].crackFrom;
     // Rocky ground takes the whole hierarchy; gentle ground only majors.
     let rocky = smoothstep(start, start * 1.9, slope);
     let gentle = smoothstep(start * 0.35, start * 1.1, slope);

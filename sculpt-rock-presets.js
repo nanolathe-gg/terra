@@ -26,7 +26,7 @@ export const ROCK_PRESETS={
 };
 // Rock surfaces a recipe may carry too (struct Rock): cracks, contour bands, moon pits and strokes, ice crystal strokes, crests, snow caps, fibres
 // and aprons, the crystal web and rock on level tops (Rock crown). A recipe that does not set one takes the world's.
-export const ROCK_SURFACE_KEYS=['crackSeverity','crackMajor','crackMinor','crackHairline','crackBlocks','crackSpacing','crackWidth','crackDark','crackNetwork','banding','bandLevel','bandFill','stepCrease','pockmark','pockSize','moonCups','moonCupSize','moonCupDepth','cupStretch','moonRibs','moonRibDepth','moonRibDark','moonFolds','moonFoldSpacing','iceCrystal','iceCrest','iceSnow','iceFall','iceApron','gougeWeb','rockCrown'];
+export const ROCK_SURFACE_KEYS=['crackSeverity','crackFrom','crackMajor','crackMinor','crackHairline','crackBlocks','crackSpacing','crackWidth','crackDark','crackNetwork','banding','bandLevel','bandFill','stepCrease','pockmark','pockSize','moonCups','moonCupSize','moonCupDepth','cupStretch','moonRibs','moonRibDepth','moonRibDark','moonFolds','moonFoldSpacing','iceCrystal','iceCrest','iceSnow','iceFall','iceApron','gougeWeb','rockCrown'];
 // One ordered headline list for the rock page and Pick.
 export const ROCK_HEADLINES=['faceWhole','faceBlockSize','faceBed','faceWear','crackSeverity','faceScratch','runoff'];
 export const ROCK_KEYS=[...Object.keys(base),'strata','strataContrast','strataGrain','absorbDepth','shadowTint',...ROCK_SURFACE_KEYS];
