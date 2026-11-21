@@ -44,7 +44,7 @@ A rock type changes only the windows whose strokes use its slot (PLAYBOOK.md,
 | green-5 | 5 | `ridgestone` (Terraced greenstone, round 2; stepCrease 1 and deeper cracks, 2026-11-19; round 16: material `green-passrock` (shared with passrock), faceGrass .15, moonFolds 0) |
 | green-6 | 6 | `ridgeblock` (Blocky ridge, round 3; material `green-darkrock`) |
 | green-2 | 9 (ridge stroke) | `divide` (round 12: bandLevel 2, bandFill 1; round 16: faceMass 0) |
-| green-7 | none set (0) | the world's own rock (the rock keys in `knobDefaults`; since round 17 the same numbers as `evad`) |
+| green-7 | none set (0) | the world's own rock (the rock keys in `knobDefaults`; round 17's change to evad's numbers was held at review) |
 
 Re-check with `grep -o '"rockPreset": [-0-9]*' repro/scenes/green-<n>.json`
 after any shape-lane edit.
@@ -103,17 +103,20 @@ Measured, trial-066 against trial-000: mean shape .104 to .094, look .090
 to .091: green-1's lean fix (a card option used to fix shape) costs look,
 .041 to .046 even after its map choice; every other keep lowered it or left
 it alone.
-Held-out green-7: look .102 to .078, shape unchanged (holdout-001/002).
-The world-rock keep was chosen from green-7's own crop and its only
-measured gain is there (no tuning window draws much slot-0 rock), so
-green-7 is no longer a clean holdout for the world's own rock.
+Held-out green-7: look .102 to .078, shape unchanged (holdout-001/002), from
+the world-rock change below, which was **held at review** (2026-11-20).
 
-- **World rock (slot 0) = evad's broken-slope numbers** (trial-020): the
-  knolls on green-7 lost their soil-terrace rings and read like retail's
-  broken hills (evidence g7-hill-base.png, g7-hill-h001.png). Every other
-  rock type now names the old values of the keys it used to inherit, so
-  nothing else moved. `evad` is now identical to slot 0; the Broken hill
-  tool still names it.
+- **Held: world rock (slot 0) = evad's broken-slope numbers** (round
+  commit 01990198, trial-020). green-7's knolls lost their soil-terrace
+  rings (evidence g7-hill-base.png, g7-hill-h001.png), but the change was
+  chosen from green-7's own crop, the tuning windows moved only .0926 to
+  .0925, and slot 0 is what every new Green map's Plateau, Mountain,
+  valleys and Crater draw, and the Hill, Knoll and Crescent tools' cracks.
+  On the authored fixtures it changes 22-26% of the pixels: softer slopes,
+  fewer cracks, less blocky faces (review renders of
+  repro/shape-scenes/green-plateau.json and green-landform.json). That is
+  the owner's call about Green's default look, not a retail keep. Port
+  without it: mean shape .0941, look .0909; green-7 .102 (port base).
 - **evad faceRock .35 to .9, faceGrass .8 to .5** (trial-013): gray rock
   patches on green-1's hill rims. green-3's three channel strokes keep the
   old evad numbers as their own rock type `reefbank` (slot 10): more rock
@@ -130,7 +133,7 @@ Leads:
    green-6; green-6's black shadow sides; gentle:band32 on green-1/7 sits
    next to the hills' shaded faces. faceShade (trial-059) and shineRock
    (trial-045) do not reach it without side effects.
-2. **green-7's slope and shore edges** fell with the world rock (slope
+2. **green-7's slope and shore edges** fell with the held world rock (slope
    .0177 to .0043, retail .0135): faceLayers .2 drew those edges as ring
    lines. A tuning window that uses slot 0 would be needed to tune it; none
    does, so judge any change on green-1's evad first.
@@ -169,8 +172,8 @@ moved nothing on green-5 (trial-050; why is a guess: probably only under
 ground-lump paint). Rock pins: trial-013 against trial-020 changed green-4
 and green-6 only on the strokes' foot fringe, where slot 0 takes over
 (evidence pin-diff-green-4-nw.png, pin-diff-green-6-c.png). `soil` (slot 1)
-does not set the crack keys, so the Knoll and Crescent tools' cracks now
-follow the new world numbers; no window draws them.
+does not set the crack keys, so with the world-rock change the Knoll and
+Crescent tools' cracks would follow the new world numbers (held, so unchanged).
 
 ## Pilot notes (2026-11-18)
 
