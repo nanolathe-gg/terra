@@ -5,21 +5,21 @@ import {mapMeta} from '../sculpt-maps.js';
 
 const webp = 'data:image/webp;base64,UklGRg4HAABXRUJQ';
 
-test('a save keeps only small WebP data pictures, and a tool picture only with a key', () => {
+test("a save keeps only the map's picture, a small WebP data URL", () => {
   assert.equal(copyPictures(undefined), undefined);
   assert.equal(copyPictures('x'), undefined);
   assert.deepEqual(copyPictures({map: {image: webp}}), {map: {image: webp}});
   // Another address, another type or an oversized picture is dropped (an opened file must not make the editor fetch anything).
   for (const image of ['https://example.com/a.webp', 'data:image/png;base64,AAAA', 'data:image/svg+xml;base64,AAAA', webp + 'A'.repeat(40000), 'data:image/webp;base64,<script>'])
     assert.equal(copyPictures({map: {image}}), undefined, image.slice(0, 40));
-  assert.deepEqual(copyPictures({tools: {hill: {key: 'abc123', image: webp}, plateau: {image: webp}, __proto__: {key: 'a', image: webp}, 'bad id!': {key: 'a', image: webp}}}), {tools: {hill: {key: 'abc123', image: webp}}});
-  assert.equal(copyPictures({tools: {hill: {key: 'ABC', image: webp}}}), undefined);
+  // An earlier build's tool pictures are not kept: the page draws its own.
+  assert.deepEqual(copyPictures({map: {image: webp}, tools: {hill: {key: 'abc123', image: webp}}}), {map: {image: webp}});
+  assert.equal(copyPictures({tools: {hill: {key: 'abc123', image: webp}}}), undefined);
 });
 
-test('a save carries the pictures of the tools the toolbar has', () => {
-  const pictures = {map: {image: webp}, tools: {hill: {key: 'a', image: webp}, gone: {key: 'b', image: webp}}};
-  assert.deepEqual(savedPictures(pictures, new Set(['hill'])), {map: {image: webp}, tools: {hill: {key: 'a', image: webp}}});
-  assert.equal(savedPictures({map: null, tools: {}}, new Set()), undefined);
+test("a save carries the map's picture and no tool's", () => {
+  assert.deepEqual(savedPictures({map: {image: webp}, tools: {hill: {key: 'a', image: webp}}}), {map: {image: webp}});
+  assert.equal(savedPictures({map: null, tools: {hill: {key: 'a', image: webp}}}), undefined);
 });
 
 test('a key follows its inputs', () => {

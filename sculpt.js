@@ -1933,13 +1933,14 @@ function workingCopy() {
   s.world=worldId;
   return withPictures(s);
 }
-// A save with the pictures drawn so far (Maps' entry and Download file; a share link carries none). Attaching them costs nothing: they are
-// drawn only when the editor is idle (picturesNow), never while saving.
-function withPictures(s) { const p=savedPictures(pictures,toolIds()); if (p) s.pictures=p; return s; }
+// A save with the map's picture drawn so far (Maps' entry and Download file; a share link carries none). Attaching it costs nothing: it is
+// drawn only when the editor is idle (picturesNow), never while saving. Tool pictures stay in the page.
+function withPictures(s) { const p=savedPictures(pictures); if (p) s.pictures=p; return s; }
 
-// The save's pictures (sculpt-thumbnails.js): the map from above, drawn once the map has been left alone for PICTURE_QUIET after a change
-// (or when it is downloaded), and each toolbar tool's stroke in this map's world, drawn one at a time while the editor is idle, only where a
-// tool's key (what its picture reads) has changed. New pictures reach the map's entry with the next save, or one save once they are done.
+// The pictures (sculpt-thumbnails.js): the map from above, which the save carries, drawn once the map has been left alone for PICTURE_QUIET
+// after a change (or when it is downloaded); and each toolbar tool's stroke in this map's world, kept in the page only, drawn one at a time
+// while the editor is idle where a tool's key (what its picture reads) has changed. After a load or a look both start without the wait
+// (picturesSoon). A new map picture reaches the map's entry with the next save, or one save of its own.
 let mapPictureDue=true,picturesUrgent=false,pictureEdits=0,pictureTimer=null,pictureSaveTimer=null,toolPictures=null;
 const PICTURE_QUIET=15000;
 const pictureStats={map:[],tools:0,skipped:{}};
@@ -1999,7 +2000,7 @@ function queueToolPictures() {
     const reaches=drawn.map(nodeReach),reach={ax:Math.min(...reaches.map(q => q.ax)),ay:Math.min(...reaches.map(q => q.ay)),bx:Math.max(...reaches.map(q => q.bx)),by:Math.max(...reaches.map(q => q.by)),r:Math.max(...reaches.map(q => q.r))};
     toolPictures.request(main,{id:t.id,key,world,nodes,frame:toolFrame(reach),rocks,context,refSpacing:spacing,options,done:(error,image) => {
       if (error || !image) { console.warn('A tool picture could not be drawn',t.id,error); return; }
-      pictures.tools[t.id]={key,image}; pictureStats.tools++; showToolPicture(t.id); picturesChanged();
+      pictures.tools[t.id]={key,image}; pictureStats.tools++; showToolPicture(t.id);   // kept in the page only: no save
     }});
   }
 }
@@ -2011,10 +2012,10 @@ function showToolPicture(id) {
     pic.src=image;
   }
 }
-// New pictures go into the map's entry once they stop coming (one save for a round of tool pictures), when the editor is idle.
+// A new map picture goes into the map's entry when the editor is idle.
 function picturesChanged() {
   clearTimeout(pictureSaveTimer);
-  pictureSaveTimer=setTimeout(function write() { if (toolPictures?.queue.size) { pictureSaveTimer=setTimeout(write,1000); return; } if (!editorQuiet()) { pictureSaveTimer=setTimeout(write,2000); return; } if (!keepSaved) saveWorking(); },1000);
+  pictureSaveTimer=setTimeout(function write() { if (!editorQuiet()) { pictureSaveTimer=setTimeout(write,2000); return; } if (!keepSaved) saveWorking(); },1000);
 }
 // Writes this tab's map to its entry; answers the write (a promise), or false when nothing is saved (a scratch page, no map chosen, no store).
 function saveWorking() {
@@ -2066,9 +2067,9 @@ function loadSketch(s,carry=false) {
   shapeClipboard=null;   // copied shapes name this map's rocks and materials: they do not paste into another map
   // Reject damaged saves before committing any pending edit to the old map.
   worldInputQueue.flush();
-  // Its pictures show at once, and a tool's whose key no longer matches (another build) is drawn again as soon as the view is idle. A map carried
-  // into another world (a copy for it) shows none of the old world's tool pictures and draws its own, map picture included.
-  { const p=copyPictures(s.pictures); toolPictures?.cancel(); pictures={map:p?.map??null,tools:carry?{}:{...(p?.tools??{})}}; mapPictureDue=carry||!p?.map; if (ready) picturesSoon(); }
+  // Its map picture shows at once; the tool pictures are drawn as soon as the view is idle (one this page drew for the same inputs is kept). A map
+  // carried into another world (a copy for it) shows none of the old world's tool pictures and draws its own map picture.
+  { const p=copyPictures(s.pictures); toolPictures?.cancel(); pictures={map:p?.map??null,tools:carry?{}:pictures.tools}; mapPictureDue=carry||!p?.map; if (ready) picturesSoon(); }
   if(!carry&&rock)setRockSettings(rock);
   cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather();
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; varySeed=s.varySeed!==false; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;

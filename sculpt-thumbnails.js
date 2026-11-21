@@ -1,52 +1,38 @@
-// A save's small pictures (prototype): the map from above, for Maps, and each tool's stroke in the map's own world, for the toolbar.
-// They are drawn from the map, not part of it: a save without them, or with one whose key no longer matches, loads the same and the
-// editor draws it again when it is idle. They travel in the map's entry and in a downloaded file, never in a share link (shareText's
-// save is sketch(), which carries none; the save-link Worker refuses fields it does not know).
-// - pictures: {map?: {image}, tools?: {[toolId]: {key, image}}}; every image a small WebP data URL.
-// - Drawing a tool's picture uses the terrain renderer itself over a small level fixture (as the material editor's pictures do), with
-//   a shape engine of its own: the map's renderer and fields are never touched. No Time pass runs there, so it is the unweathered look.
+// A save's picture, and the toolbar's. The save carries one: the map from above (pictures: {map: {image}}, a small WebP data URL), so Maps shows
+// it without opening the map. It is drawn from the map, not part of it: a save without one loads the same and the editor draws it when idle. It
+// travels in the map's entry and in a downloaded file, never in a share link (shareText's save is sketch(), which carries none; the save-link
+// Worker refuses fields it does not know).
+// Tool pictures (each toolbar tool's stroke in the map's own world) are drawn when a map opens and kept only in the page: they always show this
+// build and this world, and they cost a save nothing. A key in memory skips a tool whose inputs have not changed since its picture was drawn.
+// Drawing one uses the terrain renderer itself over a small level fixture (as the material editor's pictures do), with a shape engine of its
+// own: the map's renderer and fields are never touched. No Time pass runs there, so it is the unweathered look.
 // The renderer and the shape engine load with the first tool picture, so the list of Maps (sculpt-maps.js) and node's tests read the rest alone.
 import {HELP_PATH} from './sculpt-help-examples.js';
 
-// Raised when what a picture shows changes for reasons its key cannot see (the renderer, the fixture): every kept tool picture is drawn again.
-export const PICTURES_VERSION = 1;
 export const MAP_PICTURE = 128;                          // the long side of the map's picture, px
 export const TOOL_PICTURE = {width: 104, height: 76};    // the toolbar's picture box is 46 px high; twice that, near the hover examples' 260 x 190 shape
 const QUALITY = .72;
 const MAX_IMAGE = 32 * 1024;                             // characters of a data URL kept on load; a 128 px WebP is about 5 K
 const IMAGE_RE = /^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/;
-const MAX_TOOLS = 256;
 
-// The hash a key is written as: FNV-1a over the text, 2 x 32 bits. A key only says "drawn from the same inputs"; a collision redraws nothing.
-// Objects are written with their keys sorted: a world read back from a save holds the same values in another order.
+// The hash a tool picture's key is written as: FNV-1a over the text, 2 x 32 bits. A key only says "drawn from the same inputs"; a collision
+// redraws nothing. Objects are written with their keys sorted: a world read back from a save holds the same values in another order.
 const sorted = (key, value) => value && typeof value === 'object' && !Array.isArray(value) && !ArrayBuffer.isView(value) ? Object.fromEntries(Object.keys(value).sort().map(k => [k, value[k]])) : value;
 export function pictureKey(...parts) {
-  const text = JSON.stringify([PICTURES_VERSION, ...parts], sorted);
+  const text = JSON.stringify(parts, sorted);
   let a = 0x811c9dc5, b = 0x01000193 ^ text.length;
   for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); a = Math.imul(a ^ c, 0x01000193); b = Math.imul(b ^ c, 0x5bd1e995) ^ (b >>> 15); }
   return (a >>> 0).toString(36) + (b >>> 0).toString(36);
 }
 const validImage = v => typeof v === 'string' && v.length <= MAX_IMAGE && IMAGE_RE.test(v);
-const validKey = v => typeof v === 'string' && /^[a-z0-9]{1,32}$/.test(v);
-// A save's pictures as this editor keeps them: a picture that is not a small WebP data URL (a remote address, another type, too large) is
-// dropped, as is a tool picture without a key. Answers undefined when nothing is left.
+// A save's picture as this editor keeps it: one that is not a small WebP data URL (a remote address, another type, too large) is dropped, and
+// so is anything else a save holds there (an earlier build's tool pictures). Answers undefined when nothing is left.
 export function copyPictures(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const out = {};
-  if (validImage(value.map?.image)) out.map = {image: value.map.image};
-  if (value.tools && typeof value.tools === 'object' && !Array.isArray(value.tools)) {
-    const tools = {};
-    for (const [id, p] of Object.entries(value.tools).slice(0, MAX_TOOLS)) if (/^[\w-]{1,80}$/.test(id) && !['constructor', 'prototype', '__proto__'].includes(id) && validImage(p?.image) && validKey(p?.key)) tools[id] = {key: p.key, image: p.image};
-    if (Object.keys(tools).length) out.tools = tools;
-  }
-  return out.map || out.tools ? out : undefined;
+  return validImage(value.map?.image) ? {map: {image: value.map.image}} : undefined;
 }
-// The pictures a save carries: the map's and those of the tools the toolbar has now (a deleted tool's picture is not kept).
-export function savedPictures(pictures, toolIds) {
-  const tools = Object.fromEntries(Object.entries(pictures.tools).filter(([id]) => toolIds.has(id)));
-  const out = {...(pictures.map ? {map: pictures.map} : {}), ...(Object.keys(tools).length ? {tools} : {})};
-  return out.map || out.tools ? out : undefined;
-}
+// What a save carries of the page's pictures: the map's.
+export const savedPictures = pictures => pictures.map ? {map: pictures.map} : undefined;
 
 // A source (canvas, bitmap) drawn into width x height and written as a WebP data URL.
 export async function encodePicture(source, width, height, crop = null) {
