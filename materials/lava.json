@@ -555,6 +555,7 @@
  "world": {
     "materials": {"ground": "lava-ground", "water": "lava-water", "rock": "lava-rock", "slope": "lava-slope", "debris": "lava-debris", "soil": "lava-soil", "snow": "lava-snow", "moss": "lava-moss", "sand": "lava-sand", "band": "lava-band", "crystal": "crystals"},
     "knobDefaults": {
+        "deepDepth": 7,
         "undulationCover": 1,
         "undulationScale": 96,
         "undulationArt": 0,
