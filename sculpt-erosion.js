@@ -181,7 +181,8 @@ export class GpuErosion {
       // does no step work and teaches the rate nothing.
       const rateKey=rain!==0?'wet':'dry',mcells=active*64/1e6;this.rate??={};
       const sized=()=>mcells>0?clamp(Math.floor(25/(this.rate[rateKey]*mcells)),1,256):256;
-      let batch=this.rate[rateKey]?sized():1,last=null;
+      this.latencyBatch??={};
+      let batch=this.rate[rateKey]?Math.max(sized(),this.latencyBatch[rateKey]??0):1,last=null;
       for(let it=0;it<age;){
         current();const count=Math.min(batch,age-it);
         encoder=device.createCommandEncoder({label:'erosion gpu slice'});
@@ -196,7 +197,10 @@ export class GpuErosion {
         // submit waits 100 ms, Chrome 0.1), and sized by that wait every slice stayed one iteration long (574 slices, 62 s after one stroke).
         // So the first slice, and any slice that ran more iterations than the last without waiting 30% longer, doubles the next one; a wait
         // that grows with the work sizes it as before. (Firefox's timestamp queries read zero or too small on most slices, measured.)
-        const latency=!last||count>last.count&&wait<last.wait*1.3;
+        // A batch shown to wait no longer than a smaller one starts the next pass (latencyBatch), which would otherwise double up from its rate
+        // again; a larger batch whose wait grew with the work forgets it.
+        const proven=last&&count>last.count&&wait<last.wait*1.3,latency=!last||proven;
+        if(proven)this.latencyBatch[rateKey]=Math.max(this.latencyBatch[rateKey]??0,Math.min(256,count));else if(last&&count>last.count)delete this.latencyBatch[rateKey];
         batch=latency?Math.min(256,Math.max(sized(),count*2)):sized();last={count,wait};
         await yieldWork();
       }
