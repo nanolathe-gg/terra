@@ -1940,16 +1940,20 @@ function withPictures(s) { const p=savedPictures(pictures,toolIds()); if (p) s.p
 // The save's pictures (sculpt-thumbnails.js): the map from above, drawn once the map has been left alone for PICTURE_QUIET after a change
 // (or when it is downloaded), and each toolbar tool's stroke in this map's world, drawn one at a time while the editor is idle, only where a
 // tool's key (what its picture reads) has changed. New pictures reach the map's entry with the next save, or one save once they are done.
-let mapPictureDue=true,pictureEdits=0,pictureTimer=null,pictureSaveTimer=null,toolPictures=null;
+let mapPictureDue=true,picturesUrgent=false,pictureEdits=0,pictureTimer=null,pictureSaveTimer=null,toolPictures=null;
 const PICTURE_QUIET=15000;
 const pictureStats={map:[],tools:0,skipped:{}};
 const editorQuiet=() => ready && !loading && !stroke && !moving && !document.hidden && !sculptRegion.previewActive() && Boolean(mapCanvas) && !mapCanvas.gpuWorkPending() && !mapCanvas.previewWorkPending() && !mapCanvas.foregroundPending();
 function picturesLater(delay=PICTURE_QUIET) { clearTimeout(pictureTimer); pictureTimer=setTimeout(picturesNow,delay); }
+// A map just opened or a look just applied: the pictures start as soon as the view is idle, without the quiet wait, so the toolbar shows this
+// world's tools at once; an edit meanwhile does not put them off (persistLater).
+function picturesSoon() { picturesUrgent=true; picturesLater(300); }
 async function picturesNow() {
   pictureTimer=null;
-  if (!editorQuiet()) { picturesLater(3000); return; }
-  if (mapPictureDue) { const drawn=await drawMapPicture(); if (drawn) picturesChanged(); else if (drawn===null) { picturesLater(3000); return; } }
-  queueToolPictures();
+  const retry=picturesUrgent?500:3000;
+  if (!editorQuiet()) { picturesLater(retry); return; }
+  if (mapPictureDue) { const drawn=await drawMapPicture(); if (drawn) picturesChanged(); else if (drawn===null) { picturesLater(retry); return; } }
+  queueToolPictures(); picturesUrgent=false;
 }
 // The map's picture: its play area baked at a coarse level through the view's own renderer as the export draws it (the Surface section's
 // design view set aside; never while the view is Clay), in tiles of at most MAP_PICTURE_TILE px (one bake of
@@ -2036,7 +2040,7 @@ function persistLater(delay=450) {
   if (!SAVING) { $('save-state').textContent='Comparison sketch · use Map › Save as link or Download file to keep it.'; return; }
   if (!mapStore) { $('save-state').textContent=mapsNote||'Saving in this browser is unavailable. Use Save to keep this map as a file.'; return; }
   if (delay<200) { saveHeld=saveHeld || performance.now()-lastSaveAt<200; if (saveHeld) delay=200; }
-  mapPictureDue=true; pictureEdits++; picturesLater();   // the pictures wait for the map to be left alone
+  mapPictureDue=true; pictureEdits++; if (!picturesUrgent) picturesLater();   // the pictures wait for the map to be left alone (not after a load or a look: picturesSoon)
   clearTimeout(autosaveTimer); autosaveTimer=setTimeout(async () => {
     saveHeld=false;
     if (stroke || moving || loading) { persistLater(); return; }
@@ -2062,9 +2066,9 @@ function loadSketch(s,carry=false) {
   shapeClipboard=null;   // copied shapes name this map's rocks and materials: they do not paste into another map
   // Reject damaged saves before committing any pending edit to the old map.
   worldInputQueue.flush();
-  // Its pictures show at once; a tool's whose key no longer matches (another build, another world) is drawn again when the editor is idle,
-  // and a map carried into another world (a copy for it) draws its own map picture.
-  { const p=copyPictures(s.pictures); toolPictures?.cancel(); pictures={map:p?.map??null,tools:{...(p?.tools??{})}}; mapPictureDue=carry||!p?.map; if (ready) picturesLater(); }
+  // Its pictures show at once, and a tool's whose key no longer matches (another build) is drawn again as soon as the view is idle. A map carried
+  // into another world (a copy for it) shows none of the old world's tool pictures and draws its own, map picture included.
+  { const p=copyPictures(s.pictures); toolPictures?.cancel(); pictures={map:p?.map??null,tools:carry?{}:{...(p?.tools??{})}}; mapPictureDue=carry||!p?.map; if (ready) picturesSoon(); }
   if(!carry&&rock)setRockSettings(rock);
   cancelWeather(); refined=refinedBase=regionalWeather=null; dropGpuWeather();
   seed=Number.isInteger(s.seed)?clamp(s.seed,0,4294967295):2701; varySeed=s.varySeed!==false; refinementSeed=Number.isInteger(s.refinementSeed)?clamp(s.refinementSeed,0,4294967295):seed; $('seed').value=seed;
@@ -2729,7 +2733,7 @@ $('look-form').onsubmit=async e=>{
     try{await stashPendingSketch(token,B);}catch(err){$('look-note').textContent='The look could not be handed to the other world: '+err.message;return;}
     $('look-dialog').close();goToWorld(B.biome,{lookFrom:token,lookShapes:reset?'reset':''});return;
   }
-  try{applyLook(B,cards,{reset});$('look-dialog').close();status(`Applied ${[...cards].map(c=>LOOK_CARDS.find(([k])=>k===c)[1]).join(', ')||'the shapes\' defaults'} from ${B.mapData?.name||B.worldSettings?.name||'that map'}. One Undo puts them back.`);}
+  try{applyLook(B,cards,{reset});mapPictureDue=true;picturesSoon();$('look-dialog').close();status(`Applied ${[...cards].map(c=>LOOK_CARDS.find(([k])=>k===c)[1]).join(', ')||'the shapes\' defaults'} from ${B.mapData?.name||B.worldSettings?.name||'that map'}. One Undo puts them back.`);}
   catch(err){$('look-note').textContent='Nothing changed: '+err.message;}
 };
 // Map › New map with this look: Maps' New map, starting from this map's look (its world settings, materials, rock types, tools and
@@ -3225,7 +3229,7 @@ async function bootMap(pending=null) {
     }
   }
   else status('Blank map ready · draw terrain with the existing tools.');
-  ready=true; if (SAVING) picturesLater(); $('editor').disabled=false; $('world-editor').disabled=false; $('loading-screen').classList.add('ready'); loadingStep('Drawing the terrain…'); setTimeout(loadingDone,10000);
+  ready=true; if (SAVING) picturesSoon(); $('editor').disabled=false; $('world-editor').disabled=false; $('loading-screen').classList.add('ready'); loadingStep('Drawing the terrain…'); setTimeout(loadingDone,10000);
   if (resave) saveWorking();
   history=[{nodes:cloneNodes(),refinementSeed,mapData:mapData(),column:structuredClone(columnOverride),rock:rockSettings(),world:worldUndoState(),rocks:structuredClone(mapRocks),surface:structuredClone(config.surface),materials:structuredClone(mapMaterials),tools:structuredClone(mapTools),terrainKey:++historySerial}]; historyIndex=0; renderLayers();
   if (pending) { try {   // a page that keeps no maps: the one-use handoff (Cache API)
