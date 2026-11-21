@@ -47,14 +47,14 @@ it is in brackets.
   pipeline. A world is data, and code branches on features, never on a
   world's name. There is no CPU copy of GPU work and no flag that keeps an
   old path alive. *"I do not want to worry about back compat or drag two
-  render paths along with us"* (2026-10-29). When something is replaced, the
+  render paths along with us"* (2026-10-30). When something is replaced, the
   old thing is deleted.
 - **One editor** [rule 8]. `/` is the editor. Every tool joins its tool list,
   undo, save file and export. It is a static site with no server-only paths.
 - **Everything parametric; presets are numbers** [rule 9]. There is one
   parametric model per stage, and modifiers on top. A preset, whether a
   world's or a tool's, is only values for existing controls. There is never a
-  choice between a preset shape and a parametric one (2026-10-29).
+  choice between a preset shape and a parametric one (2026-10-30).
 - **Every control earns its place** [rule 9]. Each control is continuous and
   visibly matters at 1x across the range an artist would use. Implementation
   constants stay in code. Any world can turn on any engine feature: a
@@ -212,8 +212,9 @@ lives only on the GPU and changes the art, never the gameplay heights.
 Erosion, deposition, talus and wetness run as GPU passes
 (`engine-erosion.wgsl` and `engine-weather.wgsl` through `sculpt-erosion.js`,
 and rock runoff and debris through `engine-rock-weather.wgsl`). Maps of up to
-1168 samples a side run in one pass. Larger maps run in fixed tiles whose
-seeds depend only on the map seed and tile position. The results are data
+1168 samples a side run in one pass. Larger maps run in pages, each with an
+apron wide enough that the result does not depend on how the map is cut
+(`TIME_APRON` in `sculpt-gpu-fields.js`). The results are data
 maps (wear, deposit, wetness and others) that later stages read.
 
 ### Surface: layers and materials
@@ -303,7 +304,9 @@ These are not commitments. The owner sets the order.
   - Check the provenance of every committed table that came from looking at
     retail art. Record each table's generator, and make sure nothing stored
     as pixels or palette indices is a close copy of retail art.
-  - Remove the private `dev-assets` release, if it still exists.
+  - Decide what happens to the private `dev-assets-20261028` prerelease of
+    retail-derived files, which was left in place at the owner's request
+    ([PREVIEW_ASSETS.md](PREVIEW_ASSETS.md)).
   - Make sure the Go module dependency (`github.com/nanolathe-gg/nanolathe`)
     is public.
 - **Realism:** shore forms (shoreface, bars, dunes, wave-cut platforms),
@@ -327,4 +330,6 @@ along. The planning docs, work cards (A-H, P1-P32 and later), reviews,
 performance reports and experiment ledgers that guided it were consolidated
 into this page on 2026-11-21. Code comments still cite card names such as
 H12, P17 or lfimpact. To read the original records, check out commit
-`3ee2584d`, where they live in `BACKLOG.md`, `EXPERIMENTS.md` and `docs/`.
+`3ee2584d`, where they live in `BACKLOG.md` and `docs/`. The experiment
+ledger is kept, parked with the retail docs, in
+[retail-match/EXPERIMENTS.md](retail-match/EXPERIMENTS.md).

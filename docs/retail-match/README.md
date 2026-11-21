@@ -290,3 +290,12 @@ refuse report files from a delegated agent), put the whole report in your
 final message instead; the reviewer saves it there. Keep running notes in
 `<out>/NOTES.md` as you go: round 6 ran out of working memory at 94 trials,
 and its notes carried the round.
+
+## Earlier retail gaps
+
+The H cards (2026-10-30 to 2026-11-03) listed the retail looks they could
+not reach from numbers alone: Archipelago's shelf halo, Green's block cells
+and rim fissures, Red's mud polygons, Ice's shelf colors, Moon's uphill
+folds and others. That list is the "Small leftovers" row of
+`docs/TERRAIN_ENGINE.md` at commit `3ee2584d`. Read it before a round on
+those worlds.

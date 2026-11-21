@@ -28,7 +28,8 @@ Retail matching is parked while realism comes first (AGENTS.md rule 10).
 These docs and their tools are kept for when it returns:
 
 - [retail-match/](retail-match/README.md): the match harness, playbook,
-  atlas, world dossiers, biome catalog and the private assets bundle
+  atlas, world dossiers, biome catalog, experiment ledger and the private
+  assets bundle
 - [RETAIL_ROUND.md](RETAIL_ROUND.md): the older retail-round brief, which
   `repro/retail.sh` still follows
 
