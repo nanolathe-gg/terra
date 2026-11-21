@@ -1031,10 +1031,17 @@ fn fineSite(p: vec2f) -> FineSite {
     s.on = true;
     s.q = vec2f(p.x, p.y - 0.5 * (h - u.base));
     s.g = g;
-    // The fall line on the screen, scaled by the slope (a step down it moves the drawn point down by half the drop), and south by 0.1 so
-    // contours run across the screen on level ground and turn to the fall line from a slope of about 0.1 (a gentle bowl does not draw rings).
-    let v = vec2f(-g.x, -g.y + 0.5 * slope * slope) + vec2f(0.0, 0.1);
-    var a = atan2(v.y, v.x) + 1.5707964;   // the contour's direction
+    // The lattice's first axis. Ripples (Grain above 0) stretch along it, so it lies along the contour, which keeps its world direction on the
+    // screen (it does not change height). Strands (below 0) stretch along the second axis, so the first lies across the screen fall line: a
+    // step down the slope also moves the drawn point down by half the drop, so on a slope facing east or west the screen fall line leans
+    // away from the contour's perpendicular. The axis turns from one to the other as Grain crosses 0, where neither stretches. Both lean
+    // south by 0.1 (in slope) so contours run across the screen on level ground and follow the slope from about 0.1 (a gentle bowl draws
+    // no rings).
+    let contour = atan2(-g.y + 0.1, -g.x) + 1.5707964;
+    let acrossFall = atan2(-g.y + 0.5 * slope * slope + 0.1, -g.x) + 1.5707964;
+    var turn = acrossFall - contour;
+    turn = turn - 3.1415927 * round(turn / 3.1415927);   // the nearer way round (directions repeat every half turn)
+    var a = contour + turn * (1.0 - smoothstep(-0.3, 0.3, u.fineGrain));
     a = a - 3.1415927 * floor(a / 3.1415927);
     var k = 0u;
     for (var i = 1u; i < 8u; i++) { if (a >= FINE_ANGLES[i]) { k = i; } }
