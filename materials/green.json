@@ -960,7 +960,7 @@
       "faceRock": 1,
       "rockFaceFrom": 0.2,
       "faceGrass": 0.15,
-      "faceLayers": 0.2,
+      "faceLayers": 1,
       "faceBlockSize": 9,
       "faceJoint": 1.2,
       "faceBed": 2.5,
