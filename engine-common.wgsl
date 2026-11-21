@@ -140,6 +140,11 @@ struct Rock {
     moonFoldSpacing: f32, // height units between the folds' first set of contours
     rockCrown: f32,
     gougeWeb: f32,        // 0..1: a bold web of long dark gouges across raised crystal, round cells about 42 px (0: none)
+    // Fine relief (fineSite), per rock: a recipe that sets none takes the world's.
+    fineRelief: f32,      // its slope amplitude from a slope of 0.5 (rise per px), 0: none
+    fineSize: f32,        // its largest wavelength, px
+    fineGrain: f32,       // -1 strands down the fall line .. 0 no direction .. 1 ripples along the contours
+    finePits: f32,        // pits' share of the cells on steep ground (dimples that cast 1-2 px shadows)
 }
 
 // Absolute ground recipes; the cache holds height and unlit color parameters.
@@ -254,11 +259,8 @@ struct Uniforms {
     apron: f32,           // sand apron reach round raised ground, world px (0: none)
     worms: f32,           // wormy regolith relief on slopes (lunar)
     // Fine relief (world): 1 to 32 px art height on the lit surface (fineSite; engine-bake.wgsl bake, engine-frag.wgsl geometryMain).
-    fineRelief: f32,      // its slope amplitude from a slope of 0.5 (rise per px), 0: none
-    fineLevel: f32,       // its slope amplitude on level ground
-    fineSize: f32,        // its largest wavelength, px
-    fineGrain: f32,       // -1 strands down the fall line .. 0 no direction .. 1 ripples along the contours
-    finePits: f32,        // pits' share of the cells on steep ground (dimples that cast 1-2 px shadows)
+    fineLevel: f32,       // its slope amplitude on level ground (the world's; amount, size, grain and pits are each rock's, struct Rock)
+    fineAny: f32,         // the largest Fine relief on slopes or Fine pits of the rocks in use (writeRocks): 0 with fineLevel 0, none is drawn
     bandSpacing: f32,     // height between bands, height units (the column block's `bands`)
     bandSoftness: f32,    // share of each band that is riser
     bandLine: f32,        // darkness of the line along each riser (the column block's `bands`)
@@ -1016,7 +1018,7 @@ const FINE_ANGLES = array<f32, 9>(0.0, 0.4636476, 0.7853982, 1.1071487, 1.570796
 const FINE_STRETCH = 3.0;   // a fully grained octave's cells are 1 + FINE_STRETCH times longer along the grain
 const FINE_PIT_CELL = 7.0;  // px: at most one pit a cell
 const FINE_PIT_DEPTH = 3.0; // height units at full strength
-fn fineOn() -> bool { return u.fineRelief > 0.0 || u.fineLevel > 0.0 || u.finePits > 0.0; }
+fn fineOn() -> bool { return u.fineAny > 0.0 || u.fineLevel > 0.0; }
 fn fineSite(p: vec2f) -> FineSite {
     var s = FineSite(false, 0.0, 0.0, vec2f(0.0), vec2f(0.0), 0u, 1u, 0.0);
     if (!fineOn()) { return s; }
@@ -1026,8 +1028,9 @@ fn fineSite(p: vec2f) -> FineSite {
     let slope = length(g);
     let steep = smoothstep(0.03, 0.5, slope);
     let rough = 1.0 - routeProtection(p);
-    s.strength = mix(u.fineLevel, u.fineRelief, steep) * rough;
-    s.pits = u.finePits * steep * rough;
+    // Level ground takes the world's Fine relief on level ground; slopes the pixel's rock's (rs: the caller's useRock).
+    s.strength = mix(u.fineLevel, u.rock[rs & rockMask].fineRelief, steep) * rough;
+    s.pits = u.rock[rs & rockMask].finePits * steep * rough;
     if (s.strength <= 0.0 && s.pits <= 0.0) { return s; }
     s.on = true;
     s.q = vec2f(p.x, p.y - 0.5 * (h - u.base));
@@ -1042,7 +1045,7 @@ fn fineSite(p: vec2f) -> FineSite {
     let acrossFall = atan2(-g.y + 0.5 * slope * slope + 0.1, -g.x) + 1.5707964;
     var turn = acrossFall - contour;
     turn = turn - 3.1415927 * round(turn / 3.1415927);   // the nearer way round (directions repeat every half turn)
-    var a = contour + turn * (1.0 - smoothstep(-0.3, 0.3, u.fineGrain));
+    var a = contour + turn * (1.0 - smoothstep(-0.3, 0.3, u.rock[rs & rockMask].fineGrain));
     a = a - 3.1415927 * floor(a / 3.1415927);
     var k = 0u;
     for (var i = 1u; i < 8u; i++) { if (a >= FINE_ANGLES[i]) { k = i; } }
@@ -1066,8 +1069,8 @@ fn fineWrapNoise(q: vec2f, n: vec2f) -> f32 {
 fn fineFrame(q: vec2f, k: u32, cell: f32, salt: f32) -> f32 {
     let d = FINE_FRAMES[k];
     let r = length(d);
-    let cu = cell * (1.0 + FINE_STRETCH * max(u.fineGrain, 0.0));    // along the contours
-    let cw = cell * (1.0 + FINE_STRETCH * max(-u.fineGrain, 0.0));   // down the fall line
+    let cu = cell * (1.0 + FINE_STRETCH * max(u.rock[rs & rockMask].fineGrain, 0.0));    // along the contours
+    let cw = cell * (1.0 + FINE_STRETCH * max(-u.rock[rs & rockMask].fineGrain, 0.0));   // down the fall line
     let n = max(vec2f(1.0), round(vec2f(u.pool / (r * cu), u.pool / (r * cw))));
     let pq = poolPos(q);
     let t = vec2f(d.x * pq.x + d.y * pq.y, -d.y * pq.x + d.x * pq.y) * n / u.pool;
@@ -1077,7 +1080,7 @@ fn fineFrame(q: vec2f, k: u32, cell: f32, salt: f32) -> f32 {
 // point q. Every octave has slope s.strength: an amplitude of a quarter of its cell.
 fn fineOctaves(s: FineSite, q: vec2f, bake: bool) -> f32 {
     var total = 0.0;
-    var lambda = max(u.fineSize, 1.0);
+    var lambda = max(u.rock[rs & rockMask].fineSize, 1.0);
     for (var k = 0; k < 6; k++) {
         if (lambda < 1.5) { break; }
         let split = smoothstep(6.0, 10.0, lambda);

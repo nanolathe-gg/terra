@@ -1262,6 +1262,7 @@ export class TerrainRenderer {
     this.f('uRunoffAny', max('runoff'));
     this.f('uDebrisReachMax', max('debrisReach'));
     this.f('uShadowTintAny', max('shadowTint'));
+    this.f('uFineAny', Math.max(max('fineRelief'), max('finePits')));
     // Shine is drawn where any rock in use has gloss, roughness or wetness (applyKnobs decides it for slot 0 and the other materials).
     if (slots.some(k => k && (this.rockValue(k, 'faceWet') > 0 || Math.max(...[0, 2].map(c => this.uniformView.getFloat32(table.offset + k * table.stride + table.members.get('shineRock').offset + c * 4, true))) > 0))) this.i('uShineOn', 1);
     this.uniformsDirty = true;
