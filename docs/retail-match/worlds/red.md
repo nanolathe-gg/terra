@@ -9,7 +9,7 @@
 | red-1 | red planet (2560,896) | a rolling plain with a big shallow basin, a crescent and a mesa, ponds and craterlets | shape .21, look .38 |
 | red-2 | red river (2560,2880) | a lake with a finely terraced bank, rough cracked upland in the NW corner, one knob | shape .32, look .27 |
 | red-3 | gods of war (256,576) | a coast: rough rock bank, lavender shelf, deep water (held out in rounds 1-2; tunes from round 3) | shape .14, look 1.49 |
-| red-4 | red triangle (6656,2048) | a sea coast: the NW corner of the triangle's eastern island; low banks (a 0-8 terrace in the N and NW, a gentle ramp in the S), a lavender shelf about 100-250 px wide, deep water in the N corners, plain at 30 behind: **held out** (added round 3) | see round 3's holdout-000 |
+| red-4 | red triangle (6656,2048) | a sea coast: the NW corner of the triangle's eastern island; low banks (a 0-8 terrace in the N and NW, a gentle ramp in the S), a lavender shelf about 100-250 px wide, deep water in the N corners, plain at 30 behind: **held out** (added round 3) | shape .10, look .75 (round 3's holdout-002, the fixture as committed) |
 
 Means of the tuning windows at the base (main 50328b75): shape .27, look .33.
 
@@ -18,12 +18,13 @@ Means of the tuning windows at the base (main 50328b75): shape .27, look .33.
 | Window | Rock slot used | Rock type |
 | --- | --- | --- |
 | red-1 | 4 on every stroke (round 2) | `softface` (faceRock 0, rockFaceFrom .5): no rock shown, face construction only from slope .5 |
-| red-2 | 2 on the knob stroke (round 1); the rest unset | `darkknob` (crust -.3, rockFace 2, the world's rock material) |
+| red-2 | 2 on the knob stroke (round 1); 5 on the NW corner rise (round 3); the rest unset | `darkknob` (crust -.3, rockFace 2, faceTone .05, faceScratch 3 down the face); `chunks` (crackSeverity 1, facets 1.5, spacing 48, crackFrom .12, faceRock 0) |
 | red-3 | none set | the world's own rock |
 | red-4 | none set | the world's own rock |
 
 `rubble` (slot 3) reaches no window. red-2 paints Rock (channel 1, amount
-80) over its knob; red-3 paints Rock in five strokes. Re-check with
+80) over its knob and lays `red-crumple` (material slot 14, channel 26) over
+its NW upland; red-3 paints Rock in five strokes. Re-check with
 `grep -o '"rockPreset": [-0-9]*' repro/scenes/red-<n>.json`.
 
 ## What Red's retail looks like at 1x
@@ -71,7 +72,56 @@ pairs.
   spider, king of the hill and red river.
 - Retail's plain sits at 85 with the sea 5-38 below it.
 
-## Start here (round 3)
+## Start here (round 4)
+
+Round 3 (branch `match-red-3`, 54 of 300 trials; report in the round's final
+message, notes in `$R/match/terraform-wt-match-red-3/red/NOTES.md`) first
+added red-4, a sea coast from red triangle, as the held-out window, so red-3
+now tunes (owner, 2026-11-20). The base mean (trial-000, red-1..3) was shape
+.13, look .34; trial-045 ends at shape .13, look .22 (red-1 .11/.07, red-2
+.14/.09, red-3 .14/.50). Held-out red-4 went from .75 (holdout-002, the
+fixture as committed) to .50 (holdout-005). Kept: deep water from depth 18
+(material table), crispShore .5, wetBand 2, lightCap 1, darkknob calmer with
+grooves down the face, and red-2's broken NW upland (the `chunks` rock type,
+the `red-crumple` ground, a low lumpy corner rise).
+
+Leads:
+
+1. **Red-3's shelf is a fixture gap**: ours covers 25% of the window, retail
+   15%, and its coast lies up to 80 px landward of retail's (trial-019
+   layout.png). Narrower sea strokes cleared shelf:share but flattened the sea
+   floor (shape .14 to .18, trial-023); a refit with red-4's coast fitter
+   swung the shelf/deep split (NOTES.md). Rebuild red-3's sea with a sloped
+   floor: retail drops to -55 within 100 px in the north, and keeps a wide
+   0 to -20 shelf in the SE (x 560-860, y 640-760). The shelf colour levers
+   (bedBright, deepDepth below 18) only gray the band or break it into
+   islands (trial-022, trial-006).
+2. **Red-3's (and red-4's) coast bank** is retail's rough ground with fine
+   vertical streaks and a dark polygon crack network; ours is painted world
+   rock in dark blotches (red-3 slope.png). Chunks rock with cracks on its
+   strokes, less Rock paint, and red-rough paint did not draw it
+   (trial-048..050): a bank material with streaks and cracks, placed by a soft
+   rule near the water, is the next try.
+3. **Edge orientation** is most of red-3's look (.50): retail's land edges
+   run vertical (lit from due west: 3248 vertical against 263 horizontal on
+   red-3's inland), ours mixed (1880 against 1191). Banding, faceTone, shineRock
+   do not move it (trial-009..012, 040).
+4. **Red-2's upland** reads as broken lit lumps now, but darker and busier
+   than retail's lighter plates with thin dark cracks (crops/r2-up2-036.png).
+   Stepped versions drew dark risers (trial-029..031). Shore plates draw gray
+   slabs (trial-038).
+5. **Red-2's bank**: retail's is a wide smooth band of fine concentric lines;
+   ours is narrow and broad-terraced. Finer Steps, calmer heightVary and
+   cracks 0 do not help (trial-046, 053, 054; stroke cracks are gated by
+   world crackSeverity 0).
+6. **Deep water's 32 px patches** are too few (red-4 .48 against 1.14,
+   red-3 .53 against .87); red-water's broad noise and waterSoft move nothing
+   (trial-051, 052).
+7. **The knob** (darkknob) is even now but lacks retail's lit crest and dark
+   east lee (red-2 steep.png); the Knob tool draws it and was not viewed.
+8. Relief .8 was not revisited this round.
+
+## Start here (round 3, done)
 
 Round 2 (branch `match-red-2`, 122 of 300 trials; report in the round's
 final message, notes in `$R/match/terraform-wt-match-red-2/red/NOTES.md`)
@@ -100,7 +150,9 @@ Leads:
    Smooth soil .12 at 15.5x (trial-113, 118, 117, 119, 111). Darker
    red-slope tops clear steep:light but cost red-2 .03 (trial-122).
    Relief .8 stays the owner's call (relief .5: trial-083).
-2. **Red-2's NW upland** (largest finding, gentle edges 0.00x): retail's
+2. **Red-2's NW upland** (replaced by the owner's read, 2026-11-20: rough,
+   cracked terrain stepping down in lit chunks toward a smooth river edge;
+   round 3 lead 4). Round 2's framing: (largest finding, gentle edges 0.00x): retail's
    upland is pitted 2-8 units in 30-50 px polygon cells. A material of
    lit 40 px cells with soft dark borders (`red-crumple`, diff in the
    round's folder) draws the network by eye (trial-071), but our heights
