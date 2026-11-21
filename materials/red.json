@@ -1081,7 +1081,8 @@
         "bedCracks": 0.55,
         "bedCrackSize": 42,
         "wetBand": 2,
-        "crispShore": 0.5
+        "crispShore": 0.5,
+        "lightCap": 1
       },
       "engineDefaults": {
         "erosion": 1,
