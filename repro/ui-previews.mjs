@@ -12,6 +12,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {cdpPortFree} from './cdp-port.mjs';
+import {renderControlPreviews} from './control-previews.mjs';
 import {HELP_TOOLS,HELP_CONTROLS,HELP_CARD,HELP_PATH,HELP_FRAME,helpFrames,helpImage} from '../sculpt-help-examples.js';
 const args=process.argv.slice(2),opt=(key,fallback)=>{const i=args.indexOf(key);return i<0?fallback:args[i+1];};
 const server=opt('--server','').replace(/\/+$/,''),port=Number(opt('--port',0)),out=resolve(opt('--out',fileURLToPath(new URL('../ui-previews',import.meta.url))));
@@ -65,6 +66,10 @@ try{
   for(const world of worlds){
     await send('Page.navigate',{url:`${server}/?biome=${world}&mapX=4&mapY=4&scratch=world-previews&gpuMB=512&heapMB=1536`});await ready();
     await begin(1);await render('hill',HELP_CARD,0);const name=`world-${world}.png`;await finish(name);manifest.worlds.images[world]=name;
+  }
+  if (!worldsOnly) {
+    chrome.kill();
+    Object.assign(manifest.controls, await renderControlPreviews(save));
   }
   if(errors.length)throw Error(errors.join('\n'));
   save('manifest.json',JSON.stringify(manifest,null,1)+'\n');

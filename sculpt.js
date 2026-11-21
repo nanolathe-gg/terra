@@ -219,7 +219,7 @@ function buildToolbar() {
   const icon=name => $('tool-save-icons').querySelector(`[data-icon-choice="${name}"] svg`).cloneNode(true);
   const button=t => {
     const b=document.createElement('button');
-    b.dataset.tool=t.id; b.dataset.shape=shapeFrom(config,toolShape(t)); if (t.help) b.dataset.help=t.help; b.setAttribute('aria-pressed','false'); b.setAttribute('aria-label',t.label); b.title=t.label;
+    b.dataset.tool=t.id; b.dataset.shape=shapeFrom(config,toolShape(t)); b.dataset.help=t.help||toolHelpLine(t.id)||''; b.setAttribute('aria-pressed','false'); b.setAttribute('aria-label',t.label); b.title=t.label;
     b.style.setProperty('--tool-color',t.color); b.disabled=true;b.dataset.unavailable=toolUnavailable(t);if(b.dataset.unavailable)b.title=b.dataset.unavailable;
     // Its picture: the map's own of this tool in this world (sculpt-thumbnails.js) once drawn, until then the shape's hover example.
     const own=pictures.tools[t.id]?.image;
@@ -351,7 +351,7 @@ function updateControls() {
   pathWhy('path-delete',pathPoint<0?'Select a point first':'A path keeps at least one point','Delete the selected point');
   pathWhy('path-extend','Select a point to extend or branch from','Draw on from the selected point; from a middle point it branches');
   pathWhy('path-remove','This is the shape’s only path: delete the shape instead','Delete the selected path');
-  if(pathEditing){$('shape-path-list').replaceChildren(...paths.map((path,i)=>{const b=document.createElement('button');b.textContent=`Path ${i+1} · ${path.length} points`;b.setAttribute('aria-pressed',String(i===pathIndex));b.disabled=locked;b.onclick=()=>{pathIndex=i;pathPoint=-1;pathAdding=false;updateControls();schedule();};return b;}));}
+  if(pathEditing){$('shape-path-list').replaceChildren(...paths.map((path,i)=>{const b=document.createElement('button');b.textContent=`Path ${i+1} · ${path.length} points`;b.dataset.help='Choose this path so you can edit its points.';b.setAttribute('aria-pressed',String(i===pathIndex));b.disabled=locked;b.onclick=()=>{pathIndex=i;pathPoint=-1;pathAdding=false;updateControls();schedule();};return b;}));}
   for(const id of ['rotate-left','rotate-right','scale-down','scale-up'])$(id).disabled=!nodes[selected]?.points||locked;
   $('view-clay').setAttribute('aria-pressed',String(!$('view-passability').matches('[aria-pressed=true]')&&$('clay').checked));
   $('view-rendered').setAttribute('aria-pressed',String(!$('view-passability').matches('[aria-pressed=true]')&&!$('clay').checked));
@@ -1697,7 +1697,7 @@ function renderLayers() {
     const item=document.createElement('li');item.draggable=true;item.dataset.index=i;
     const chosen=i===selected||alsoSelected.includes(i);item.className=(chosen?'selected ':'')+(n.hidden?'is-hidden':'');
     const grip=document.createElement('span');grip.className='layer-grip';grip.textContent='⠿';grip.setAttribute('aria-hidden','true');
-    const name=document.createElement('button');name.className='layer-name';name.textContent=shapeLabel(n);const count=document.createElement('span');count.className='path-count';const pc=shapePaths(n).length;count.textContent=pc?`${pc} path${pc===1?'':'s'}`:'';name.setAttribute('aria-pressed',String(chosen));name.onclick=e=>{if(e.shiftKey)toggleShape(i);else selectNode(i===selected&&!alsoSelected.length?-1:i);};
+    const name=document.createElement('button');name.className='layer-name';name.textContent=shapeLabel(n);name.dataset.help='Select this shape to edit it. Shift-click adds it to the selection.';const count=document.createElement('span');count.className='path-count';const pc=shapePaths(n).length;count.textContent=pc?`${pc} path${pc===1?'':'s'}`:'';name.setAttribute('aria-pressed',String(chosen));name.onclick=e=>{if(e.shiftKey)toggleShape(i);else selectNode(i===selected&&!alsoSelected.length?-1:i);};
     const number=document.createElement('span');number.className='layer-index';number.textContent=String(i+1).padStart(2,'0');
     const visibility=document.createElement('button');visibility.className='layer-visibility';visibility.textContent=n.hidden?'○':'◉';visibility.title=visibility.ariaLabel=`${n.hidden?'Show':'Hide'} ${name.textContent}`;visibility.setAttribute('aria-pressed',String(!n.hidden));visibility.onclick=()=>{selected=i;nodeAction('hide');};
     name.disabled=visibility.disabled=loading||Boolean(stroke||moving);
@@ -2757,9 +2757,9 @@ function syncWorldHome(viewOnly=false){
   const rocks=[{slot:0,name:worldRockName(config)},...mapRocks].map(r=>({slot:r.slot,name:r.name,used:used.has(r.slot),color:hexColor(rockDrawn(r.slot))}));
   const layers=surfacePanel?.summary()??[],state=JSON.stringify([rocks,layers]);if(state===worldHomeSummary)return;worldHomeSummary=state;
   const list=$('world-home-rock-list');list.replaceChildren();
-  for(const rock of rocks){const line=document.createElement('div'),b=document.createElement('button');b.type='button';b.className='world-home-rock';b.dataset.slot=rock.slot;b.innerHTML='<span class="material-chip" aria-hidden="true"></span><span></span><span class="world-use-dot" aria-label="Used by a shape in view"></span>';b.children[0].style.background=rock.color;b.children[1].textContent=rock.name;b.children[2].hidden=!rock.used;b.onclick=()=>{openWorldSection('wsec-rock-types');selectRock(rock.slot);};line.append(b);if(!rock.used){const note=document.createElement('p');note.className='small';note.textContent=`Nothing in view uses ${rock.name}.`;line.append(note);}list.append(line);}
+  for(const rock of rocks){const line=document.createElement('div'),b=document.createElement('button');b.type='button';b.className='world-home-rock';b.dataset.slot=rock.slot;b.dataset.help='Open this rock type’s settings.';b.innerHTML='<span class="material-chip" aria-hidden="true"></span><span></span><span class="world-use-dot" aria-label="Used by a shape in view"></span>';b.children[0].style.background=rock.color;b.children[1].textContent=rock.name;b.children[2].hidden=!rock.used;b.onclick=()=>{openWorldSection('wsec-rock-types');selectRock(rock.slot);};line.append(b);if(!rock.used){const note=document.createElement('p');note.className='small';note.textContent=`Nothing in view uses ${rock.name}.`;line.append(note);}list.append(line);}
   const surface=$('world-home-layers');surface.replaceChildren();
-  for(const layer of layers.filter(l=>l.section==='drawing')){const b=document.createElement('button');b.type='button';b.className='link world-home-layer';b.textContent=`${layer.name} · Coverage: ${layer.coverage}`;b.onclick=()=>{openWorldSection('wsec-surface');surfacePanel.open(layer.key);};surface.append(b);}
+  for(const layer of layers.filter(l=>l.section==='drawing')){const b=document.createElement('button');b.type='button';b.className='link world-home-layer';b.dataset.help='Open the rule, material and coverage for this surface layer.';b.textContent=`${layer.name} · Coverage: ${layer.coverage}`;b.onclick=()=>{openWorldSection('wsec-surface');surfacePanel.open(layer.key);};surface.append(b);}
   const drawing=layers.filter(l=>l.section==='drawing').length;$('world-home-layer-count').textContent=`${drawing} draw here · ${layers.length-drawing} more`;
 }
 function buildWorldPanel() {
@@ -2775,6 +2775,7 @@ function buildWorldPanel() {
     const set=mergedColors()[key];
     row.innerHTML=`<span>${label}</span><input type="checkbox" aria-label="Use a base color for ${label}"${set?' checked':''}><input type="color" aria-label="${label} base color" value="${shownColor(key,set)}">`;
     const [box,pick]=row.querySelectorAll('input');
+    box.dataset.help=pick.dataset.help=COLOR_HELP[key];pick.dataset.preview='knob-'+key;
     // Shallow water keeps the pick as a tone of the water's drawn color (sculpt-column.js colorTone), as the Rock column's beds do.
     const value=() => key==='shallowTone'?colorTone(waterDrawn(),rgbColor(pick.value)):pick.value;
     const apply=() => setWorldColor(key,box.checked?value():null);
@@ -2809,6 +2810,7 @@ function buildKnobs() {
   const toggle = (key, label, on, off, isOn) => {
     const row = document.createElement('label'); row.className = 'small'; row.style.display = 'flex'; row.style.gap = '6px';
     const box = document.createElement('input'); box.type = 'checkbox'; box.checked = isOn;
+    box.dataset.help = 'Reduce the map’s displayed colors to the game’s palette. Export always uses the game palette.';
     box.addEventListener('change', () => setKnob(key, box.checked ? on : off));
     row.append(box, label); render.append(row);
   };
@@ -2823,7 +2825,8 @@ function buildKnobs() {
       const wrap = controlRow({id,label:`${cleanLabel} <output${choices?' hidden':''}>${+current.toFixed(3)}</output>`,range:`min="${min}" max="${max}" step="${step}" value="${current}"`,choices});
       const home=worldHome(key),direct=home==='Rock types/Headline'||home.startsWith('World/');
       const {block:box,search}=direct?{block:document.querySelector(`[data-home="${home}"] .world-rows`),search:title}:worldGroup(title,key);
-      wrap.dataset.knob=key;wrap.dataset.searchGroup=search+' '+label;wrap.querySelector('label').title=label;(wrap.querySelector('.scrub')||wrap).title=label;
+      wrap.dataset.knob=key;wrap.dataset.searchGroup=search+' '+label;
+      const note=label.match(/\((.+)\)/)?.[1];if(note)wrap.dataset.note=note;
       const input = wrap.querySelector('#'+id), out = wrap.querySelector('output');
       if(choices)input.value=String(current);
       input.addEventListener('input', () => { out.textContent = input.value; if (rockSelected>0 && ROCK_KEYS.includes(key)) setPresetKnob(key, Number(input.value)); else setKnob(key, input.value); });

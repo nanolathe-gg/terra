@@ -348,7 +348,7 @@ export async function mountMapFeatures(api) {
   }
   function update() {
     controls.disabled=!enabled();
-    for (const [name,button] of buttons) { button.setAttribute('aria-pressed',String(mode===name)); button.disabled=name==='fill' && !FILL_KINDS.some(k => kinds.includes(k)); button.title=button.disabled?'Fill places generated trees, shrubs and rocks; this world has none yet.':''; }
+    for (const [name,button] of buttons) { button.setAttribute('aria-pressed',String(mode===name)); button.dataset.help=({place:'Click a cell to place an object from the selected recipe.',erase:'Click or drag over object footprints to remove them.',fill:'Populate eligible cells with trees, shrubs or rocks.'})[name]; button.disabled=name==='fill' && !FILL_KINDS.some(k => kinds.includes(k)); button.title=button.disabled?'Fill places generated trees, shrubs and rocks; this world has none yet.':''; }
     // Starts is its own tool on the rail: the card takes its name, and the Place / Erase / Fill switch steps aside.
     $('map-features-title').textContent=mode==='starts'?'Start positions':'Features'; doc.querySelector('.feature-modes').hidden=mode==='starts';
     $('start-count').hidden=mode!=='starts'; $('start-count').textContent=`${starts.length} of ${MAX_STARTS}`;
@@ -373,7 +373,10 @@ export async function mountMapFeatures(api) {
     const select=$('start-list'); select.replaceChildren(...starts.map((s,i) => { const option=doc.createElement('option'); option.value=i; option.textContent=`${i+1}: (${s.x}, ${s.z})`; return option; }));
     select.value=String(selectedStart); $('start-remove').disabled=starts.length<=1 || selectedStart<0;
     $('fill-kind').value=fill.kind; $('fill-region').value=fill.region;
-    for(const button of doc.querySelectorAll('[data-fill-region]'))button.setAttribute('aria-pressed',String(button.dataset.fillRegion===fill.region));
+    for(const button of doc.querySelectorAll('[data-fill-region]')){
+      button.setAttribute('aria-pressed',String(button.dataset.fillRegion===fill.region));
+      button.dataset.help=({brush:'Drag to fill along the brush path.',lasso:'Draw an outline to fill the eligible ground it encloses.',flood:'Click to fill connected, gentle dry ground.'})[button.dataset.fillRegion];
+    }
     for (const [name,input] of fillInputs) if (doc.activeElement!==input) input.value=String(fill[name]);
     numericInputs.forEach(showNumericValue);
     $('feature-count-line').textContent=`${placements.length} features · ${starts.length} starts`;

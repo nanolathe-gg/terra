@@ -755,6 +755,4502 @@
     "value": 100,
     "label": "100%"
    }
+  ],
+  "knob-groundPatch": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-groundPatchSize": [
+   {
+    "value": 60,
+    "label": "60 px"
+   },
+   {
+    "value": 230,
+    "label": "230 px"
+   },
+   {
+    "value": 400,
+    "label": "400 px"
+   }
+  ],
+  "knob-undulation": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 8,
+    "label": "8"
+   },
+   {
+    "value": 16,
+    "label": "16"
+   }
+  ],
+  "knob-undulationScale": [
+   {
+    "value": 48,
+    "label": "48 px"
+   },
+   {
+    "value": 208,
+    "label": "208 px"
+   },
+   {
+    "value": 360,
+    "label": "360 px"
+   }
+  ],
+  "knob-undulationCover": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-undulationArt": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceSteep": [
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2.5,
+    "label": "2.5"
+   },
+   {
+    "value": 4,
+    "label": "4"
+   }
+  ],
+  "knob-lowReach": [
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 20.5,
+    "label": "20.5"
+   },
+   {
+    "value": 40,
+    "label": "40"
+   }
+  ],
+  "knob-lowGrain": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-reliefScale": [
+   {
+    "value": 8,
+    "label": "8 px"
+   },
+   {
+    "value": 36,
+    "label": "36 px"
+   },
+   {
+    "value": 64,
+    "label": "64 px"
+   }
+  ],
+  "knob-reliefAmount": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.6,
+    "label": "0.6"
+   },
+   {
+    "value": 1.2,
+    "label": "1.2"
+   }
+  ],
+  "knob-reliefLumps": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-reliefWarp": [
+   {
+    "value": 0,
+    "label": "0 px"
+   },
+   {
+    "value": 12,
+    "label": "12 px"
+   },
+   {
+    "value": 24,
+    "label": "24 px"
+   }
+  ],
+  "knob-reliefPatchy": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-gentleRelief": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-plainRelief": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1.5,
+    "label": "1.5"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   }
+  ],
+  "knob-lumpRelief": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 4,
+    "label": "4"
+   },
+   {
+    "value": 8,
+    "label": "8"
+   }
+  ],
+  "knob-worms": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-flatShadow": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-flatOcclusion": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-lightCap": [
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 1.3,
+    "label": "1.3"
+   },
+   {
+    "value": 1.6,
+    "label": "1.6"
+   }
+  ],
+  "knob-shadeDepth": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-sunTilt": [
+   {
+    "value": -1,
+    "label": "-1"
+   },
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-sunHeight": [
+   {
+    "value": 20,
+    "label": "20°"
+   },
+   {
+    "value": 48,
+    "label": "48°"
+   },
+   {
+    "value": 75,
+    "label": "75°"
+   }
+  ],
+  "knob-ambient": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.4,
+    "label": "0.4"
+   },
+   {
+    "value": 0.8,
+    "label": "0.8"
+   }
+  ],
+  "knob-creaseShade": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-hillLight": [
+   {
+    "value": 0.6,
+    "label": "0.6"
+   },
+   {
+    "value": 1.1,
+    "label": "1.1"
+   },
+   {
+    "value": 1.6,
+    "label": "1.6"
+   }
+  ],
+  "knob-faceFill": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.26,
+    "label": "0.26"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   }
+  ],
+  "knob-rockCrown": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-sandCrown": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-slopeTexture": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-slopeMarks": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-wrinkles": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-shineStretch": [
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 4.5,
+    "label": "4.5"
+   },
+   {
+    "value": 8,
+    "label": "8"
+   }
+  ],
+  "knob-shineWhite": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-shineGround": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-shineGroundSharp": [
+   {
+    "value": 2,
+    "label": "2"
+   },
+   {
+    "value": 102,
+    "label": "102"
+   },
+   {
+    "value": 200,
+    "label": "200"
+   }
+  ],
+  "knob-shineGroundRough": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-shineGroundScale": [
+   {
+    "value": 1,
+    "label": "1 px"
+   },
+   {
+    "value": 12.5,
+    "label": "12.5 px"
+   },
+   {
+    "value": 24,
+    "label": "24 px"
+   }
+  ],
+  "knob-shineSlope": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-shineSlopeSharp": [
+   {
+    "value": 2,
+    "label": "2"
+   },
+   {
+    "value": 102,
+    "label": "102"
+   },
+   {
+    "value": 200,
+    "label": "200"
+   }
+  ],
+  "knob-shineSlopeRough": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-shineRock": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-shineRockSharp": [
+   {
+    "value": 2,
+    "label": "2"
+   },
+   {
+    "value": 102,
+    "label": "102"
+   },
+   {
+    "value": 200,
+    "label": "200"
+   }
+  ],
+  "knob-shineRockRough": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-shineRockScale": [
+   {
+    "value": 1,
+    "label": "1 px"
+   },
+   {
+    "value": 12.5,
+    "label": "12.5 px"
+   },
+   {
+    "value": 24,
+    "label": "24 px"
+   }
+  ],
+  "knob-shineOutside": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-looseSupply": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-looseSize": [
+   {
+    "value": 2,
+    "label": "2"
+   },
+   {
+    "value": 13,
+    "label": "13"
+   },
+   {
+    "value": 24,
+    "label": "24"
+   }
+  ],
+  "knob-boulders": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-stoneSort": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-stoneRound": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-stoneSlab": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-sandLight": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-coastRamp": [
+   {
+    "value": 0.05,
+    "label": "0.05"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-shallowDepth": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 30,
+    "label": "30"
+   },
+   {
+    "value": 60,
+    "label": "60"
+   }
+  ],
+  "knob-deepDepth": [
+   {
+    "value": 10,
+    "label": "10"
+   },
+   {
+    "value": 55,
+    "label": "55"
+   },
+   {
+    "value": 100,
+    "label": "100"
+   }
+  ],
+  "knob-crispShore": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-deepEdge": [
+   {
+    "value": 0,
+    "label": "Ramp"
+   },
+   {
+    "value": 1,
+    "label": "Hard step"
+   }
+  ],
+  "knob-bedTint": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-bedBright": [
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 1.5,
+    "label": "1.5"
+   }
+  ],
+  "knob-bedContrast": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.75,
+    "label": "0.75"
+   },
+   {
+    "value": 1.5,
+    "label": "1.5"
+   }
+  ],
+  "knob-bedRelief": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1.5,
+    "label": "1.5"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   }
+  ],
+  "knob-bedCracks": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-bedCrackSize": [
+   {
+    "value": 8,
+    "label": "8 px"
+   },
+   {
+    "value": 52,
+    "label": "52 px"
+   },
+   {
+    "value": 96,
+    "label": "96 px"
+   }
+  ],
+  "knob-shoreEdge": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-bankRock": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-wetBand": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 20,
+    "label": "20"
+   },
+   {
+    "value": 40,
+    "label": "40"
+   }
+  ],
+  "knob-rockFace": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   },
+   {
+    "value": 4,
+    "label": "4"
+   }
+  ],
+  "knob-faceRock": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-rockFaceFrom": [
+   {
+    "value": 0.2,
+    "label": "0.2"
+   },
+   {
+    "value": 1.1,
+    "label": "1.1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-rimReach": [
+   {
+    "value": 0,
+    "label": "0 px"
+   },
+   {
+    "value": 40,
+    "label": "40 px"
+   },
+   {
+    "value": 80,
+    "label": "80 px"
+   }
+  ],
+  "knob-shoreRock": [
+   {
+    "value": 0,
+    "label": "0 px"
+   },
+   {
+    "value": 48,
+    "label": "48 px"
+   },
+   {
+    "value": 96,
+    "label": "96 px"
+   }
+  ],
+  "knob-shoreShelf": [
+   {
+    "value": 0,
+    "label": "0 px"
+   },
+   {
+    "value": 48,
+    "label": "48 px"
+   },
+   {
+    "value": 96,
+    "label": "96 px"
+   }
+  ],
+  "knob-faceExtrude": [
+   {
+    "value": -1,
+    "label": "-1"
+   },
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceMass": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1.5,
+    "label": "1.5"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   }
+  ],
+  "knob-faceWhole": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceWholeLarge": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceRegular": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceBlock": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   },
+   {
+    "value": 6,
+    "label": "6"
+   }
+  ],
+  "knob-faceBlockSize": [
+   {
+    "value": 4,
+    "label": "4 px"
+   },
+   {
+    "value": 26,
+    "label": "26 px"
+   },
+   {
+    "value": 48,
+    "label": "48 px"
+   }
+  ],
+  "knob-faceStretch": [
+   {
+    "value": 0.25,
+    "label": "0.25"
+   },
+   {
+    "value": 2.15,
+    "label": "2.15"
+   },
+   {
+    "value": 4,
+    "label": "4"
+   }
+  ],
+  "knob-faceBlockHeight": [
+   {
+    "value": 0.25,
+    "label": "0.25"
+   },
+   {
+    "value": 3.15,
+    "label": "3.15"
+   },
+   {
+    "value": 6,
+    "label": "6"
+   }
+  ],
+  "knob-faceJointTilt": [
+   {
+    "value": -65,
+    "label": "-65°"
+   },
+   {
+    "value": 0,
+    "label": "0°"
+   },
+   {
+    "value": 65,
+    "label": "65°"
+   }
+  ],
+  "knob-faceScaleVary": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceBreak": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceRound": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceJoint": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1.5,
+    "label": "1.5"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   }
+  ],
+  "knob-faceJointWidth": [
+   {
+    "value": 0.25,
+    "label": "0.25"
+   },
+   {
+    "value": 1.65,
+    "label": "1.65"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   }
+  ],
+  "knob-faceSecondary": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-faceContinuity": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceLean": [
+   {
+    "value": -45,
+    "label": "-45°"
+   },
+   {
+    "value": 0,
+    "label": "0°"
+   },
+   {
+    "value": 45,
+    "label": "45°"
+   }
+  ],
+  "knob-faceWear": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceCrease": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   },
+   {
+    "value": 6,
+    "label": "6"
+   }
+  ],
+  "knob-faceCreaseSize": [
+   {
+    "value": 3,
+    "label": "3 px"
+   },
+   {
+    "value": 14,
+    "label": "14 px"
+   },
+   {
+    "value": 24,
+    "label": "24 px"
+   }
+  ],
+  "knob-faceScratch": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   },
+   {
+    "value": 6,
+    "label": "6"
+   }
+  ],
+  "knob-faceScratchSize": [
+   {
+    "value": 3,
+    "label": "3 px"
+   },
+   {
+    "value": 11.5,
+    "label": "11.5 px"
+   },
+   {
+    "value": 20,
+    "label": "20 px"
+   }
+  ],
+  "knob-faceScratchLength": [
+   {
+    "value": 4,
+    "label": "4 px"
+   },
+   {
+    "value": 82,
+    "label": "82 px"
+   },
+   {
+    "value": 160,
+    "label": "160 px"
+   }
+  ],
+  "knob-faceScratchAngle": [
+   {
+    "value": -90,
+    "label": "-90°"
+   },
+   {
+    "value": 0,
+    "label": "0°"
+   },
+   {
+    "value": 90,
+    "label": "90°"
+   }
+  ],
+  "knob-faceClast": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   },
+   {
+    "value": 4,
+    "label": "4"
+   }
+  ],
+  "knob-faceClastSize": [
+   {
+    "value": 3,
+    "label": "3 px"
+   },
+   {
+    "value": 18,
+    "label": "18 px"
+   },
+   {
+    "value": 32,
+    "label": "32 px"
+   }
+  ],
+  "knob-faceDetailPatch": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-runoff": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-runoffScale": [
+   {
+    "value": 8,
+    "label": "8 px"
+   },
+   {
+    "value": 44,
+    "label": "44 px"
+   },
+   {
+    "value": 80,
+    "label": "80 px"
+   }
+  ],
+  "knob-runoffConcentration": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-runoffCut": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 4,
+    "label": "4"
+   },
+   {
+    "value": 8,
+    "label": "8"
+   }
+  ],
+  "knob-runoffStain": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-debrisAmount": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-debrisReach": [
+   {
+    "value": 8,
+    "label": "8 px"
+   },
+   {
+    "value": 52,
+    "label": "52 px"
+   },
+   {
+    "value": 96,
+    "label": "96 px"
+   }
+  ],
+  "knob-debrisDepth": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 6,
+    "label": "6"
+   },
+   {
+    "value": 12,
+    "label": "12"
+   }
+  ],
+  "knob-faceShade": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceTone": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.25,
+    "label": "0.25"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   }
+  ],
+  "knob-faceFresh": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceRind": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceRindDepth": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 10,
+    "label": "10"
+   },
+   {
+    "value": 20,
+    "label": "20"
+   }
+  ],
+  "knob-faceRindTone": [
+   {
+    "value": -0.65,
+    "label": "-0.65"
+   },
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.65,
+    "label": "0.65"
+   }
+  ],
+  "knob-faceRindWarmth": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceRindRough": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceMineral": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceStrata": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.25,
+    "label": "0.25"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   }
+  ],
+  "knob-faceWet": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-stepSoftPx": [
+   {
+    "value": 1,
+    "label": "1 px"
+   },
+   {
+    "value": 21,
+    "label": "21 px"
+   },
+   {
+    "value": 40,
+    "label": "40 px"
+   }
+  ],
+  "knob-shelfWander": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 20,
+    "label": "20"
+   },
+   {
+    "value": 40,
+    "label": "40"
+   }
+  ],
+  "knob-bedFlat": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-shoalRag": [
+   {
+    "value": 0,
+    "label": "0 px"
+   },
+   {
+    "value": 8,
+    "label": "8 px"
+   },
+   {
+    "value": 16,
+    "label": "16 px"
+   }
+  ],
+  "knob-shoalShoreSoft": [
+   {
+    "value": 0,
+    "label": "0 px"
+   },
+   {
+    "value": 6,
+    "label": "6 px"
+   },
+   {
+    "value": 12,
+    "label": "12 px"
+   }
+  ],
+  "knob-layerCrease": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-stepCrease": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-shineSlopeGate": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.75,
+    "label": "0.75"
+   },
+   {
+    "value": 1.5,
+    "label": "1.5"
+   }
+  ],
+  "knob-shineGate": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-shineHeadroom": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "face-variation": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 75,
+    "label": "75%"
+   },
+   {
+    "value": 150,
+    "label": "150%"
+   }
+  ],
+  "facing": [
+   {
+    "value": 1,
+    "label": "Left of the line"
+   },
+   {
+    "value": 3,
+    "label": "North"
+   },
+   {
+    "value": 5,
+    "label": "East"
+   },
+   {
+    "value": 7,
+    "label": "South"
+   }
+  ],
+  "fingers": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 75,
+    "label": "75%"
+   },
+   {
+    "value": 150,
+    "label": "150%"
+   }
+  ],
+  "layer-px": [
+   {
+    "value": 4,
+    "label": "4 px"
+   },
+   {
+    "value": 32,
+    "label": "32 px"
+   },
+   {
+    "value": 60,
+    "label": "60 px"
+   }
+  ],
+  "layer-riser": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 40,
+    "label": "40"
+   },
+   {
+    "value": 80,
+    "label": "80"
+   }
+  ],
+  "lf-step-reference": [
+   {
+    "value": 0,
+    "label": "Profile"
+   },
+   {
+    "value": 1,
+    "label": "Shoreline"
+   },
+   {
+    "value": 2,
+    "label": "Circular shoreline"
+   }
+  ],
+  "sec-terrace-jitter": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "sec-breakup": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "lf-height-reference": [
+   {
+    "value": 0,
+    "label": "Fixed elevation"
+   },
+   {
+    "value": 1,
+    "label": "Sea level"
+   },
+   {
+    "value": 2,
+    "label": "Ground"
+   }
+  ],
+  "lf-combine": [
+   {
+    "value": 0,
+    "label": "Raise to"
+   },
+   {
+    "value": 1,
+    "label": "Cut to"
+   },
+   {
+    "value": 2,
+    "label": "Flatten to"
+   }
+  ],
+  "lf-route-smooth": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "lf-talus-lumps": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "lf-ejecta": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 150,
+    "label": "150%"
+   },
+   {
+    "value": 300,
+    "label": "300%"
+   }
+  ],
+  "lf-buckling": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 150,
+    "label": "150%"
+   },
+   {
+    "value": 300,
+    "label": "300%"
+   }
+  ],
+  "lf-secondaries": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 6,
+    "label": "6"
+   },
+   {
+    "value": 12,
+    "label": "12"
+   }
+  ],
+  "lf-secondary-distance": [
+   {
+    "value": 8,
+    "label": "8"
+   },
+   {
+    "value": 14,
+    "label": "14"
+   },
+   {
+    "value": 20,
+    "label": "20"
+   }
+  ],
+  "lf-vary-foot": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   },
+   {
+    "value": 200,
+    "label": "200%"
+   }
+  ],
+  "lf-vary-middle": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   },
+   {
+    "value": 200,
+    "label": "200%"
+   }
+  ],
+  "scatter-count": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   },
+   {
+    "value": 6,
+    "label": "6"
+   }
+  ],
+  "scatter-spread": [
+   {
+    "value": 30,
+    "label": "30 px"
+   },
+   {
+    "value": 90,
+    "label": "90 px"
+   },
+   {
+    "value": 145,
+    "label": "145 px"
+   }
+  ],
+  "scatter-size": [
+   {
+    "value": 12,
+    "label": "12%"
+   },
+   {
+    "value": 32,
+    "label": "32%"
+   },
+   {
+    "value": 55,
+    "label": "55%"
+   }
+  ],
+  "scatter-vary": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "ground-edge": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "rim-gaps": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 6,
+    "label": "6"
+   },
+   {
+    "value": 12,
+    "label": "12"
+   }
+  ],
+  "rim-gap-width": [
+   {
+    "value": 5,
+    "label": "5%"
+   },
+   {
+    "value": 55,
+    "label": "55%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "rim-gap-depth": [
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 151,
+    "label": "151"
+   },
+   {
+    "value": 300,
+    "label": "300"
+   }
+  ],
+  "spur-length": [
+   {
+    "value": 0,
+    "label": "0 px"
+   },
+   {
+    "value": 90,
+    "label": "90 px"
+   },
+   {
+    "value": 170,
+    "label": "170 px"
+   }
+  ],
+  "spur-spread": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "spur-width": [
+   {
+    "value": 20,
+    "label": "20%"
+   },
+   {
+    "value": 110,
+    "label": "110%"
+   },
+   {
+    "value": 200,
+    "label": "200%"
+   }
+  ],
+  "spur-taper": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "spur-height": [
+   {
+    "value": 10,
+    "label": "10%"
+   },
+   {
+    "value": 55,
+    "label": "55%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "spur-forks": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "spur-bulb": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "crest-vary": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "crest-taper": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "water-deep": [
+   {
+    "value": 0,
+    "label": "World default"
+   },
+   {
+    "value": 1,
+    "label": "Hard"
+   },
+   {
+    "value": 2,
+    "label": "Faded"
+   }
+  ],
+  "water-shore": [
+   {
+    "value": 0,
+    "label": "World default"
+   },
+   {
+    "value": 1,
+    "label": "Soft bank"
+   }
+  ],
+  "paint-channel": [
+   {
+    "value": 1,
+    "label": "Rock"
+   },
+   {
+    "value": 2,
+    "label": "Snow or ice"
+   },
+   {
+    "value": 3,
+    "label": "Wet or dark ground"
+   },
+   {
+    "value": 4,
+    "label": "Moss"
+   },
+   {
+    "value": 5,
+    "label": "Denser scatter"
+   },
+   {
+    "value": 16,
+    "label": "Ground lumps"
+   },
+   {
+    "value": 18,
+    "label": "Relaxation: more"
+   }
+  ],
+  "lf-ground": [
+   {
+    "value": -1,
+    "label": "Ground beneath"
+   },
+   {
+    "value": 23,
+    "label": "Example material"
+   }
+  ],
+  "lf-rock": [
+   {
+    "value": -1,
+    "label": "Rock beneath"
+   },
+   {
+    "value": 1,
+    "label": "Example rock"
+   }
+  ],
+  "style-vegetation": [
+   {
+    "value": -100,
+    "label": "-100%"
+   },
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "finger-size": [
+   {
+    "value": 20,
+    "label": "20%"
+   },
+   {
+    "value": 160,
+    "label": "160%"
+   },
+   {
+    "value": 300,
+    "label": "300%"
+   }
+  ],
+  "finger-vary": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "finger-inlet": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "river-depth": [
+   {
+    "value": 25,
+    "label": "25%"
+   },
+   {
+    "value": 215,
+    "label": "215%"
+   },
+   {
+    "value": 400,
+    "label": "400%"
+   }
+  ],
+  "layer-vary": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "layer-circle": [
+   {
+    "value": 8,
+    "label": "8 px"
+   },
+   {
+    "value": 44,
+    "label": "44 px"
+   },
+   {
+    "value": 80,
+    "label": "80 px"
+   }
+  ],
+  "lava-circle-vary": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "layer-jag": [
+   {
+    "value": 0,
+    "label": "0 px"
+   },
+   {
+    "value": 6,
+    "label": "6 px"
+   },
+   {
+    "value": 12,
+    "label": "12 px"
+   }
+  ],
+  "lava-spread": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   },
+   {
+    "value": 200,
+    "label": "200%"
+   }
+  ],
+  "cracks": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "amount": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 50,
+    "label": "50"
+   },
+   {
+    "value": 100,
+    "label": "100"
+   }
+  ],
+  "roughness": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "softness": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "relief": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 80,
+    "label": "80%"
+   },
+   {
+    "value": 160,
+    "label": "160%"
+   }
+  ],
+  "material-weathering": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "deposit-spread": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "knob-shallowTone": [
+   {
+    "value": "#689ca6",
+    "label": "#689ca6"
+   },
+   {
+    "value": "#497d59",
+    "label": "#497d59"
+   },
+   {
+    "value": "#b08657",
+    "label": "#b08657"
+   }
+  ],
+  "knob-sun": [
+   {
+    "value": "#d9e9ff",
+    "label": "#d9e9ff"
+   },
+   {
+    "value": "#fff4d8",
+    "label": "#fff4d8"
+   },
+   {
+    "value": "#ffe0aa",
+    "label": "#ffe0aa"
+   }
+  ],
+  "knob-sky": [
+   {
+    "value": "#e4edff",
+    "label": "#e4edff"
+   },
+   {
+    "value": "#fff0da",
+    "label": "#fff0da"
+   },
+   {
+    "value": "#cbb7df",
+    "label": "#cbb7df"
+   }
+  ],
+  "knob-lushness": [
+   {
+    "value": -1,
+    "label": "-1"
+   },
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-soilRim": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-erosionRain": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-wetSwath": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-wetGround": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-plantRelief": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-highland": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-highFrom": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 60,
+    "label": "60"
+   },
+   {
+    "value": 120,
+    "label": "120"
+   }
+  ],
+  "knob-highReach": [
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 31,
+    "label": "31"
+   },
+   {
+    "value": 60,
+    "label": "60"
+   }
+  ],
+  "knob-shineSand": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-shineSandSharp": [
+   {
+    "value": 2,
+    "label": "2"
+   },
+   {
+    "value": 102,
+    "label": "102"
+   },
+   {
+    "value": 200,
+    "label": "200"
+   }
+  ],
+  "knob-shineSandRough": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-sand": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-sandLee": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-wind": [
+   {
+    "value": 0,
+    "label": "0°"
+   },
+   {
+    "value": 90,
+    "label": "90°"
+   },
+   {
+    "value": 180,
+    "label": "180°"
+   }
+  ],
+  "knob-sandDust": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-sandGrass": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-ripple": [
+   {
+    "value": 0,
+    "label": "0 px"
+   },
+   {
+    "value": 8,
+    "label": "8 px"
+   },
+   {
+    "value": 16,
+    "label": "16 px"
+   }
+  ],
+  "knob-rippleHeight": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1.5,
+    "label": "1.5"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   }
+  ],
+  "knob-banding": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-bandSoftness": [
+   {
+    "value": 0.05,
+    "label": "0.05"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-bandLevel": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-bandFill": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-sandBanding": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-sandBandSpacing": [
+   {
+    "value": 0.3,
+    "label": "0.3"
+   },
+   {
+    "value": 2.2,
+    "label": "2.2"
+   },
+   {
+    "value": 4,
+    "label": "4"
+   }
+  ],
+  "knob-strata": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-strataContrast": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-strataGrain": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-bedDip": [
+   {
+    "value": -4,
+    "label": "-4"
+   },
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 4,
+    "label": "4"
+   }
+  ],
+  "knob-bedDipDir": [
+   {
+    "value": 0,
+    "label": "0°"
+   },
+   {
+    "value": 90,
+    "label": "90°"
+   },
+   {
+    "value": 180,
+    "label": "180°"
+   }
+  ],
+  "knob-baseBand": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-baseBandLow": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 6,
+    "label": "6"
+   },
+   {
+    "value": 12,
+    "label": "12"
+   }
+  ],
+  "knob-baseBandHigh": [
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 8.5,
+    "label": "8.5"
+   },
+   {
+    "value": 16,
+    "label": "16"
+   }
+  ],
+  "knob-baseBandWander": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   },
+   {
+    "value": 4,
+    "label": "4"
+   }
+  ],
+  "knob-baseBandGaps": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.45,
+    "label": "0.45"
+   },
+   {
+    "value": 0.9,
+    "label": "0.9"
+   }
+  ],
+  "knob-desertCapFlat": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-bedCycleVary": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-faceBedVary": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1.5,
+    "label": "1.5"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   }
+  ],
+  "knob-faceBed": [
+   {
+    "value": 2,
+    "label": "2"
+   },
+   {
+    "value": 11,
+    "label": "11"
+   },
+   {
+    "value": 20,
+    "label": "20"
+   }
+  ],
+  "knob-faceLedge": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   },
+   {
+    "value": 4,
+    "label": "4"
+   }
+  ],
+  "knob-faceRun": [
+   {
+    "value": 20,
+    "label": "20 px"
+   },
+   {
+    "value": 160,
+    "label": "160 px"
+   },
+   {
+    "value": 300,
+    "label": "300 px"
+   }
+  ],
+  "knob-faceFold": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 24,
+    "label": "24"
+   },
+   {
+    "value": 48,
+    "label": "48"
+   }
+  ],
+  "knob-faceSpall": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   },
+   {
+    "value": 4,
+    "label": "4"
+   }
+  ],
+  "knob-faceLamina": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1.5,
+    "label": "1.5"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   }
+  ],
+  "knob-faceLaminaSize": [
+   {
+    "value": 6,
+    "label": "6"
+   },
+   {
+    "value": 11,
+    "label": "11"
+   },
+   {
+    "value": 16,
+    "label": "16"
+   }
+  ],
+  "knob-faceLayers": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-faceGrass": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-shineCrystal": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-shineCrystalSharp": [
+   {
+    "value": 2,
+    "label": "2"
+   },
+   {
+    "value": 102,
+    "label": "102"
+   },
+   {
+    "value": 200,
+    "label": "200"
+   }
+  ],
+  "knob-shineCrystalRough": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-absorbDepth": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-shadowTint": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-iceCrystal": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-gougeWeb": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-iceCrest": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "shore-plates": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "plate-water-px": [
+   {
+    "value": 0,
+    "label": "0 px"
+   },
+   {
+    "value": 120,
+    "label": "120 px"
+   },
+   {
+    "value": 240,
+    "label": "240 px"
+   }
+  ],
+  "plate-land-px": [
+   {
+    "value": 0,
+    "label": "0 px"
+   },
+   {
+    "value": 120,
+    "label": "120 px"
+   },
+   {
+    "value": 240,
+    "label": "240 px"
+   }
+  ],
+  "plate-size": [
+   {
+    "value": 8,
+    "label": "8 px"
+   },
+   {
+    "value": 52,
+    "label": "52 px"
+   },
+   {
+    "value": 96,
+    "label": "96 px"
+   }
+  ],
+  "plate-gap": [
+   {
+    "value": 0,
+    "label": "0 px"
+   },
+   {
+    "value": 80,
+    "label": "80 px"
+   },
+   {
+    "value": 160,
+    "label": "160 px"
+   }
+  ],
+  "plate-height": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 75,
+    "label": "75"
+   },
+   {
+    "value": 150,
+    "label": "150"
+   }
+  ],
+  "plate-material": [
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "plate-vary": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "crystal-shore-seam": [
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 58,
+    "label": "58%"
+   },
+   {
+    "value": 65,
+    "label": "65%"
+   }
+  ],
+  "ice-facets": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "lf-facet-form": [
+   {
+    "value": 0,
+    "label": "Angular facets"
+   },
+   {
+    "value": 1,
+    "label": "Stepped columns"
+   },
+   {
+    "value": 2,
+    "label": "Prisms"
+   }
+  ],
+  "lf-facet-surface": [
+   {
+    "value": 0,
+    "label": "Rock"
+   },
+   {
+    "value": 1,
+    "label": "Crystal"
+   }
+  ],
+  "ice-facet-size": [
+   {
+    "value": 14,
+    "label": "14 px"
+   },
+   {
+    "value": 64,
+    "label": "64 px"
+   },
+   {
+    "value": 115,
+    "label": "115 px"
+   }
+  ],
+  "crystal-step": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 19,
+    "label": "19"
+   },
+   {
+    "value": 38,
+    "label": "38"
+   }
+  ],
+  "crystal-tiers": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "crystal-facet": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "crystal-size-var": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "crystal-sides": [
+   {
+    "value": 3,
+    "label": "3"
+   },
+   {
+    "value": 7,
+    "label": "7"
+   },
+   {
+    "value": 10,
+    "label": "10"
+   }
+  ],
+  "crystal-stretch": [
+   {
+    "value": 100,
+    "label": "100%"
+   },
+   {
+    "value": 200,
+    "label": "200%"
+   },
+   {
+    "value": 300,
+    "label": "300%"
+   }
+  ],
+  "crystal-top": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 95,
+    "label": "95%"
+   }
+  ],
+  "crystal-variation": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "crystal-align": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "berg-jitter": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "berg-break": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 4,
+    "label": "4"
+   },
+   {
+    "value": 8,
+    "label": "8"
+   }
+  ],
+  "berg-rough": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 15,
+    "label": "15"
+   },
+   {
+    "value": 30,
+    "label": "30"
+   }
+  ],
+  "knob-crackSeverity": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.75,
+    "label": "0.75"
+   },
+   {
+    "value": 1.5,
+    "label": "1.5"
+   }
+  ],
+  "knob-crackSpacing": [
+   {
+    "value": 16,
+    "label": "16 px"
+   },
+   {
+    "value": 56,
+    "label": "56 px"
+   },
+   {
+    "value": 96,
+    "label": "96 px"
+   }
+  ],
+  "knob-crackFrom": [
+   {
+    "value": 0.05,
+    "label": "0.05"
+   },
+   {
+    "value": 0.62,
+    "label": "0.62"
+   },
+   {
+    "value": 1.2,
+    "label": "1.2"
+   }
+  ],
+  "knob-crackMajor": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-crackMinor": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-crackHairline": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-crackBlocks": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1.5,
+    "label": "1.5"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   }
+  ],
+  "knob-crackWidth": [
+   {
+    "value": 0.5,
+    "label": "0.5 px"
+   },
+   {
+    "value": 1.5,
+    "label": "1.5 px"
+   },
+   {
+    "value": 2.5,
+    "label": "2.5 px"
+   }
+  ],
+  "knob-crackNetwork": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-crackDark": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "fissure-width": [
+   {
+    "value": 4,
+    "label": "4 px"
+   },
+   {
+    "value": 27,
+    "label": "27 px"
+   },
+   {
+    "value": 50,
+    "label": "50 px"
+   }
+  ],
+  "fissure-jag": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "fissure-branches": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 6,
+    "label": "6"
+   },
+   {
+    "value": 12,
+    "label": "12"
+   }
+  ],
+  "fissure-branch-len": [
+   {
+    "value": 20,
+    "label": "20 px"
+   },
+   {
+    "value": 160,
+    "label": "160 px"
+   },
+   {
+    "value": 300,
+    "label": "300 px"
+   }
+  ],
+  "fissure-branch-spread": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "fissure-taper": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "fissure-network": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "fissure-cell": [
+   {
+    "value": 30,
+    "label": "30 px"
+   },
+   {
+    "value": 95,
+    "label": "95 px"
+   },
+   {
+    "value": 160,
+    "label": "160 px"
+   }
+  ],
+  "fissure-crack": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "fissure-dark": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "knob-beachWidth": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-apron": [
+   {
+    "value": 0,
+    "label": "0 px"
+   },
+   {
+    "value": 60,
+    "label": "60 px"
+   },
+   {
+    "value": 120,
+    "label": "120 px"
+   }
+  ],
+  "knob-waterSoft": [
+   {
+    "value": 0,
+    "label": "0 px"
+   },
+   {
+    "value": 32,
+    "label": "32 px"
+   },
+   {
+    "value": 64,
+    "label": "64 px"
+   }
+  ],
+  "transition-detail": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
+  ],
+  "knob-lavaCrust": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-lavaPillow": [
+   {
+    "value": 16,
+    "label": "16 px"
+   },
+   {
+    "value": 48,
+    "label": "48 px"
+   },
+   {
+    "value": 80,
+    "label": "80 px"
+   }
+  ],
+  "knob-lavaChip": [
+   {
+    "value": 3,
+    "label": "3 px"
+   },
+   {
+    "value": 7.5,
+    "label": "7.5 px"
+   },
+   {
+    "value": 12,
+    "label": "12 px"
+   }
+  ],
+  "knob-lavaVeins": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-lavaCalm": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-lavaDusk": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-pockmark": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-pockSize": [
+   {
+    "value": 3,
+    "label": "3 px"
+   },
+   {
+    "value": 7.5,
+    "label": "7.5 px"
+   },
+   {
+    "value": 12,
+    "label": "12 px"
+   }
+  ],
+  "knob-moonCups": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-moonCupSize": [
+   {
+    "value": 3,
+    "label": "3 px"
+   },
+   {
+    "value": 7.5,
+    "label": "7.5 px"
+   },
+   {
+    "value": 12,
+    "label": "12 px"
+   }
+  ],
+  "knob-moonCupDepth": [
+   {
+    "value": 0.4,
+    "label": "0.4"
+   },
+   {
+    "value": 1.7,
+    "label": "1.7"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   }
+  ],
+  "knob-cupStretch": [
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   }
+  ],
+  "knob-moonRibs": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-moonRibDepth": [
+   {
+    "value": 0.2,
+    "label": "0.2"
+   },
+   {
+    "value": 1.6,
+    "label": "1.6"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   }
+  ],
+  "knob-moonRibDark": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.45,
+    "label": "0.45"
+   },
+   {
+    "value": 0.9,
+    "label": "0.9"
+   }
+  ],
+  "knob-moonFolds": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-moonFoldSpacing": [
+   {
+    "value": 0.3,
+    "label": "0.3"
+   },
+   {
+    "value": 1.7,
+    "label": "1.7"
+   },
+   {
+    "value": 3,
+    "label": "3"
+   }
+  ],
+  "knob-iceSoft": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-iceSnow": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-iceFall": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-iceApron": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-iceFrost": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-frostGaps": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.3,
+    "label": "0.3"
+   },
+   {
+    "value": 0.6,
+    "label": "0.6"
+   }
+  ],
+  "knob-frostGapReach": [
+   {
+    "value": 0.2,
+    "label": "0.2"
+   },
+   {
+    "value": 0.7,
+    "label": "0.7"
+   },
+   {
+    "value": 1.2,
+    "label": "1.2"
+   }
+  ],
+  "knob-frostGapSize": [
+   {
+    "value": 3,
+    "label": "3 px"
+   },
+   {
+    "value": 14,
+    "label": "14 px"
+   },
+   {
+    "value": 24,
+    "label": "24 px"
+   }
+  ],
+  "knob-frostGapDepth": [
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 3.3,
+    "label": "3.3"
+   },
+   {
+    "value": 6,
+    "label": "6"
+   }
+  ],
+  "frost-needles": [
+   {
+    "value": 0,
+    "label": "0%"
+   },
+   {
+    "value": 50,
+    "label": "50%"
+   },
+   {
+    "value": 100,
+    "label": "100%"
+   }
   ]
  },
  "worlds": {

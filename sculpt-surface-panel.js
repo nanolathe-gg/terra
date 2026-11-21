@@ -152,7 +152,7 @@ let rowKey = '';
 const uid = part => `surface-${rowKey}-${part}`.replace(/[^A-Za-z0-9_-]/g, '_');
 const ROCK_TYPED = ['rock', 'crown', 'paintedRock', 'chips'];
 const factSelect = (value, onChange, part) => {
-  const select = el('select', {title: 'What it reads', id: uid(part)}, ...SURFACE_FACTS.map(f => el('option', {value: f, textContent: FACT_LABELS[f][0], selected: f === value})));
+  const select = el('select', {title: 'Choose which terrain or material property the rule reads at each pixel.', id: uid(part)}, ...SURFACE_FACTS.map(f => el('option', {value: f, textContent: FACT_LABELS[f][0], selected: f === value})));
   select.onchange = () => onChange(select.value);
   return select;
 };
@@ -220,7 +220,7 @@ export function mountSurfacePanel(host) {
     const id = uid(label), row = controlRow({id, label: `${label} <output></output>`, range: `min="${min}" max="${max}" step="${step}" value="${value}"`});
     const input = row.querySelector('input[type=range]'), out = row.querySelector('output');
     out.textContent = show(value); row.classList.add('surface-slider');
-    if (title) row.querySelector('.scrub').title = title;
+    if (title) input.dataset.help = title;
     input.oninput = () => { out.textContent = show(Number(input.value)); onInput(Number(input.value), false); };
     input.onchange = () => onInput(Number(input.value), true);
     return row;
@@ -237,7 +237,7 @@ export function mountSurfacePanel(host) {
     const set = (field, v) => edit(i, l => { if (v === undefined) delete l.where[k][field]; else l.where[k][field] = v; }, true);
     const moved = drawn && (drawn.from !== w.from || drawn.to !== w.to);
     return el('div', {className: 'surface-term'}, factSelect(w.fact, f => edit(i, l => { l.where[k].fact = f; }, true), `w${k}-fact`),
-      number('from', w.from, v => set('from', v), undefined, undefined, `w${k}-from`), number('to', w.to, v => set('to', v), undefined, undefined, `w${k}-to`),
+      number('from', w.from, v => set('from', v), 'Lower limit of this condition. Clear it to leave the condition open below.', undefined, `w${k}-from`), number('to', w.to, v => set('to', v), 'Upper limit of this condition. Clear it to leave the condition open above.', undefined, `w${k}-to`),
       number('fade', w.fade ?? .05, v => edit(i, l => { l.where[k].fade = Math.max(v ?? .05, .0001); }, true), 'How gradually it starts and stops', '', `w${k}-fade`),
       remover('Remove this condition', () => edit(i, l => { l.where.splice(k, 1); if (!l.where.length) delete l.where; }, true)),
       ...(moved ? [el('span', {className: 'small surface-spread-now', textContent: `With Spread: ${drawn.from != null ? fmt(drawn.from) : 'open'} to ${drawn.to != null ? fmt(drawn.to) : 'open'}`})] : []));

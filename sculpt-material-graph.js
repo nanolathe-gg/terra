@@ -2,6 +2,8 @@
 // It draws and reports gestures; the editor (sculpt-material-editor.js) owns the material and makes every change.
 import {NODES, nodeTypes, orderNodes, accepts as fits} from './sculpt-materials.js';
 
+import {nodeInputHelp, nodeKindHelp} from './sculpt-material-help.js';
+
 export const CARD = {width: 172, head: 38, row: 22, thumb: 72, port: 6, reach: 14};
 const COLORS = {coords: '#91b9df', gray: '#d9bf8c', color: '#9bd5ae'};
 const inputsOf = n => NODES[n.type].inputs;
@@ -212,7 +214,12 @@ export function mountMaterialGraph(host) {
     } else {
       hover = hit(p);
       canvas.style.cursor = hover?.port ? 'crosshair' : hover?.c ? 'grab' : hover?.frame ? 'pointer' : 'default';
-      canvas.title = hover?.port === 'out' ? 'Drag to an input to connect' : hover?.port ? (hover.c.n.in[hover.port] ? 'Drag the wire away or click to disconnect' : 'Drag an output here to connect') : hover?.toggle ? 'Turn this node on or off' : '';
+      const n = hover?.c?.n;
+      const input = n && inputsOf(n).find(([key]) => key === hover.port);
+      if (hover?.port === 'out') canvas.title = 'Drag this output to an input to connect it.';
+      else if (input) canvas.title = nodeInputHelp(n.type, input[0], input[2]) + (n.in[input[0]] ? ' Click to disconnect.' : '');
+      else if (hover?.toggle) canvas.title = 'Turn this node on or bypass it.';
+      else canvas.title = n ? nodeKindHelp(n.type, n.kind) ?? NODES[n.type].help : '';
     }
   };
   canvas.onpointerup = e => {

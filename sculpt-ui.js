@@ -261,6 +261,21 @@ export function mountColumnPanel(read,change,commit,reset){
  const state=()=>{drawStack();$('column-title').textContent='Rock column of '+$('rock-current-name').textContent;const {edited}=read();restore.disabled=!edited;note.textContent=edited?'Map column edited.':'Using the world column unchanged.';};
  function field(parent,label,path,{min,max,step='any',choices,color=false}={}){
   const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement(choices?'select':'input');input.dataset.columnPath=path.join('.');input.setAttribute('aria-label',label);
+  const field=path.includes('beds')?['thickness','hardness','material'][path.at(-1)]:color?'color':label;
+  input.dataset.help=({
+   thickness:'Set the vertical thickness of this bed within each repeat.',
+   hardness:'Set how strongly the bed resists weathering and stands out as a ledge.',
+   material:'Choose the color slot this bed uses when layer colors are enabled.',
+   color:'Set the color of the rock beds that use this slot.',
+   'Starts at height':'Set the height where this section starts repeating upward.',
+   'Height step':'Set the height change from one contour band to the next.',
+   'Line strength':'Set the strength of the column’s contour lines.',
+   'Count height from':'Choose whether section heights start at sea level or at the base plain.',
+   'Bed wander':'Increase the vertical drift of bed boundaries around the terrain.',
+   'Broad wander':'Increase the long-scale bends in the bed boundaries.',
+   'Medium wander':'Increase the medium-scale bends in the bed boundaries.',
+   'Fine wander':'Increase the fine-scale bends in the bed boundaries.',
+  })[field];
   const value=at(read().column,path);if(choices){input.replaceChildren(...choices.map(([v,text])=>new Option(text,v)));input.value=value;}
   else{input.type=color?'color':'number';input.required=true;input.value=color?'#'+value.map(v=>Math.round(v).toString(16).padStart(2,'0')).join(''):value;input.step=step;if(min!==undefined)input.min=min;if(max!==undefined)input.max=max;}
   input.oninput=()=>{input.setCustomValidity('');if(!input.checkValidity()){note.textContent='Enter a value within the displayed limits.';return;}const column=structuredClone(read().column),target=at(column,path.slice(0,-1));target[path.at(-1)]=color?[1,3,5].map(i=>parseInt(input.value.slice(i,i+2),16)):choices?input.value:Number(input.value);if(choices&&typeof value==='number')target[path.at(-1)]=Number(input.value);
@@ -270,7 +285,7 @@ export function mountColumnPanel(read,change,commit,reset){
  }
  // A section or bed added or removed: the edited copy is one change and one undo step, and the panel is drawn again for the new rows.
  function reshape(edit){const column=structuredClone(read().column||{});edit(column);try{change(column);commit();}catch(err){note.textContent=err.message;return;}sync();}
- function button(parent,text,label,onclick,disabled=false){const b=document.createElement('button');b.type='button';b.textContent=text;if(label)b.setAttribute('aria-label',label);b.disabled=disabled;b.onclick=onclick;parent.append(b);return b;}
+ function button(parent,text,label,onclick,disabled=false){const b=document.createElement('button');b.type='button';b.textContent=text;if(label)b.setAttribute('aria-label',label);b.dataset.help=label||({'Add a rock column':'Start a repeating sequence of rock beds.','Add section':'Add a new repeating bed section above the last one.'})[text];b.disabled=disabled;b.onclick=onclick;parent.append(b);return b;}
  function sync(){
   const {column}=read();body.replaceChildren();state();
   // The column's sections (a world or map without any has no column, and adds one here).
@@ -302,5 +317,5 @@ export function mountColumnPanel(read,change,commit,reset){
   column?.wander?.terrain?.forEach((_,i)=>field(options,['Broad wander','Medium wander','Fine wander'][i],['wander','terrain',i]));
   if(column?.colors){const colors=document.createElement('details');colors.className='feature-group';colors.open=true;colors.innerHTML='<summary>Material slot colors</summary>';const fields=document.createElement('div');fields.className='column-options';colors.append(fields);column.colors.forEach((_,i)=>field(fields,`Slot ${i+1}`,['colors',i],{color:true}));body.append(colors);}
  }
- restore.onclick=()=>{reset();sync();};sync();return sync;
+ restore.dataset.help='Replace this rock column with its starting beds and colors.';restore.onclick=()=>{reset();sync();};sync();return sync;
 }
