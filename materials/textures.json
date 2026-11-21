@@ -271,8 +271,8 @@
    {"id":"lit","type":"light","name":"Cells lit from the west","params":{"direction":180,"strength":6},"in":{"in":"cells"},"x":472,"y":400},
    {"id":"shade","type":"combine","kind":"add","name":"Add the cells' light","params":{"amount":0.6,"offset":0.5},"in":{"a":"step-11","b":"lit","mask":null},"x":1416,"y":250},
    {"id":"crk","type":"noise","kind":"cracks","name":"Cell borders","params":{"size":40,"detail":0.3,"layers":0,"seed":7,"jitter":0.9,"hex":0},"in":{"in":"cw"},"x":236,"y":550},
-   {"id":"crkl","type":"levels","name":"Soft dark cracks","params":{"low":0.0,"high":0.3,"gamma":1,"invert":0},"in":{"in":"crk"},"x":472,"y":550},
-   {"id":"crkg","type":"gradient","name":"Crack multiplier","params":{"ease":1},"in":{"in":"crkl"},"stops":[[0,0.6,0.56,0.55],[1,1,1,1]],"x":708,"y":550},
+   {"id":"crkl","type":"levels","name":"Soft dark cracks","params":{"low":0.0,"high":0.12,"gamma":1,"invert":0},"in":{"in":"crk"},"x":472,"y":550},
+   {"id":"crkg","type":"gradient","name":"Crack multiplier","params":{"ease":1},"in":{"in":"crkl"},"stops":[[0,0.5,0.46,0.45],[1,1.06,1.06,1.06]],"x":708,"y":550},
    {"id":"crkm","type":"combine","kind":"multiply","name":"Multiply cracks","params":{"amount":1,"offset":0},"in":{"a":"shade","b":"crkg","mask":null},"x":1650,"y":300},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"crkm","height":null,"shine":null},"x":1880,"y":300}
   ],
