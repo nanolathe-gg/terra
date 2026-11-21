@@ -981,7 +981,7 @@
     "materials": {"ground": "red-plain", "water": "red-water", "rock": "red-bank", "slope": "red-slope", "debris": "red-debris", "extra": ["red-rough", "red-crumple"], "soil": "red-soil", "snow": "red-snow", "moss": "red-moss", "sand": "red-sand", "band": "red-band", "crystal": "crystals"},
     "knobDefaults": {
         "fineRelief": 2,
-        "fineSize": 8,
+        "fineSize": 32,
         "fineGrain": 0,
         "shoreRock": 96,
         "shoreShelf": 96,
