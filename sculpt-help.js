@@ -43,14 +43,20 @@ export function mountHelp(){
     owner?.removeAttribute('aria-describedby');owner=target;const token=++revision;
     if(!target.isConnected||!target.getClientRects().length||document.hidden){hide();return;}
     // A shape tool's picture and words are its shape's (data-shape: a world's tool draws a shape of the library).
-    // A map's own tool (Save as tool) shows its shape's sketch and says what it is: no rendered example draws its numbers.
+    // A map's own tool (Save as tool) says what it is; its picture is its own once drawn, until then its shape's sketch (no shipped example draws its numbers).
     const tool=target.dataset.tool||target.dataset.icon,shape=target.dataset.shape||tool,own=target.dataset.mapTool!==undefined,control=target.closest('.control'),source=control?.querySelector('input[type=range],select'),key=source?.id;
     const label=tool?target.getAttribute('aria-label'):control?.querySelector('label')?.cloneNode(true);if(label instanceof Element)label.querySelector('output')?.remove();
     const name=typeof label==='string'?label:label?.textContent?.trim();if(!name){hide();return;}
     // A row's unit, or what it measures, is said here and not on the row (data-note).
     tip.replaceChildren(element('strong',''));tip.firstChild.textContent=name+(control?.dataset.note?` (${control.dataset.note})`:'');
     const example=HELP_CONTROLS[key],valid=()=>owner===target&&revision===token&&!tip.hidden&&target.isConnected&&target.getClientRects().length>0;
-    if(tool||example){
+    // A tool's own picture, drawn in this map's world (sculpt-thumbnails.js, on its button once drawn), comes before the shape's Green example.
+    const live=tool?target.querySelector('.tool-pic')?.getAttribute('src'):null;
+    if(live?.startsWith('data:image/webp;base64,')){
+      const art=element('div','help-art'),image=new Image();image.alt=name+' terrain example';image.src=live;art.append(image);
+      tip.append(art,element('small','help-caption','Rendered in this map’s world'));
+    }
+    else if(tool||example){
       const art=element('div','help-art',tool?illustration(shape):''),caption=element('small','help-caption','Illustration');tip.append(art,caption);
       if(!tool){art.textContent='Loading preview…';caption.textContent='Same shape and seed throughout';}
       previews.then(index=>{
