@@ -64,7 +64,8 @@ export function mountEditorUI(){
  const surfaces=[['tab-map','pane-map',true],['open-graphics','pane-graphics',true],['open-export','pane-export',true],['tab-objects','pane-objects',false]];
  function setSurface(button,pane,open){$(pane).hidden=!open;$(button).setAttribute('aria-expanded',String(open));if(!open)for(const d of $(pane).querySelectorAll('details.share-menu[open]'))d.open=false;}
  function closeSurfaces(menusOnly=false){let any=false;for(const [button,pane,menu] of surfaces)if(!$(pane).hidden&&(menu||!menusOnly)){setSurface(button,pane,false);any=true;}return any;}
- for(const [button,pane,menu] of surfaces)$(button).onclick=()=>{const open=$(pane).hidden;if(menu)closeSurfaces(true);closeFlyouts();setSurface(button,pane,open);};
+ // A menu opens at its top: a pane keeps its scroll while hidden, and with overlay scrollbars a scrolled Map menu hid Save as link.
+ for(const [button,pane,menu] of surfaces)$(button).onclick=()=>{const open=$(pane).hidden;if(menu)closeSurfaces(true);closeFlyouts();setSurface(button,pane,open);if(menu&&open)$(pane).scrollTop=0;};
  // The Map menu's file actions close it: New opens its dialog, Open a file picker, Save a download.
  $('pane-map').addEventListener('click',e=>{if(e.target.closest('#new-map,#load,#save'))setSurface('tab-map','pane-map',false);});
  // The View button names the view in use (Art, Clay or Passability), whichever script presses it.
