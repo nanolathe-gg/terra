@@ -21,7 +21,8 @@ const post = (env, body, headers = {}) => handle(new Request('https://w.test/map
 const env = (over = {}) => ({MAPS: fakeBucket(), ...over});
 
 test('a good save round-trips with browser-readable headers', async () => {
-  const e = env(), body = gz(save());
+  const pictures = {map: {image: 'data:image/webp;base64,UklGRg=='}};
+  const e = env(), body = gz(save({pictures}));
   const r = await post(e, body);
   assert.equal(r.status, 200);
   const {id} = await r.json();
@@ -70,6 +71,9 @@ test('bad bodies are refused with clear errors and nothing is stored', async () 
     [gz(JSON.stringify(save({mapData: {pad: 'a'.repeat(MAX_UNCOMPRESSED + 1)}}))), 413, /uncompressed/],
     [gz(save({junk: 'stored for good'})), 400, /fields a save does not have \(junk\)/],
     [gz(save({biome: {x: 1}})), 400, /wrong kind of value/],
+    [gz(save({pictures: {map: {image: 'https://example.test/map.webp'}}})), 400, /WebP map thumbnail/],
+    [gz(save({pictures: {map: {image: 'data:image/webp;base64,' + 'A'.repeat(32 * 1024)}}})), 400, /WebP map thumbnail/],
+    [gz(save({pictures: {map: {image: 'data:image/webp;base64,UklGRg=='}, tools: {}}})), 400, /WebP map thumbnail/],
     [gz(save({seaLevel: 'deep'})), 400, /wrong kind of value/],
     [Buffer.alloc(MAX_COMPRESSED + 1, 7), 413, /too large/],
   ];

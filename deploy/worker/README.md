@@ -3,6 +3,9 @@
 Permanent, content-addressed share links for Terraform saves. A Cloudflare Worker (`worker.js`, no dependencies) over an
 R2 bucket, on the free tier at a workers.dev address. Wrangler is run with `npx`; nothing is added to the repo.
 
+The editor sends the gzip-compressed JSON it would download, including the optional map thumbnail. Deploy this Worker before releasing
+an editor that sends thumbnails. Earlier version 6 links without a thumbnail still open.
+
 ## Deploy (once)
 
 ```sh

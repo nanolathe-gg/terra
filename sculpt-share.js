@@ -3,11 +3,13 @@
 
 export const ID_RE = /^[a-z2-7]{16}$/;
 
-// The text that is shared: the save with sorted keys and without fields that only say "default" (`hidden: false`, undefined values), so a
-// stroke gives the same bytes whether it was drawn or loaded from a link, and sharing a loaded map again gives the same link.
-const canon = (v, key) => Array.isArray(v) ? v.map(x => canon(x)) : v && typeof v === 'object'
-  ? Object.fromEntries(Object.keys(v).sort().filter(k => v[k] !== undefined && !(k === 'hidden' && v[k] === false)).map(k => [k, canon(v[k], k)])) : v;
-export const shareText = save => JSON.stringify(canon(save));
+const ordered = (v, omitHidden) => Array.isArray(v) ? v.map(x => ordered(x, omitHidden)) : v && typeof v === 'object'
+  ? Object.fromEntries(Object.keys(v).sort().filter(k => !(omitHidden && k === 'hidden' && v[k] === false)).map(k => [k, ordered(v[k], omitHidden)])) : v;
+export const orderedText = value => JSON.stringify(ordered(value, false));
+
+// The JSON used for both downloads and links. Sorting keys and omitting the default hidden flag keeps a drawn stroke and a loaded stroke
+// byte-identical when their settings match.
+export const shareText = save => JSON.stringify(ordered(save, true));
 
 let crcTable = null;
 export function crc32(bytes) {

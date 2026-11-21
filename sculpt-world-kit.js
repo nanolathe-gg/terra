@@ -6,8 +6,9 @@ import {shapeFrom} from './sculpt-scene.js';
 import {copyRocks,worldRocks,giveRockMaterials,ROCK_SLOTS} from './sculpt-rock-presets.js';
 import {copyMaterial,copyMaterials,addMaterial,worldMaterials,worldOwnMaterials,worldKey,roleName,MAP_ROLES,MATERIAL_SLOTS,materialStates,materialStaged,materialCacheUsage} from './sculpt-materials.js';
 
-const ordered=v=>Array.isArray(v)?v.map(ordered):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,ordered(v[k])])):v;
-export const sameKitData=(a,b)=>JSON.stringify(ordered(a))===JSON.stringify(ordered(b));
+import {orderedText} from './sculpt-share.js';
+
+export const sameKitData=(a,b)=>orderedText(a)===orderedText(b);
 const same=sameKitData,object=v=>v&&typeof v==='object'&&!Array.isArray(v);
 const KEY=/^[a-z][a-z0-9_-]{0,39}$/,roles=new Set(['worldGround','worldWater',...MAP_ROLES.map(([r])=>r)]);
 const fields=(v,allowed,what)=>{if(!object(v)||Object.keys(v).some(k=>!allowed.includes(k)))throw Error(`Invalid ${what}.`);};
