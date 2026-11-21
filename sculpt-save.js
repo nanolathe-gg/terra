@@ -56,7 +56,7 @@ export const roleCard=key => ROLE_CARDS[key]??(typeof key==='string'&&key.starts
 const ROLE_NAME_KEYS={ground:'worldGround',water:'worldWater',...Object.fromEntries(MAP_ROLES.map(([key,name]) => [name,key]))};
 export const roleNameCard=name => name==='extra'?'tools':ROLE_CARDS[ROLE_NAME_KEYS[name]]??'surface';
 // A world setting's built-in value, in the order the renderer reads them (sculpt-renderer.js: the world's engineDefaults over its defaults), so a
-// map saves the value it draws with. Eight worlds set erosion and erosionRain (Crystal also crystalShallowAll) in engineDefaults against
+// map saves the value it draws with. Worlds set erosion and erosionRain in engineDefaults against
 // defaults.json's; read defaults first, a saved map reopened with the Time pass set otherwise.
 export const worldBase=(config,key) => config.engineDefaults?.[key]??config.defaults?.[key];
 export const worldKeys=config => new Set([...Object.keys(config.defaults||{}),...Object.keys(config.engineDefaults||{}),...KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)),'beachFrom','sandEdge','fill','relief','palette','sun']);
