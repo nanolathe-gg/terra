@@ -79,6 +79,10 @@ export function worldControlRequirement(key,v){
  if(key==='highland')return n('highMaterial')<=0?'The map has no highland material. In Materials, choose one and set Also the world’s to highland ground.':'';
  if(key==='faceMineral')return n('faceClast')>0?'':'Raise Embedded fragment relief to use Mineral contrast: it tints the fragments (the grain\u2019s minerals are the rock material\u2019s).';
  if(['highFrom','highReach'].includes(key))return needs('highland','Highland ground');
+ if(key==='faceSlopeAlign'){
+  const blocks=Math.max(n('faceBlock'),n('faceJoint'),n('faceWhole'),n('faceWholeLarge'),n('faceBreak'),n('faceSpall'));
+  return n('rockFace')>0&&blocks>0||n('debrisAmount')>0&&n('faceBreak')>0?'':'Raise Rock relief: Depth and enable blocks or joints to follow the slope.';
+ }
  if(key==='faceRegular')return worldControlRequirement('faceBlockSize',v);   // it moves every block and joint, as Block size does
  if(key==='faceDetailPatch')return needs('rockFace','Rock relief: Depth')||(Math.max(n('faceCrease'),n('faceScratch'))>0?'':'Raise Pitting, or Scratches and water grooves, to cluster fine detail.');
  const fractures=Math.max(n('faceBreak'),n('faceSpall'),n('faceJoint'));
@@ -165,7 +169,7 @@ export function worldControlRequirement(key,v){
 // Primary controls describe a visible feature. Fine tuning remains available
 // explicitly (and through search), without filling the default inspector.
 export const WORLD_PRIMARY_CONTROLS=new Set([
- 'faceWhole','faceWholeLarge','faceRegular','sandLee','faceJointWidth','faceSecondary','faceContinuity','faceDetailPatch','faceFresh','faceRind','faceRindDepth','faceRindTone','faceRindWarmth','faceRindRough','faceBreak','faceBedVary','bedCycleVary','faceJointTilt','faceScaleVary','faceFold','faceSpall','faceClast','faceClastSize','faceMineral',
+ 'faceWhole','faceWholeLarge','faceRegular','sandLee','faceJointWidth','faceSecondary','faceContinuity','faceDetailPatch','faceFresh','faceRind','faceRindDepth','faceRindTone','faceRindWarmth','faceRindRough','faceBreak','faceBedVary','bedCycleVary','faceJointTilt','faceSlopeAlign','faceScaleVary','faceFold','faceSpall','faceClast','faceClastSize','faceMineral',
  'runoff','runoffScale','runoffConcentration','runoffCut','runoffStain','debrisAmount','debrisReach','debrisDepth','stoneSort','stoneRound','stoneSlab',
  'plantRelief',
  'bedDip','bedDipDir','faceStretch','faceBlockHeight','faceRound','faceJoint','faceExtrude','faceLamina','faceLaminaSize','faceScratchLength','faceScratchAngle',

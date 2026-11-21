@@ -29,7 +29,7 @@ fn rockTerrain(@builtin(global_invocation_id) id:vec3u){
     let point=vec3f(p,baseHeight(p));var hard=.55;var slot=0.0;var thick=u.rock[rs & rockMask].faceBed;
     if(u.rock[rs & rockMask].columnCount>0){let bed=voxelBed(point);hard=columnGather(bed,length(g)).x;slot=bed.slot;thick=bed.thick*u.rock[rs & rockMask].faceBed/5.5;}
     var released=0.0;
-    if(u.rock[rs & rockMask].faceBreak>0.0){let block=voxelBlocks(voxelRockSpace(point),max(24.0,u.rock[rs & rockMask].faceBlockSize*2.5));released=voxelRelease(block,hard);}
+    if(u.rock[rs & rockMask].faceBreak>0.0){let block=voxelBlocks(voxelFractureSpace(point,voxelRockSpace(point)),max(24.0,u.rock[rs & rockMask].faceBlockSize*2.5));released=voxelRelease(block,hard);}
     // z: the bed's colour slot, plus 8 times the cell's rock slot, so a deposit knows whose rock each source is.
     textureStore(sourceOut,vec2i(id.xy),vec4f(hard,released,slot+8.0*f32(rs & rockMask),thick));
 }

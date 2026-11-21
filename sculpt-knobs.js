@@ -47,7 +47,7 @@ export const KNOBS = [
   ['Rock blocks', [['faceWhole','Whole blocks (share of blocks)',0,1,.05,0],['faceWholeLarge','Whole large blocks (share of blocks)',0,1,.05,0],['faceRegular','Block regularity (0 scattered, 1 a grid)',0,1,.05,0],
     ['faceBlock','Block offsets and tilts',0,6,.1,3],['faceBlockSize','Block size (px)',4,48,1,11],
     ['faceStretch','Block length / width',.25,4,.05,1],['faceBlockHeight','Block height / layer height (blocks are never under 3.5 units tall)',.25,6,.05,1],
-    ['faceJointTilt','Joint tilt from vertical (deg)',-65,65,1,0],['faceScaleVary','Block size variation',0,1,.05,0],
+    ['faceSlopeAlign','Follow slope',0,1,.05,0],['faceJointTilt','Joint tilt (deg)',-65,65,1,0],['faceScaleVary','Block size variation',0,1,.05,0],
     ['faceBreak','Block release',0,1,.05,0],['faceRound','Rounded blocks',0,1,.05,0],['faceJoint','Joint depth',0,3,.05,.35],
     ['faceJointWidth','Joint opening width',.25,3,.05,1],['faceSecondary','Secondary fracture depth',0,2,.05,.35],['faceContinuity','Fracture continuity',0,1,.05,1],
     ['faceLean','Joint orientation from north-south (deg)',-45,45,1,28]]],

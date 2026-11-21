@@ -338,6 +338,7 @@
     "faceBedVary": 1,
     "faceBreak": 0,
     "faceJointTilt": 0,
+    "faceSlopeAlign": 0,
     "faceScaleVary": 0,
     "faceFold": 0,
     "faceSpall": 0,

@@ -1,0 +1,383 @@
+{
+  "biome": "red",
+  "ground": false,
+  "query": "biome=red&mapX=4&mapY=4&sea=100&plain=8&erosion=0&sunHeight=42&sunTilt=0&deepEdge=1&shallowDepth=9&deepDepth=28&waterSoft=0&shoalRag=4&shelfWander=3&bedTint=1&bedBright=1.05&bedContrast=1.14&bedFlat=0.2&bedRelief=0&bedCracks=0&wetBand=0&shoreRock=28&shoreShelf=96&crispShore=.52&banding=0&faceLamina=0&faceScratch=0&faceLedge=0&faceExtrude=0&faceMass=0.32&faceWear=0.34&faceRind=0&lightCap=1.07&ambient=0.37&reliefAmount=0.36&slopeTexture=0.16&faceFill=0.36&flatOcclusion=0.32&shineRock=0.04&shineRockRough=0.2&shineGround=0&shineWater=0&closeShadow=0.82&rockFace=2.7&faceRock=1&rockFaceFrom=0.2&faceBlockSize=19&faceBlockHeight=6&faceBlock=4.5&faceJoint=1.26&faceJointWidth=1.55&faceScaleVary=0.82&faceStretch=1.13&faceRound=0.37&faceRegular=0.05&faceJointTilt=0&faceLean=11&faceWhole=0&faceWholeLarge=0&faceSecondary=0.76&faceContinuity=0.78&faceCrease=1.1&faceCreaseSize=4&faceClast=0.83&faceClastSize=8&faceDetailPatch=0.48&faceTone=0.05&faceSpall=0.64&faceBreak=0&faceSlopeAlign=1&crackFrom=0.12&crackSeverity=0&crackSpacing=42&crackMajor=0.88&crackMinor=0.4&crackHairline=0.16&crackBlocks=2.35&crackNetwork=1&crackWidth=1.45&crackDark=0.21",
+  "strokes": [
+    [
+      "landform",
+      [
+        [
+          450,
+          480
+        ],
+        [
+          1020,
+          495
+        ]
+      ],
+      {
+        "card": {
+          "heightReference": 0,
+          "elevation": 48,
+          "combine": 1,
+          "diameter": 2050,
+          "lean": 100,
+          "wander": 0,
+          "widthVary": 0,
+          "heightVary": 0,
+          "cracks": 0,
+          "gullies": 0,
+          "talus": 0,
+          "curve": {
+            "form": "lfPlateau",
+            "knots": [
+              [
+                0,
+                0
+              ],
+              [
+                0.12,
+                0.1
+              ],
+              [
+                0.3,
+                0.85
+              ],
+              [
+                0.46,
+                1
+              ],
+              [
+                1,
+                1
+              ]
+            ]
+          }
+        }
+      }
+    ],
+    [
+      "landform",
+      [
+        [
+          85,
+          279
+        ],
+        [
+          235,
+          309
+        ],
+        [
+          358,
+          369
+        ],
+        [
+          561,
+          484
+        ],
+        [
+          680,
+          559
+        ],
+        [
+          870,
+          611
+        ],
+        [
+          1035,
+          751
+        ]
+      ],
+      {
+        "card": {
+          "heightReference": 2,
+          "elevation": 109,
+          "combine": 0,
+          "diameter": 650,
+          "lean": 100,
+          "wander": 34,
+          "widthVary": 14,
+          "heightVary": 0,
+          "varySize": 105,
+          "cracks": 80,
+          "gullies": 5,
+          "gullySize": 60,
+          "talus": 0,
+          "terraces": 0,
+          "routeSmooth": 0,
+          "styleVegetation": 0,
+          "curve": {
+            "form": "lfPlateau",
+            "knots": [
+              [
+                0,
+                0
+              ],
+              [
+                0.15,
+                0.04
+              ],
+              [
+                0.27,
+                0.15
+              ],
+              [
+                0.4,
+                0.3
+              ],
+              [
+                0.56,
+                0.51
+              ],
+              [
+                0.65,
+                0.78
+              ],
+              [
+                0.75,
+                1
+              ],
+              [
+                1,
+                1
+              ]
+            ]
+          }
+        }
+      }
+    ]
+  ],
+  "window": {
+    "x": 140,
+    "y": 75,
+    "width": 1000,
+    "height": 852
+  },
+  "materials": [
+    {
+      "slot": 3,
+      "name": "Red coast bank",
+      "key": null,
+      "worldGround": false,
+      "worldWater": false,
+      "worldRock": true,
+      "source": "red-bank",
+      "seed": 0,
+      "nodes": [
+        {
+          "id": "step-1",
+          "type": "warp",
+          "name": "Pattern distortion",
+          "enabled": true,
+          "kind": "turbulence",
+          "params": {
+            "amount": 0.65,
+            "size": 10,
+            "layers": 0,
+            "axis": 0,
+            "seed": 0
+          },
+          "in": {
+            "in": null,
+            "by": null
+          },
+          "x": 0,
+          "y": 0
+        },
+        {
+          "id": "step-2",
+          "type": "noise",
+          "name": "Mottling",
+          "enabled": true,
+          "kind": "smooth",
+          "params": {
+            "size": 5,
+            "detail": 0.25,
+            "layers": 0,
+            "seed": 2
+          },
+          "in": {
+            "in": "step-1"
+          },
+          "x": 236,
+          "y": -75
+        },
+        {
+          "id": "step-3",
+          "type": "noise",
+          "name": "Fine grain",
+          "enabled": true,
+          "kind": "smooth",
+          "params": {
+            "size": 1.8,
+            "detail": 0,
+            "layers": 0,
+            "seed": 1
+          },
+          "in": {
+            "in": "step-1"
+          },
+          "x": 236,
+          "y": 75
+        },
+        {
+          "id": "step-4",
+          "type": "combine",
+          "name": "Add fine detail",
+          "enabled": true,
+          "kind": "add",
+          "params": {
+            "amount": 0.25,
+            "offset": 0.5
+          },
+          "in": {
+            "a": "step-2",
+            "b": "step-3",
+            "mask": null
+          },
+          "x": 472,
+          "y": 0
+        },
+        {
+          "id": "step-5",
+          "type": "levels",
+          "name": "Pattern levels",
+          "enabled": true,
+          "params": {
+            "low": 0.05,
+            "high": 0.95,
+            "gamma": 1,
+            "bands": 1,
+            "steps": 4,
+            "terracing": 0,
+            "invert": 0
+          },
+          "in": {
+            "in": "step-4"
+          },
+          "x": 708,
+          "y": 0
+        },
+        {
+          "id": "step-6",
+          "type": "gradient",
+          "name": "Bank colors",
+          "enabled": true,
+          "params": {
+            "ease": 1
+          },
+          "in": {
+            "in": "step-5"
+          },
+          "stops": [
+            [
+              0,
+              0.33,
+              0.19,
+              0.15
+            ],
+            [
+              0.5,
+              0.39,
+              0.22,
+              0.165
+            ],
+            [
+              1,
+              0.47,
+              0.255,
+              0.18
+            ]
+          ],
+          "x": 944,
+          "y": 0
+        },
+        {
+          "id": "lump",
+          "type": "noise",
+          "name": "Fine lumps",
+          "enabled": true,
+          "kind": "smooth",
+          "params": {
+            "size": 3.5,
+            "detail": 0.4,
+            "layers": 0,
+            "seed": 5
+          },
+          "in": {
+            "in": null
+          },
+          "x": 236,
+          "y": 250
+        },
+        {
+          "id": "material",
+          "type": "output",
+          "name": "Material",
+          "enabled": true,
+          "params": {
+            "relief": 0.88,
+            "wornFrom": 0.2,
+            "wornAmount": 1,
+            "depositFrom": 0.2,
+            "depositAmount": 1
+          },
+          "in": {
+            "color": "step-6",
+            "height": "lump",
+            "shine": null,
+            "worn": null,
+            "deposit": null
+          },
+          "x": 1880,
+          "y": 300
+        }
+      ],
+      "frames": [],
+      "controls": [],
+      "palette": [
+        61,
+        189,
+        29,
+        188,
+        60,
+        187,
+        28,
+        186,
+        59,
+        185,
+        58,
+        27,
+        184,
+        207,
+        57,
+        183,
+        71,
+        26,
+        56,
+        206,
+        25,
+        70,
+        182,
+        24,
+        205,
+        23,
+        181,
+        22,
+        204,
+        203
+      ],
+      "dither": {
+        "amount": 1,
+        "spread": 0,
+        "tone": 1,
+        "red": 1,
+        "green": 1,
+        "blue": 1
+      }
+    }
+  ],
+  "source": {
+    "note": "Authored two-stroke Red peninsula and seabed for the slope-aligned rock test."
+  }
+}

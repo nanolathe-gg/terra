@@ -106,7 +106,7 @@ struct Rock {
     shadowTint: f32,
     material: i32,        // its surface material's slot (grain, art height, shine), 0 the world's rock material (u.rockGround)
     crackFrom: f32,       // slope where cracks take their whole hierarchy and the blocks step (facets); majors start at .35 of it
-    pad3: f32,
+    faceSlopeAlign: f32,  // 0: joints in the world frame; 1: joints follow the surface
     // Rock surfaces, per recipe (moved from the world uniforms so a shape's rock can carry them): cracks, contour bands, moon pits,
     // cups, ribs and folds, ice crystal strokes, crests, snow caps, fibres and aprons.
     crackDark: f32,
@@ -1160,6 +1160,24 @@ fn voxelFold(p:vec3f)->f32 {
 fn voxelRockSpace(p:vec3f)->vec3f {
     let a=radians(u.rock[rs & rockMask].faceLean);let x=p.x*cos(a)+p.y*sin(a);let y=-p.x*sin(a)+p.y*cos(a);
     return vec3f(x,y,p.z+columnOffset(p.xy)+voxelFold(p));
+}
+// Project onto the local tangent plane of the authored surface. Near a
+// planar bank the lateral coordinates stay fixed along its normal. The
+// depth coordinate follows the terrain, with no dependence on sea level,
+// baked relief or the chunk's origin.
+fn voxelFracturePoint(p:vec3f)->vec3f {
+    let align=u.rock[rs & rockMask].faceSlopeAlign;
+    if(align<=0.0){return p;}
+    let gradient=broadGradient(p.xy);
+    let height=baseHeight(p.xy);
+    let nz=inverseSqrt(1.0+dot(gradient,gradient));
+    let dz=p.z-height;
+    let along=gradient*(clamp(dz,-40.0,40.0)*nz*nz);
+    return mix(p,vec3f(p.xy+along,u.base+dz*nz),align);
+}
+fn voxelFractureSpace(p:vec3f,rockPosition:vec3f)->vec3f {
+    if(u.rock[rs & rockMask].faceSlopeAlign<=0.0){return rockPosition;}
+    return voxelRockSpace(voxelFracturePoint(p));
 }
 struct VoxelRock {face:f32,edge:f32,tone:f32}
 // The thinnest bed the face draws, in height units on a vertical face: 2 px up the screen (a height unit is half a pixel) and 4 voxels at
