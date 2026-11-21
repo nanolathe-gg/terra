@@ -2348,11 +2348,35 @@ $('load').addEventListener('click',() => { if (!stroke) $('file').click(); });
 // nowhere to save a map drawn. (From the first picker, the picker is already back behind the file chooser.)
 const backToPicker=() => { if (needsPicker() && !leavingForWorld && !$('new-map-dialog').open) openNewMap(true); };
 $('file').addEventListener('cancel',backToPicker);
-$('file').addEventListener('change',async () => {
-  const file=$('file').files[0]; $('file').value=''; if (!file || stroke) return;
+async function openMapFile(file) {
+  if (!file || !ready || loading || stroke || moving) return;
+  const dialog=$('new-map-dialog');
+  if (dialog.open) $('new-map-error').textContent='';
+  error();
   loading=true; $('editor').disabled=true;
-  try { if (file.size>64*1024*1024) throw new Error('This sculpt sketch is too large to load.'); await loadSketchFile(JSON.parse(await file.text())); } catch (err) { error(err.message); }
-  finally { loading=false; $('editor').disabled=false; updateControls(); backToPicker(); }
+  try {
+    if (file.size>64*1024*1024) throw new Error('This sculpt sketch is too large to load.');
+    if (await loadSketchFile(JSON.parse(await file.text()))) dialog.close();
+  } catch (err) { error(err.message); }
+  finally {
+    loading=false; $('editor').disabled=false; updateControls(); backToPicker();
+    if (dialog.open && !$('error').hidden) $('new-map-error').textContent=$('error').textContent;
+  }
+}
+$('file').addEventListener('change',() => {
+  const file=$('file').files[0]; $('file').value='';
+  openMapFile(file);
+});
+window.addEventListener('dragover',event => {
+  if (!event.dataTransfer?.types.includes('Files')) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect='copy';
+});
+window.addEventListener('drop',event => {
+  if (!event.dataTransfer?.types.includes('Files')) return;
+  event.preventDefault();   // Keep the editor open even if the browser can display the file.
+  const files=event.dataTransfer.files,file=files[0];
+  if (files.length===1 && (file.type==='application/json' || /\.json$/i.test(file.name))) openMapFile(file);
 });
 // Share Link uploads the gzipped save and uses the hash to keep its address. The history entry remembers this tab's local copy on refresh.
 const shareMessage=text => { $('share-message').textContent=text; };

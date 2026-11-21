@@ -1,4 +1,4 @@
-// Download and share the same save, then open both in an isolated Chrome profile. Authored fixture only.
+// Download and share the same save, then open it by picker, link, and drop in an isolated Chrome profile. Authored fixture only.
 // node repro/save-load.mjs --server http://127.0.0.1:<yours> --port <cdp> --out <dir>
 import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import assert from 'node:assert/strict';
@@ -121,7 +121,13 @@ try{
   await recipient.ready(`!window.sameDocument&&sculptRegion.mapData().name==='Re-shared fixture'`);
   assert.equal(await recipient.ev('sculptDebug.tabMap()'),localId);
   assert.equal(await recipient.ev('location.href'),updated.href);
+  // Drop the original file on the canvas. It opens as its own map, just as it did through the picker.
+  const point=await recipient.ev(`(()=>{const box=document.getElementById('overlay').getBoundingClientRect();return {x:box.x+box.width/2,y:box.y+box.height/2};})()`);
+  const data={items:[],files:[file],dragOperationsMask:1};
+  for(const type of ['dragEnter','dragOver','drop'])await recipient.send('Input.dispatchDragEvent',{type,...point,data});
+  await recipient.ready(`sculptRegion.mapData().name==='Collaboration fixture'&&sculptDebug.tabMap()!==${JSON.stringify(localId)}`);
+  assert.ok(isDeepStrictEqual(normalize(await recipient.ev('sculptDebug.sketch()')),normalize(saved)),'The dropped file differs from the downloaded map.');
   for(const page of [source,recipient])assert.deepEqual(page.errors,[]);
-  const report={sameRecipe:true,sameDownloadAndShareBytes:Buffer.byteLength(saveText),sameLinkAfterOpening:true,replacedAddressInPlace:true,sameLocalMapAfterRefresh:true,matchingPixels:before.length/4,rgbaSHA256:createHash('sha256').update(Buffer.from(before)).digest('hex'),world:saved.worldSettings.name,biome:saved.biome};
+  const report={sameRecipe:true,openedByDrop:true,sameDownloadAndShareBytes:Buffer.byteLength(saveText),sameLinkAfterOpening:true,replacedAddressInPlace:true,sameLocalMapAfterRefresh:true,matchingPixels:before.length/4,rgbaSHA256:createHash('sha256').update(Buffer.from(before)).digest('hex'),world:saved.worldSettings.name,biome:saved.biome};
   writeFileSync(join(out,'report.json'),JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));
 }finally{for(const {ws,browser}of browsers){ws?.close();browser.kill();}}
