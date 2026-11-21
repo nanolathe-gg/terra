@@ -27,3 +27,16 @@ test('a map size of 1 to 40 whole units and a sea level of 0 to 255 is one the e
   for(const [x,y,sea] of [[0,4,64],[41,4,64],[2.5,4,64],['4',4,64],[4,4,256],[4,4,-1],[4,4,1.5],[4,4,undefined],[4,4,NaN],[undefined,4,64]])
     assert.equal(validMapSize(x,y,sea),false,JSON.stringify([x,y,sea]));
 });
+
+test('a map may hold its own plain height above its sea', async () => {
+  const {configureMap, savedPlain} = await import('../sculpt-map.js');
+  const world = () => ({baseHeight: 9, seaLevel: 0});
+  const a = world(); configureMap(a, new URLSearchParams('mapX=2&mapY=2&sea=75'));
+  assert.deepEqual([a.seaLevel, a.baseHeight], [75, 84], 'without one, the world\'s plain rides on the map\'s sea');
+  const b = world(); configureMap(b, new URLSearchParams('mapX=2&mapY=2&sea=20&plain=1'));
+  assert.deepEqual([b.seaLevel, b.baseHeight], [20, 21]);
+  assert.throws(() => configureMap(world(), new URLSearchParams('mapX=2&mapY=2&sea=250&plain=9')), /plain/);
+  assert.throws(() => configureMap(world(), new URLSearchParams('mapX=2&mapY=2&sea=20&plain=-1')), /plain/);
+  assert.equal(savedPlain({baseHeight: 84, seaLevel: 75}), 9);
+  assert.equal(savedPlain({}), null);
+});

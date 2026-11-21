@@ -1,7 +1,7 @@
 {
   "version": 1,
   "patterns": [
-    "engine-*.wgsl", "sculpt-*.wgsl", "materials/*.json",
+    "engine-*.wgsl", "sculpt-*.wgsl", "materials/*.json", "site.json",
     "sculpt.js", "sculpt-save.js", "sculpt-world-kit.js", "sculpt-renderer.js", "sculpt-webgpu.js",
     "sculpt-gpu-fields.js", "sculpt-erosion.js", "sculpt-rock-weather.js",
     "sculpt-volume.js", "sculpt-material-model.js", "sculpt-column.js",
@@ -12,6 +12,6 @@
     "sculpt-preview.js", "sculpt-map.js", "sculpt-knobs.js",
     "sculpt-control-schema.js", "sculpt-help-examples.js",
     "sculpt-tools.js", "sculpt-change-map.js", "sculpt-memory.js",
-    "repro/ui-previews.mjs", "internal/site/config.go"
+    "repro/ui-previews.mjs", "repro/control-previews.mjs", "repro/headless.mjs", "repro/png.mjs", "internal/site/config.go"
   ]
 }

@@ -22,8 +22,29 @@ const query = take('--query'), configs = take('--configs'), baseCommit = take('-
 const world = argv[0];
 if (!world) { console.error('usage: node repro/match_validate.mjs <world> [--query \'key=v&key=v\']'); process.exit(2); }
 const errors = [], warnings = [];
+// A key written twice in one object: JSON keeps the last, so an edit above a later copy renders nothing (round 11's trial-039 added a
+// world.shapes.hill that an empty "hill": {} further down shadowed). Returns [key, line] for each.
+function duplicateKeys(text) {
+  const found = [], stack = [];
+  let line = 1, expectKey = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '\n') line++;
+    else if (c === '"') {
+      let j = i + 1; while (j < text.length && text[j] !== '"') j += text[j] === '\\' ? 2 : 1;
+      const str = text.slice(i + 1, j); i = j;
+      if (expectKey && stack.length && stack[stack.length - 1]) { const keys = stack[stack.length - 1]; if (keys.has(str)) found.push([str, line]); keys.add(str); }
+      expectKey = false;
+    } else if (c === '{') { stack.push(new Set()); expectKey = true; }
+    else if (c === '[') { stack.push(null); expectKey = false; }
+    else if (c === '}' || c === ']') { stack.pop(); expectKey = false; }
+    else if (c === ',') expectKey = Boolean(stack.length && stack[stack.length - 1]);
+  }
+  return found;
+}
 function load(file) {
   const text = readFileSync(join(repo, file), 'utf8');
+  for (const [key, line] of duplicateKeys(text)) errors.push(`${file} line ${line}: key "${key}" appears twice in one object; JSON keeps the last, so the earlier one does nothing.`);
   try { return JSON.parse(text); } catch (e) {
     const at = Number(/position (\d+)/.exec(e.message)?.[1]);
     const line = Number.isFinite(at) ? text.slice(0, at).split('\n').length : '?';
@@ -93,6 +114,7 @@ for (const t of w.tools ?? []) {
 const colorKeys = new Set(['sunColor', 'skyColor']);   // the light colors the address reads (sculpt-scene.js hexColors)
 for (const [k, v] of new URLSearchParams(query)) {
   if (colorKeys.has(k)) { if (!/^[0-9a-f]{6}$/i.test(v)) errors.push(`--query ${k}=${v}: a color is six hex digits (rrggbb).`); continue; }
+  if (k === 'sea' || k === 'plain') continue;   // a map's own heights (MAP_HEIGHTS below)
   if (!known.has(k)) { errors.push(`--query ${k}: not a World control or known setting, so it would change nothing. See section 1 of the reference.`); continue; }
   const r = ranges.get(k), x = Number(v);
   if (!Number.isFinite(x)) errors.push(`--query ${k}=${v}: not a number.`);
@@ -101,7 +123,12 @@ for (const [k, v] of new URLSearchParams(query)) {
 
 // The map lane: each window's scene.
 const UNDULATION = new Set(['undulation', 'undulationScale', 'undulationCover', 'undulationArt']);   // the map's ground node (sculpt-knobs.js UNDULATION)
-const [{SHAPE_FIELDS, LANDFORM_KEYS, SECTION_KEYS}, {worldSlots}] = await Promise.all([import('../sculpt-scene.js'), import('./match_world.mjs')]);
+// A map's own sea level and plain height above it (Map pane; sculpt-map.js configureMap): a low-floored retail map uses the game's 0-255.
+const MAP_HEIGHTS = new Set(['sea', 'plain']);
+// A map's own water: its depths, bed and damp band (red-2's river stays light to depth 24 where red-3's sea darkens from depth 8). A map
+// holds its world's settings whole (owner, 2026-11-19); this short list is what a map maker sets per map, so the rest stays one world answer.
+const MAP_WATER = new Set(['shallowDepth', 'deepDepth', 'bedTint', 'bedBright', 'bedContrast', 'bedCracks', 'bedRelief', 'bedFlat', 'wetBand']);
+const [{SHAPE_FIELDS, LANDFORM_KEYS, SECTION_KEYS}, {worldSlots, materialUse}] = await Promise.all([import('../sculpt-scene.js'), import('./match_world.mjs')]);
 const {config, rocks, materials, missed} = await worldSlots(world, configs);
 if (missed.length) warnings.push(`world.rock: no room in the map's materials for the rock material of ${missed.join(', ')}; ${missed.length > 1 ? 'they show' : 'it shows'} the world's rock material (REFERENCE.md, "Rock slots")`);
 const {toolDefaults, DRAWN_KINDS} = await import('../sculpt-scene.js');
@@ -118,11 +145,18 @@ for (const f of scenes) {
   const had = new Set(new URLSearchParams(before).keys());
   for (const [k, v] of new URLSearchParams(sc.query ?? '')) {
     if (!pinned.has(k)) pinned.set(k, []); pinned.get(k).push(`${f.replace('.json', '')} ${v}`);
+    if (MAP_HEIGHTS.has(k)) { if (!(Number.isInteger(Number(v)) && Number(v) >= 0 && Number(v) <= 255)) errors.push(`${at} query ${k}=${v}: a whole number 0-255.`); continue; }
     if (!known.has(k)) { errors.push(`${at} query ${k}: not a setting the page reads.`); continue; }
-    if (!UNDULATION.has(k) && !had.has(k)) errors.push(`${at} query ${k}: a scene's query sets only the map's own ground relief (${[...UNDULATION].join(', ')}). ${k} is the world's: set it in world.knobDefaults, or give this map a rock type or ground of its own (README.md, "The map lane").`);
+    if (!UNDULATION.has(k) && !MAP_WATER.has(k) && !had.has(k)) errors.push(`${at} query ${k}: a scene's query sets only the map's own ground relief (${[...UNDULATION].join(', ')}), its sea and plain, and its own water (${[...MAP_WATER].join(', ')}). ${k} is the world's: set it in world.knobDefaults, or give this map a rock type or ground of its own (README.md, "The map lane").`);
     const r = ranges.get(k), x = Number(v);
     if (r && Number.isFinite(x) && (x < r[0] || x > r[1])) errors.push(`${at} query ${k}=${v} is outside its range ${r[0]} to ${r[1]}.`);
   }
+  if (sc.surface !== undefined) { try { (await import('../sculpt-material-model.js')).copySurface(sc.surface); } catch (err) { errors.push(`${at} surface: ${err.message}`); } }
+  // A role name (@rock) is resolved only in world.surface (internal/site/config.go); a map's own list holds material keys, so an @ name there draws nothing.
+  (Array.isArray(sc.surface) ? sc.surface : []).forEach((l, i) => {
+    const m = l?.material;
+    if (typeof m === 'string' && m.startsWith('@')) errors.push(`${at} surface[${i}] (${l.name ?? l.id ?? l.builtin}): material ${m} is a role name, which only world.surface resolves; a map's own list names the material itself${(w.materials ?? {})[m.slice(1)] ? ` (${w.materials[m.slice(1)]})` : ''}.`);
+  });
   (sc.strokes ?? []).forEach(([kind, , opt], i) => {
     const c = opt?.card ?? {}, where = `${at} stroke ${i} (${kind})`;
     for (const k of Object.keys(c)) if (!cardKeys.has(k)) warnings.push(`${where}: card key ${k} is not a stroke field (typo?). See section 5 of the reference.`);
@@ -131,6 +165,9 @@ for (const f of scenes) {
       const m = materials.find(m => m.slot === c.groundPreset);
       if (!m || m.worldWater) errors.push(`${where}: groundPreset ${c.groundPreset} is not a ground material slot (section 7 of the reference).`);
       else if (m.worldGround) errors.push(`${where}: groundPreset ${c.groundPreset} is the world's ground; choose it as 0.`);
+      // Slots are positions: a new surface layer's material or role takes a slot ahead of world.materials.extra and moves every later one
+      // (round 6's trial-032 turned green-5's ground into sand). A map lays an extra ground or a rock type's, rarely a role's or a layer's.
+      else if (/^role |surface layer/.test(materialUse(m))) warnings.push(`${where}: groundPreset ${c.groundPreset} now lays \`${m.source ?? m.name}\`, ${materialUse(m)}. If you added a surface layer or role material, the extra slots moved: renumber the scenes (section 7 of the reference).`);
     }
   });
 }

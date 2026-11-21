@@ -6,6 +6,7 @@
 import {LANDFORM_DEFAULTS,LANDFORM_SHAPES,SHAPE_FIELDS,shapeFrom} from './sculpt-scene.js';
 import {landformTool} from './sculpt-shape-presets.js';
 import {rockByKey} from './sculpt-rock-presets.js';
+import {orderedText} from './sculpt-share.js';
 
 // The icon set: Save as tool's icon choices in index.html (#tool-save-icons, one button with its svg each), which the shape buttons copy: a tool picks one by name.
 export const TOOL_ICONS=['landform','plateau','hill','mountain','ramp','valleyV','valleyU','valleyT','crater','crystal','deep','shallow','river','braided','cone','pillars','island'];
@@ -67,7 +68,12 @@ const fallBack=n => ({...n,tool:LANDFORM_TOOL.id,kept:true});
 export const keepStrokeTools=(nodes,ids) => nodes.map(n => n?.kind==='landform' && !ids.has(n.tool)?fallBack(n):n);
 // A working copy's marks (sculpt.js workingCopy): per stroke the settings that differ from its tool's defaults in its world (`defaultsOf`), which are
 // the ones the artist set by hand.
-export const markEdited=(nodes,defaultsOf) => nodes.map(n => { const base=n.kind==='ground'?null:defaultsOf(n); return base?{...n,edited:Object.keys(n.params).filter(k => k!=='seed' && JSON.stringify(n.params[k])!==JSON.stringify(base[k]))}:n; });
+export const markEdited=(nodes,defaultsOf) => nodes.map(n => {
+  const base=n.kind==='ground'?null:defaultsOf(n);
+  if (!base) return n;
+  const edited=Object.keys(n.params).filter(k => k!=='seed' && n.params[k]!==base[k] && orderedText(n.params[k])!==orderedText(base[k])).sort();
+  return {...n,edited};
+});
 // A working copy's strokes carried into another world (sculpt.js carryNodes; the ground node is the page's): where the toolbar (`ids`) has a stroke's tool,
 // each setting the artist changed by hand (`edited`, the working copy's marks) stays and every other takes `defaultsOf(stroke)`, the new world's for that
 // tool. A stroke whose tool it lacks falls back to the generic landform, and one that fell back before stays so: every number as it was, for good.

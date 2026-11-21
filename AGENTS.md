@@ -2,21 +2,34 @@
 
 Terraform is an experimental browser (WebGPU) terrain and map editor for
 Total Annihilation. These rules apply to every agent working in this
-repository. The owner's decisions behind them are in
-[docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md) ("Decisions" and "Rules for
-the cards"). Setup and ports are in
-[BACKLOG.md's ground rules](BACKLOG.md#ground-rules-every-card). Where this
-page and an older card disagree, this page wins.
+repository. The goal, the owner's decisions behind these rules and the
+architecture are in [docs/DESIGN.md](docs/DESIGN.md); setup is in
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Where this page and another doc
+disagree, this page wins. Code and tests cite these rules by number: keep the
+numbering.
 
 ## How to work
 
 1. **Work in a worktree:** `git worktree add ../terraform-wt-<task> -b <task> main`.
    Never edit the main checkout or another agent's worktree. Never reset,
    rebase, stash, amend or force-push `main` or anyone else's work.
-2. **Use your own server, browser port and assets root** (BACKLOG ground
-   rule 2). Never stop a process you did not start. Port 8801 is the
-   owner's editor, and the Chrome checks default to it (CDP 9450): always
-   pass `--server` and `--port`.
+2. **Use your own server, browser port and assets root.** Never stop a
+   process you did not start. Port 8801 is the owner's editor, and the
+   Chrome checks default to it (CDP 9450): always pass `--server` and
+   `--port`. Ports 8766-8812 belong to other sessions, and the server's
+   default port (8767) is among them, so always pass `--port` too:
+
+   ```
+   R=/tmp/nanolathe-map-editor
+   mkdir -p $R/agent-<task>
+   go run ./cmd/terraform --port <yours> --assets-root $R/agent-<task> \
+     > $R/agent-<task>/server.log 2>&1 &
+   ```
+
+   Some tools use `<cdp>` through `<cdp>+2`. Retail crops and measuring
+   inputs under `$R` (`$R/repro-r7`, `$R/retail-<world>`, `$R/assets-*`) are
+   read-only. Optional Python scripts use the main checkout's
+   `.venv/bin/python`.
 3. **Do the task you were given, at the size you were given.** Add no
    panels, pages, buttons, tools or controls the task does not ask for. If
    you think the editor needs one, propose it in your report.
@@ -48,7 +61,9 @@ page and an older card disagree, this page wins.
 7. **One engine.** Every world runs the same GPU pipeline: shape, ground,
    time, surface and light. A world is data: its numbers in
    `materials/<world>.json`, its presets, and its ground and water
-   materials (`materials/textures.json`).
+   materials (`materials/textures.json`). A built-in world is where a new
+   map starts; the map then holds its world's settings whole, so retuning a
+   built-in world never changes a saved map (owner, 2026-11-19).
    - Code branches on a feature or on material data, never on a world's
      name (`repro/gate.sh` checks this).
    - There is one render path. Don't keep a CPU copy of GPU work, add a
@@ -79,9 +94,12 @@ page and an older card disagree, this page wins.
 9. **A control for everything an artist would shape, and each one earns its place.**
    - Artists set a world's look by hand (shape, structure, layering,
      variation, roughness, broad and fine detail, weathering, color,
-     vegetation, wetness, shine), and their settings become the world's
-     defaults. Reuse or extend an existing control before adding one; a new
-     control does not duplicate one that sits beside it.
+     vegetation, wetness, shine), and their settings are saved with the
+     map: a map is its own world, and any map's look can start a new map or
+     be applied to another (owner, 2026-11-19; nothing about a world is kept
+     in the browser apart from a map). Reuse or extend an existing control
+     before adding one; a new control does not duplicate one that sits
+     beside it.
    - Every control is continuous: its low end is a value of the same model,
      not a switch. Moving it to 0, or a small step above 0, changes the
      picture a little, never into a different render path.
@@ -172,7 +190,7 @@ See [the asset workflow](docs/PREVIEW_ASSETS.md).
 Optimize for fast iteration on this unreleased editor. Run checks that can
 catch a failure caused by your change. Do not run every integration check,
 every scene, control sweeps, realism reports or performance benchmarks for
-every change. Older cards asking for broad checks do not override this rule.
+every change. Older docs or scripts asking for broad checks do not override this rule.
 
 - During iteration, run relevant unit tests (`node --test repro/paths.test.mjs`,
   for example) and inspect changed editor behavior. Documentation-only edits
@@ -225,6 +243,9 @@ Use additional standalone checks only for the work they protect:
 - Section editor, features, passability or workspace: the corresponding
   `repro/curveedit.mjs`, `features.mjs`, `passability.mjs` or `workspace.mjs`,
   with your own `--server` and `--port`.
+- What a map keeps, Apply look or New map with this look: `repro/map-snapshot.mjs`
+  (it edits `materials/*.json` in its worktree and puts them back) and
+  `repro/look.mjs`, with your own `--server` and `--port`.
 - Drag or bake performance: `node repro/perf.mjs` when investigating or
   claiming a performance change; compare both builds under similar conditions.
 - Visual terrain work: inspect affected authored scenes at 1x. Realism reports,

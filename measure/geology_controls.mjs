@@ -59,8 +59,8 @@ const BODY_SCALE = {crystalTiers: 100, crystalSides: 1, crystalStep: 1, crystalT
   crystalShoreSeam: 100, frostNeedles: 100, iceFacets: 100, iceFacetSize: 1};
 const impacts = family === 'impacts', shores = family === 'shores', bodies = family === 'bodies', fractures = family === 'fractures' || shores || bodies || impacts;   // both read each scene's own effective value
 const scenes = {};   // world -> the three scenes' variants, for the page's own values
-const queries = {};   // world -> the three scenes' own query pairs (zhon-1: beachWidth=0), which win over every table
-for (const world of ['green', 'red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice']) {
+const queries = {};   // world -> the three scenes' own query pairs, which win over every table
+for (const world of ['green', 'red', 'archipelago', 'moon', 'lava', 'desert', 'crystal', 'ice']) {
   const q = [1, 2, 3].map(n => new URLSearchParams(JSON.parse(readFileSync(scenePath(world, n), 'utf8')).query));
   queries[world] = q; scenes[world] = q.map(() => '');
 }

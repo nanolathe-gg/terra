@@ -529,7 +529,7 @@ export class TerrainRenderer {
   // The draw's uniform table: only the six placement rows are read, at PLACEMENT_ROW. A table with a `placement` block gives them
   // (Green's); every other table leaves them to the world's material, as the world's placement always was.
   placementTable(variant) {
-    const rows = this.materialData?.placement ? tablePlacementRows(this.materialData) : this.placementRows(variant);
+    const rows = this.config.placement ? tablePlacementRows(this.config) : this.placementRows(variant);   // the map's copy (sculpt-save.js ENGINE_TABLES)
     // The world's surface layers in the rows before the placement rows (engine-frag.wgsl surfaceStage): two a layer from row 0, the stages' heads at SURFACE_HEAD_ROW.
     // A material layer draws the map's material that carries its id (worldLayer).
     const slotOf = id => [...(this.grounds || new Map())].find(([, m]) => m.worldLayer === id)?.[0] ?? -1;
@@ -899,9 +899,7 @@ export class TerrainRenderer {
     }
     this.f('uShadeBlue', variant.has('shadeBlue') ? Number(variant.get('shadeBlue')) : 0);
     this.f('uFrostWet', variant.has('frostWet') ? Number(variant.get('frostWet')) : 0);
-    // E7 (Crystal): shallow water's crystal mosaic.
-    this.f('uCrystalShallow', variant.has('crystalShallow') ? Number(variant.get('crystalShallow')) : 0);
-    this.f('uCrystalShallowPx', variant.has('crystalShallowPx') ? Number(variant.get('crystalShallowPx')) : 10);
+    this.f('uSlabShallows', Math.min(1, Math.max(0, Number(variant.get('slabShallows')) || 0)));
     // G7 (Crystal): the craters' web and light; the defaults leave every world as it was.
     this.f('uCrystalCraterWeb', variant.has('crystalCraterWeb') ? Number(variant.get('crystalCraterWeb')) : 0);
     this.f('uCrystalCraterWebPx', variant.has('crystalCraterWebPx') ? Number(variant.get('crystalCraterWebPx')) : 14);
@@ -910,8 +908,6 @@ export class TerrainRenderer {
     this.f('uCrystalCraterTone', variant.has('crystalCraterTone') ? Number(variant.get('crystalCraterTone')) : 0);
     this.f('uCrystalCraterLight', variant.has('crystalCraterLight') ? Number(variant.get('crystalCraterLight')) : 1);
     this.f('uCrystalSeamEnd', variant.has('crystalSeamEnd') ? Number(variant.get('crystalSeamEnd')) : 0.74);
-    this.f('uCrystalShallowInk', variant.has('crystalShallowInk') ? Number(variant.get('crystalShallowInk')) : 0.55);
-    this.f('uCrystalShallowAll', variant.has('crystalShallowAll') ? Number(variant.get('crystalShallowAll')) : 0);
     // E11: shallow water round 2; every default is the earlier look.
     this.f('uShelfWander', variant.has('shelfWander') ? Number(variant.get('shelfWander')) : 0);
     this.f('uStepSoftPx', variant.has('stepSoftPx') ? Number(variant.get('stepSoftPx')) : 1);
@@ -959,6 +955,7 @@ export class TerrainRenderer {
     this.f('uShineGate', variant.has('shineGate') ? Number(variant.get('shineGate')) : 0);
     this.f('uShineHeadroom', variant.has('shineHeadroom') ? Number(variant.get('shineHeadroom')) : 0);
     this.f('uPockmark', variant.has('pockmark') ? Number(variant.get('pockmark')) : 0);
+    this.f('uStepCrease', variant.has('stepCrease') ? Number(variant.get('stepCrease')) : 0);
     this.f('uPockSize', variant.has('pockSize') ? Number(variant.get('pockSize')) : 5);
     // G8 (Moon).
     this.f('uMoonCups', variant.has('moonCups') ? Number(variant.get('moonCups')) : 0);
@@ -1014,7 +1011,7 @@ export class TerrainRenderer {
     this.i('uGroundFringe', material.groundFringe === true);
     // A preset can retain coloured veins or dark neutral grain at its edge.
     // The blending algorithm does not choose a biome's material colour.
-    this.f('uWetBand', material.wetBand ?? 13);
+    this.f('uWetBand', variant.has('wetBand') ? Number(variant.get('wetBand')) : material.wetBand ?? 13);   // World control; a world's material table sets its default (config.go)
     // E6: mineralDetail scales the rock art's contrast about its mean (1: as drawn).
     const bed = this.config.water?.riverBedRGB;   // riverfix: a braided bed's gravel, world data (absent: the draw darkens the world's rock)
     this.set('uRiverBed', bed ? [...bed.map(v => v / 255), 1] : [0, 0, 0, 0]);
@@ -1064,7 +1061,7 @@ export class TerrainRenderer {
     set('uFaceStreak', number('faceStreak', 0));
     for (const [key, fallback] of [['rockFace', 0], ['rockFaceFrom', 0.6], ['faceBed', 5.5], ['faceLedge', 2.2], ['faceRun', 90], ['faceLean', 28], ['faceScratch', 2.5],
       ['faceScratchSize', 7], ['faceBlock', 3], ['faceBlockSize', 11], ['faceGrass', 0.8], ['faceRock', 0.9], ['faceCrease', 2.5], ['faceCreaseSize', 6],
-      ['faceShade', 0.85], ['faceWear', 0.35], ['faceLayers', 0], ['faceMass', 1], ['faceTone', 0.12], ['faceStrata', 0], ['faceWet', 0], ['shoreRock',0],['shoreShelf',0],['runoff',0],['runoffScale',24],['runoffConcentration',.65],['runoffCut',2],['runoffStain',.5],['debrisAmount',0],['debrisReach',56],['debrisDepth',4],['rimReach',0], ['faceJointTilt',0],['faceScaleVary',0],['faceFold',0],['faceBedVary',1],['bedCycleVary',0],['faceBreak',0],['faceSpall',0],['faceClast',0],['faceClastSize',12],['faceMineral',0],['faceJointWidth',1],['faceSecondary',.35],['faceContinuity',1],['faceDetailPatch',0],['faceWhole',0],['faceWholeLarge',0],['faceRegular',0],['sandLee',0],['groundPatch',0],['groundPatchSize',200],['faceFresh',0],['faceRind',0],['faceRindDepth',6],['faceRindTone',-.22],['faceRindWarmth',.35],['faceRindRough',.65], ['faceStretch', 1], ['faceBlockHeight', 1], ['faceRound', 0], ['faceJoint', 0.35], ['faceExtrude', 0], ['faceLamina', 0], ['faceLaminaSize', 6], ['faceScratchLength', 50], ['faceScratchAngle', 0], ['absorbDepth', 0], ['shadowTint', 0]])
+      ['faceShade', 0.85], ['faceWear', 0.35], ['faceLayers', 0], ['faceMass', 1], ['faceTone', 0.12], ['faceStrata', 0], ['faceWet', 0], ['shoreRock',0],['shoreShelf',0],['runoff',0],['runoffScale',24],['runoffConcentration',.65],['runoffCut',2],['runoffStain',.5],['debrisAmount',0],['debrisReach',56],['debrisDepth',4],['rimReach',0], ['faceJointTilt',0],['faceSlopeAlign',0],['faceScaleVary',0],['faceFold',0],['faceBedVary',1],['bedCycleVary',0],['faceBreak',0],['faceSpall',0],['faceClast',0],['faceClastSize',12],['faceMineral',0],['faceJointWidth',1],['faceSecondary',.35],['faceContinuity',1],['faceDetailPatch',0],['faceWhole',0],['faceWholeLarge',0],['faceRegular',0],['sandLee',0],['groundPatch',0],['groundPatchSize',200],['faceFresh',0],['faceRind',0],['faceRindDepth',6],['faceRindTone',-.22],['faceRindWarmth',.35],['faceRindRough',.65], ['faceStretch', 1], ['faceBlockHeight', 1], ['faceRound', 0], ['faceJoint', 0.35], ['faceExtrude', 0], ['faceLamina', 0], ['faceLaminaSize', 6], ['faceScratchLength', 50], ['faceScratchAngle', 0], ['absorbDepth', 0], ['shadowTint', 0]])
       set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
     set('uFaceStreakFrom', number('faceStreakFrom', 0.3));
     set('uGentleRelief', number('gentleRelief', 0.6));
@@ -1076,6 +1073,7 @@ export class TerrainRenderer {
     set('uBedCrackSize', number('bedCrackSize', 36));
     set('uLumpRelief', number('lumpRelief', 4));
     set('uCrackSpacing', number('crackSpacing', 40));
+    set('uCrackFrom', number('crackFrom', 0.44));
     set('uCrackWidth', number('crackWidth', 1));
     set('uCrackNetwork', number('crackNetwork', 0.35));
     set('uCrackMinor', number('crackMinor', 0.75));
@@ -1103,6 +1101,7 @@ export class TerrainRenderer {
     set('uBandJag', number('bandJag', 0));
     set('uBandFade', number('bandFade', 0.75));
     set('uBandLevel', number('bandLevel', 0));
+    set('uBandFill', number('bandFill', 0));
     set('uBeachDistance', this.layers.has('beach') ? (this.config.material?.beachWidth ?? 120) * number('beachWidth', 0.6) : 0);
     set('uHasBeach', this.layers.has('beach'));
     set('uSandBanding', number('sandBanding', 0));

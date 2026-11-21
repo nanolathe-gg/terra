@@ -121,7 +121,7 @@ export function strokeCurve(kind, q) {
   const back = kind === 'landform' ? k.back ?? k.knots : k.back;
   if (kind === 'landform') out.back = sampleKnots(back);
   out.u.cvLip = k.knots.concat(kind === 'landform' ? back : []).some(p => p[1] > 1 || p[1] < 0) ? 1 : 0;
-  if (SECTION_KINDS.includes(kind)) Object.assign(out.u, {sSteps: Math.round(clamp(q.terraces, 0, 8)), sFlat: Math.min(q.ledge, .95), sJit: q.terraceJitter, sBreak: clamp(q.breakup || 0, 0, 1)});
+  if (SECTION_KINDS.includes(kind)) Object.assign(out.u, {sSteps: Math.round(clamp(q.terraces, 0, 12)), sFlat: Math.min(q.ledge, .95), sJit: q.terraceJitter, sBreak: clamp(q.breakup || 0, 0, 1)});
   return out;
 }
 // H27: a landform's two half widths (px): the whole section is the diameter, and the back (the lean side) is Lean times the front.
@@ -258,7 +258,7 @@ export const fingerReach = (q, radius = q.radius || 40) => .5 * radius * (1 + 1.
 export const landformShore = q => q.fingers > 0 || Math.round(q.shoreLayers) >= 1 || q.shorePlates > 0 || landformBeach(q);
 export function landformSteps(q) {
   const reference=Math.round(clamp(q.stepReference||0,0,2)),shore=reference>0;
-  const count=Math.round(clamp(q.terraces||0,0,shore?12:8));
+  const count=Math.round(clamp(q.terraces||0,0,12));
   return {...q,terraces:shore?0:count,shoreLayers:shore?count:0,layerStyle:reference===2?1:0,
     layerLedge:clamp(q.ledge??.6,.4,.95),layerRough:clamp(q.terraceJitter??.35,0,1)};
 }

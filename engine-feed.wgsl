@@ -31,7 +31,8 @@ struct FU {
     envelope: f32,      // the erosion budget's envelope (erosionEnvelope)
     tilesWide: u32,
     maskStride: u32,    // seedMain: seven authored mask words or one selected word per Time cell
-    pad1: u32,
+    shownHeights: u32,  // seedMain: 1 when F's heights are already the ones the art shows (the Time cells, timeDownMain); else F holds the
+                        // shape fields' planes and the undulation the art hides (plane 6) comes off
     invalidRect: vec4i, // authored edits since this refinement result; empty when current
 }
 
@@ -60,11 +61,19 @@ fn sm(a: f32, b: f32, v: f32) -> f32 { let t = clamp((v - a) / (b - a), 0.0, 1.0
 fn signedByte(w: u32, p: u32) -> i32 {
     return (i32(w << (24u - (p & 3u) * 8u))) >> 24u;
 }
-fn height(x: i32, y: i32) -> f32 { return F[u32(y) * fu.grid + u32(x)]; }
-fn gradientAt(x: i32, y: i32) -> f32 {
+// The height the art shows: the game's, less the undulation the art does not show (plane 6, engine-shape.wgsl artLevel; 0 where the art shows
+// all of it). Time's slope gate reads it, so a map that hides its rolling ground from the art (undulationArt below 1) gets no Time channels cut
+// along that hidden roll; the roll stays in the game's heights. On the Time cells (a lattice finer than TIME_CELL) the cells' heights are
+// already the shown ones (timeDownMain).
+fn shownHeight(x: i32, y: i32) -> f32 {
+    let i = u32(y) * fu.grid + u32(x);
+    if (fu.shownHeights != 0u) { return F[i]; }   // the Time cells hold two planes: never read a seventh
+    return F[i] - F[6u * fu.cells + i];
+}
+fn shownGradientAt(x: i32, y: i32) -> f32 {
     let n = i32(fu.grid);
     let lx = max(0, x - 1); let rx = min(n - 1, x + 1); let ty = max(0, y - 1); let by = min(n - 1, y + 1);
-    return length(vec2f((height(rx, y) - height(lx, y)) / (f32(rx - lx) * fu.spacing), (height(x, by) - height(x, ty)) / (f32(by - ty) * fu.spacing)));
+    return length(vec2f((shownHeight(rx, y) - shownHeight(lx, y)) / (f32(rx - lx) * fu.spacing), (shownHeight(x, by) - shownHeight(x, ty)) / (f32(by - ty) * fu.spacing)));
 }
 
 @compute @workgroup_size(8, 8)
@@ -81,8 +90,8 @@ fn seedMain(@builtin(global_invocation_id) id: vec3u) {
     if (h <= sea) { out.z = -1.0; fixedField[i] = out; return; }
     let p = F[fu.cells + i];
     if (p >= 1.0) { fixedField[i] = out; return; }
-    var slope = gradientAt(x, y);
-    for (var yy = max(0, y - 1); yy <= min(n - 1, y + 1); yy++) { for (var xx = max(0, x - 1); xx <= min(n - 1, x + 1); xx++) { slope = max(slope, gradientAt(xx, yy)); } }
+    var slope = shownGradientAt(x, y);
+    for (var yy = max(0, y - 1); yy <= min(n - 1, y + 1); yy++) { for (var xx = max(0, x - 1); xx <= min(n - 1, x + 1); xx++) { slope = max(slope, shownGradientAt(xx, yy)); } }
     let weight = sm(0.035, 0.20, slope) * (1.0 - clamp(p, 0.0, 1.0));
     if (weight <= 0.0) { fixedField[i] = out; return; }
     let steep = sm(0.7, 1.5, slope);
@@ -293,7 +302,9 @@ fn gatherMaps(@builtin(global_invocation_id) id: vec3u) {
 
 fn tcFine(c: vec2u) -> vec2u { return min(vec2u(u32(fu.ox), u32(fu.oy)) + c * fu.gh, vec2u(fu.grid - 1u)); }
 // A coarse height is the fine heights around its cell under a 1 2 1 tent, so the pass erodes the ground at its own scale and not one fine
-// sample's; protection and the masks are the cell's own (a mean would blur a protected edge).
+// sample's; protection and the masks are the cell's own (a mean would blur a protected edge). The heights are the ones the art shows (less the
+// undulation it hides, plane 6): the pass's change lands on the game's heights (timeUpHeightMain), so a hidden roll keeps its height and gets
+// no channels cut along it.
 @compute @workgroup_size(8, 8)
 fn timeDownMain(@builtin(global_invocation_id) id: vec3u) {
     let gc = fu.gw;
@@ -302,7 +313,8 @@ fn timeDownMain(@builtin(global_invocation_id) id: vec3u) {
     var h = 0.0;
     for (var dy = -1; dy <= 1; dy++) { for (var dx = -1; dx <= 1; dx++) {
         let w = f32((2 - abs(dx)) * (2 - abs(dy))) / 16.0;
-        h += w * F[u32(clamp(f.y + dy, 0, n - 1)) * fu.grid + u32(clamp(f.x + dx, 0, n - 1))];
+        let k = u32(clamp(f.y + dy, 0, n - 1)) * fu.grid + u32(clamp(f.x + dx, 0, n - 1));
+        h += w * (F[k] - F[6u * fu.cells + k]);
     } }
     let i = u32(f.y) * fu.grid + u32(f.x);
     tcF[j] = h; tcF[gc * gc + j] = F[fu.cells + i];

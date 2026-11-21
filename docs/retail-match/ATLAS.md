@@ -36,7 +36,7 @@ your output folder.
 - **Cutting a 1x window of any map** into your output folder:
 
   ```sh
-  "${PYTHON:-/Users/daniel/src/terraform/.venv/bin/python}" repro/retail_crop.py map "$R/retail-<world>/<map>" <x> <y> <out>/crops/<name>
+  "${PYTHON:-python3}" repro/retail_crop.py map "$R/retail-<world>/<map>" <x> <y> <out>/crops/<name>
   ```
 
   `x` and `y` are multiples of 16. You get `retail.png` (1024 px),
@@ -47,7 +47,7 @@ your output folder.
 
 ## Building blocks and catalogs
 
-- **The feature catalog:** `docs/BIOME_CATALOG.md` (in the checkout). For
+- **The feature catalog:** `docs/retail-match/BIOME_CATALOG.md` (in the checkout). For
   each world it covers the recurring retail features, the tool and rock type
   that draw each one, a status, and the gaps that are known and ranked.
   Start here, so you do not rediscover a known gap.
@@ -72,7 +72,7 @@ Your base trial prints each window's starting scores. "Map exports here" counts 
 | World | Windows (held out) | Map exports here | Sections | Notes |
 | --- | --- | --- | --- | --- |
 | green | 1-6 (7) | 13 | none | dossier: [worlds/green.md](worlds/green.md) |
-| red | 1-2 (3) | 9 | none | |
+| red | 1-3 (4) | 9 | none | dossier: [worlds/red.md](worlds/red.md); red-4 is a sea coast (red triangle); red-3's sea refitted to its heights in round 4 |
 | archipelago | 1-2 (3) | 10 | none | known tells: even fringe rings, rippled sand, banded shallows |
 | moon | 1-2 (3) | 13 | moon | |
 | zhon | 1-2 (3) | none | sections-zhon | the windows are map editor sections |
@@ -86,7 +86,7 @@ Your base trial prints each window's starting scores. "Map exports here" counts 
 If `worlds/<world>.md` is missing, write it before your first trial,
 following `worlds/green.md`. Draw on:
 
-- the world's section of `docs/BIOME_CATALOG.md`;
+- the world's section of `docs/retail-match/BIOME_CATALOG.md`;
 - its `catalog.md`;
 - your own look at its windows' `retail.png` and a few map thumbnails.
 

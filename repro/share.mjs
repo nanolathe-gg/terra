@@ -85,7 +85,7 @@ await session(async ({send, ev, shot, open}) => {
   for (let i = 0; i < 100 && !await ev(`document.getElementById('share-url').value`); i++) await sleep(200);
   link = await ev(`document.getElementById('share-url').value`);
   await shot('1-share-link');
-  check('link is page?map=id', /[?&]map=[a-z2-7]{16}$/.test(link), link);
+  check('link uses #/maps/<id>', /#\/maps\/[a-z2-7]{16}$/.test(link), link);
   // The same map shared again gives the same link.
   await openShare(ev);
   for (let i = 0; i < 100 && await ev(`document.getElementById('share-result').hidden`); i++) await sleep(200);
@@ -99,7 +99,7 @@ await session(async ({send, ev, shot, open}) => {
   ownJson = await sketchJson(ev); await sleep(1200);
   check('own map differs from shared', nodesOf(ownJson) !== nodesOf(sharedJson));
   // A link that does not exist leaves the map alone and says so.
-  const bad = link.replace(/map=.*/, 'map=aaaaaaaaaaaaaaaa');
+  const bad = link.replace(/[^/]+$/, 'aaaaaaaaaaaaaaaa');
   await open(bad);
   check('unknown link says so', /No saved map has this link/.test(await ev(`document.getElementById('error').textContent`)));
   { const now = await sketchJson(ev); check('unknown link leaves own map', nodesOf(now) === nodesOf(ownJson), differs(ownJson, now)); }
@@ -110,11 +110,11 @@ await session(async ({send, ev, shot, open}) => {
   await openShare(ev);
   for (let i = 0; i < 100 && !await ev(`document.getElementById('share-url').value`); i++) await sleep(200);
   check('share, open, share again: same link', await ev(`document.getElementById('share-url').value`) === link, await ev(`document.getElementById('share-url').value`));
-  check('map= dropped from the address', !(await ev('location.search')).includes('map='));
+  check('the map link stays in the address', await ev('location.href') === link);
   { const maps = await savedMaps(ev); check('own map kept in Maps beside the shared one', maps.length === 2 && maps.filter(m => m.here).length === 1, JSON.stringify(maps)); }
   await shot('3-opened-shared');
   await openOtherMap(ev);
-  check('Maps opens the own map again', nodesOf(await sketchJson(ev)) === nodesOf(ownJson));
+  check('Maps opens the own map again and clears the shared address', nodesOf(await sketchJson(ev)) === nodesOf(ownJson) && await ev('location.hash') === '');
   await shot('4-restored');
   // A reload keeps the tab's map: nothing re-opens the shared map.
   await open(page); check('reload keeps the own map', nodesOf(await sketchJson(ev)) === nodesOf(ownJson));
@@ -135,7 +135,7 @@ await session(async ({send, ev, shot, open}) => {
   await open(redLink);
   check('world switch: world changed', await ev('sculptRegion.sketch().biome') === 'red');
   check('world switch: the status says where the own map is', /saved as a new map/.test(await ev(`document.getElementById('status').textContent`)));
-  check('world switch: no map= or shared= left in the address', !/[?&](map|shared)=/.test(await ev('location.search')), await ev('location.search'));
+  check('world switch: the map link stays in the address', await ev('location.href') === redLink);
   await shot('5-world-switch');
   { const maps = await savedMaps(ev); check('world switch: own map kept in Maps', maps.length === 2, JSON.stringify(maps)); }
   await openOtherMap(ev);
@@ -146,7 +146,7 @@ await session(async ({send, ev, shot, open}) => {
 });
 check('console clean', logs.filter(l => !/favicon|404/.test(l)).length === 0, logs.join(' | ').slice(0, 300));
 if (tokenFile && link) {
-  const id = link.split('map=')[1], token = readFileSync(tokenFile, 'utf8').trim();
+  const id = new URL(link).hash.split('/').pop(), token = readFileSync(tokenFile, 'utf8').trim();
   const r = await fetch(`${mapsUrl}/${id}`, {method: 'DELETE', headers: {Authorization: `Bearer ${token}`}});
   const after = await fetch(`${mapsUrl}/${id}`);
   check('test entry deleted', r.ok && after.status === 404, `delete ${r.status}, then get ${after.status}`);

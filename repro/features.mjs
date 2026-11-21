@@ -113,8 +113,8 @@ try {
   assert.equal(loaded.n, 4); assert.match(loaded.status, /1 saved feature does not fit this world or map and was left out/); report.unfit = loaded.status;
   report.select = 'select, drag, metal, re-roll, Shift-add, Delete, refused overlap';
   // Every world places every kind: a kind its table lacks is Green's (the Go config generator), lit by the world's own sun. Moon has rocks of its
-  // own and Green's trees, shrubs and scars; Zhon has no table and takes all four.
-  for (const world of ['moon', 'zhon']) {
+  // own and Green's trees, shrubs and scars. Archipelago also takes Green's rocks.
+  for (const world of ['moon', 'archipelago']) {
     await send('Page.navigate', {url: `${server}/?biome=${world}&mapX=4&mapY=4&scratch=features-test-${world}&gpuMB=512&heapMB=1536`}); await ready();
     await press('#feature-tool');
     assert.equal(await ev('document.getElementById("feature-kind-note").textContent'), '');
@@ -123,7 +123,7 @@ try {
     assert.equal(await ev('sculptCanvas.features.addFeature("rock",20,20)'), true); assert.equal(await ev('sculptCanvas.features.addFeature("tree",30,30)'), true);
     await settled(); await shot(`${world}-rock-tree.png`);
   }
-  report.everyWorld = 'Moon and Zhon place every kind (a kind a world lacks is Green\'s)';
+  report.everyWorld = 'Moon and Archipelago place every kind (a kind a world lacks is Green\'s)';
   // The shared catalog: import, duplicate, recolor, edit and place independently.
   await send('Page.navigate', {url: `${server}/?biome=green&mapX=4&mapY=4&gpuMB=512&heapMB=1536`}); await ready();
   await press('#feature-tool'); await set('#feature-kind','tree');
@@ -199,26 +199,21 @@ try {
   assert.deepEqual(await placements(),beforeReorder.features);
   await ev('(async()=>{sculptCanvas.zoom(1);const v=document.getElementById("viewport");v.scrollLeft=180;v.scrollTop=100;v.dispatchEvent(new Event("scroll"));await sculptCanvas.idle();return true;})()'); await settled(); await shot('mixed-recipes.png');
   const saved=await ev('sculptCanvas.features.serialize()');
-  await set('#biome-select','biome:moon'); await sleep(500); await ready();
+  // Another world through Apply look (owner, 2026-11-19): a whole look from Moon forks the map there; Features only from the map left in
+  // Green, in this browser's maps, brings the map's own feature styles back.
+  const look=async(pick,cards)=>{await press('#world-apply');await sleep(300);await ev(`(async()=>{const s=document.getElementById('look-source');const o=[...s.options].find(${pick});s.value=o.value;s.dispatchEvent(new Event('change'));for(const b of document.querySelectorAll('#look-cards input'))b.checked=${cards?`${JSON.stringify(cards)}.includes(b.value)`:'true'};document.getElementById('look-cards').dispatchEvent(new Event('change'));for(let i=0;i<80&&document.getElementById('look-apply').disabled;i++)await new Promise(r=>setTimeout(r,100));document.getElementById('look-apply').click();return true;})()`);};
+  await look(`o=>o.value==='builtin:moon'`); await sleep(1500); await ready(`sculptDebug.biome==='moon'`);
   assert.equal(await ev('sculptRegion.sketch().biome'),'moon');
+  await look(`o=>o.value.startsWith('map:')&&o.text.includes('Green Planet')`,['features']); await sleep(800); await ready();
   assert.deepEqual(await ev('sculptCanvas.features.serialize().featureSet'),saved.featureSet);
   assert.deepEqual(await placements(),saved.features);
   await ev('(async()=>{sculptCanvas.zoom(1);const v=document.getElementById("viewport");v.scrollLeft=180;v.scrollTop=100;v.dispatchEvent(new Event("scroll"));await sculptCanvas.idle();return true;})()'); await settled(); await shot('mixed-recipes-moon.png');
   const pack=await ev(`sculptMap.export('Mixed Recipes').then(r=>({count:r.featureCount,check:r.selfCheck}),e=>({error:e.message}))`);
   assert.equal(pack.error,undefined);assert.equal(pack.count,saved.features.length);assert.equal(pack.check.archive,true);
-  // Custom worlds capture their recipes; clearing a map uses those defaults.
-  await set('#world-new-name','Recipe test world');await press('#world-new');await sleep(500);await ready();
+  // The map's feature set is its own (owner, 2026-11-19: everything lives with the map): it survives a reload of the map.
+  await ev('location.reload(),true');await sleep(500);await ready();
   assert.deepEqual(await ev('sculptCanvas.features.serialize().featureSet'),saved.featureSet);
-  await ev('sculptCanvas.features.load({}),true');
-  assert.deepEqual(await ev('sculptCanvas.features.serialize().featureSet'),saved.featureSet);
-  const worldFile=await ev(`(async()=>{const original=URL.createObjectURL;let blob;try{URL.createObjectURL=b=>{blob=b;return original(b);};document.getElementById('world-export').click();return JSON.parse(await blob.text());}finally{URL.createObjectURL=original;}})()`);
-  assert.deepEqual(worldFile.world.featureSet,saved.featureSet);
-  const worldPath=join(out,'mixed.world.json');writeFileSync(worldPath,JSON.stringify(worldFile));
-  const dom=await send('DOM.getDocument'),fileNode=await send('DOM.querySelector',{nodeId:dom.result.root.nodeId,selector:'#world-file'});
-  await send('DOM.setFileInputFiles',{nodeId:fileNode.result.nodeId,files:[worldPath]});await sleep(500);await ready();
-  await ev('sculptCanvas.features.load({}),true');
-  assert.deepEqual(await ev('sculptCanvas.features.serialize().featureSet'),saved.featureSet);
-  report.recipes='Artist canopy, size variation, tendril and camouflage edits undo/save/export correctly. Imported Red tendrils and Lava rocks; independent colors, duplicate, count edits, atomic footprint rejection, reorder/load, fill/undo, world switch, custom-world defaults, world file export/import and archive export passed';
+  report.recipes='Artist canopy, size variation, tendril and camouflage edits undo/save/export correctly. Imported Red tendrils and Lava rocks; independent colors, duplicate, count edits, atomic footprint rejection, reorder/load, fill/undo, world switch, the feature set kept with the map and archive export passed';
   assert.deepEqual(errors, []);
   console.log(JSON.stringify(report, null, 1));
 } finally { ws?.close(); browser.kill(); }

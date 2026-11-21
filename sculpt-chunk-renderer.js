@@ -45,7 +45,8 @@ const COLOR_INPUT_PACK=`
   let rockId=(round(f.r*127.0)-127.0)/127.0;let groundId=round(f.g*127.0)/255.0;
   packed[2u*plane+i]=pack4x8snorm(vec4f(e.gba,rockId));
   let weather=textureLoad(grids,p,0,0);let material=textureLoad(grids,p,1,0);let time=textureLoad(grids,p,2,0);let fall=textureLoad(grids,p,3,0);
-  packed[3u*plane+i]=pack4x8unorm(vec4f(weather.rg,time.rg));packed[4u*plane+i]=pack4x8unorm(material);packed[5u*plane+i]=pack4x8unorm(vec4f(fall.rg,groundId,0));
+  // The fall layer's remaining channel carries the physical shore slab mask.
+  packed[3u*plane+i]=pack4x8unorm(vec4f(weather.rg,time.rg));packed[4u*plane+i]=pack4x8unorm(material);packed[5u*plane+i]=pack4x8unorm(vec4f(fall.rg,groundId,f.b));
 }`;
 
 // Scissor cached native F work in raster pixels, retaining helper invocations
@@ -142,7 +143,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     // pixel: those far samples need only the height grid (`far` widens the grid's apron, not the fields'). At every world's own sun there are
     // none of the last, and far is the twelfth sample's reach.
     const sun=this.sunVector(),rise=sun[2]/Math.hypot(sun[0],sun[1]),far=238.6*rise<240+1e-3?240/rise:12**2*1.4+2;
-    const shadow=9**2*1.4+2,draw=Math.max(shadow,128,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,60,n('cavity',0)>0?4+1.4:0,n('crystalShallow',0)>0?48:0);   // H20: the shallow mosaic's fringe taps the crystal field 48 px out
+    const shadow=9**2*1.4+2,draw=Math.max(shadow,128,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,60,n('cavity',0)>0?4+1.4:0);
     // P16: the largest class drawn has radius min(16, 3.3 x the median); a stone reaches 1.6 radii from its candidate (1.41 of a class radius at most) and a larger stone that suppresses it a little further, and the mask reads the heights 14 px out for a cliff's foot plus its gradient (5).
     const stones=n('boulders',0)>0?3.6*32+90:3.6*Math.min(16,3.3*rock('looseSize',6))+24;   // Boulders: a 32 px class, and the mask looks for the wall 80 px out
     const beach=Math.max(this.config.layers.includes('beach')?(this.config.material?.beachWidth??120)*n('beachWidth',.6):0,n('apron',0))*1.35*1.15;

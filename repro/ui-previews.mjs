@@ -2,7 +2,7 @@
 // ui-previews/, which is published as a pinned release bundle and served with the editor. Authored fixtures only: no retail
 // scene, crop or map is loaded. Run it again when a preset, the renderer or an example changes:
 // node repro/ui-previews.mjs --server http://127.0.0.1:<port> --port <cdp> [--out DIR]
-// Add --worlds-only to regenerate just the nine New-map thumbnails, preserving all hover examples.
+// Add --worlds-only to regenerate just the New map thumbnails, preserving all hover examples.
 // It replaces the folder's images and manifest and removes images the examples no longer name.
 import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import {spawn,execFileSync} from 'node:child_process';
@@ -12,6 +12,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {cdpPortFree} from './cdp-port.mjs';
+import {renderControlPreviews} from './control-previews.mjs';
 import {HELP_TOOLS,HELP_CONTROLS,HELP_CARD,HELP_PATH,HELP_FRAME,helpFrames,helpImage} from '../sculpt-help-examples.js';
 const args=process.argv.slice(2),opt=(key,fallback)=>{const i=args.indexOf(key);return i<0?fallback:args[i+1];};
 const server=opt('--server','').replace(/\/+$/,''),port=Number(opt('--port',0)),out=resolve(opt('--out',fileURLToPath(new URL('../ui-previews',import.meta.url))));
@@ -60,11 +61,15 @@ try{
   }
   }
   // The same authored landform, camera and seed in every world's default material. No scene/map source is loaded.
-  const worlds=['green','red','archipelago','moon','zhon','desert','lava','crystal','ice','lush'];
+  const {worlds}=await (await fetch(`${server}/services.json`)).json();
   manifest.worlds={frame:HELP_FRAME,fixture:{kind:'hill',path:HELP_PATH,card:HELP_CARD,seed:2701,crop:{x:180,y:140,width:850,height:620}},images:{}};
   for(const world of worlds){
     await send('Page.navigate',{url:`${server}/?biome=${world}&mapX=4&mapY=4&scratch=world-previews&gpuMB=512&heapMB=1536`});await ready();
     await begin(1);await render('hill',HELP_CARD,0);const name=`world-${world}.png`;await finish(name);manifest.worlds.images[world]=name;
+  }
+  if (!worldsOnly) {
+    chrome.kill();
+    Object.assign(manifest.controls, await renderControlPreviews(save));
   }
   if(errors.length)throw Error(errors.join('\n'));
   save('manifest.json',JSON.stringify(manifest,null,1)+'\n');

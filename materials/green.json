@@ -808,7 +808,28 @@
   "deposit": {"params": {"reach": 1, "round": 0.7}, "vary": {"reach": [0.8, 1.4], "haloRough": [4, 10]}}
  },
  "world": {
-    "materials": {"ground": "green-ground", "water": "green-water", "rock": "green-rock", "slope": "green-slope", "debris": "green-debris", "soil": "green-soil", "snow": "green-snow", "moss": "green-moss", "sand": "green-sand", "band": "green-band", "crystal": "crystals", "extra": ["green-groundgrain"]},
+    "materials": {"ground": "green-ground", "water": "green-water", "rock": "green-rock", "slope": "green-slope", "debris": "green-debris", "soil": "green-soil", "snow": "green-snow", "moss": "green-moss", "sand": "green-sand", "band": "green-band", "crystal": "crystals", "extra": ["green-groundgrain", "green-clump"]},
+    "surface": [
+        {"name": "Highland ground", "builtin": "highland"},
+        {"name": "Slope cover", "builtin": "slopeCover"},
+        {"name": "Bare soil", "builtin": "soil", "material": "@soil"},
+        {"name": "Rock", "builtin": "rock"},
+        {"name": "Beach", "builtin": "beach"},
+        {"name": "Crown rock", "builtin": "crown"},
+        {"name": "Base band", "builtin": "baseBand", "material": "@band"},
+        {"name": "Moss on regrown debris", "builtin": "regrownMoss", "material": "@moss"},
+        {"name": "Debris fines", "builtin": "fines"},
+        {"name": "Painted rock", "builtin": "paintedRock"},
+        {"name": "Painted snow", "builtin": "paintedSnow", "material": "@snow"},
+        {"name": "Painted moss", "builtin": "paintedMoss", "material": "@moss"},
+        {"name": "Sand dust", "builtin": "sandDust", "material": "@sand"},
+        {"name": "Sand", "builtin": "sand", "material": "@sand"},
+        {"name": "Chips", "builtin": "chips"},
+        {"name": "Snow on ice crests", "builtin": "iceCrest", "material": "@snow"},
+        {"name": "Snow on ice tops", "builtin": "iceCap", "material": "@snow"},
+        {"id": "gentlelumps", "name": "Lumps on gentle grades", "material": "green-lumps", "stage": "ground", "where": [{"fact": "slope", "from": 0.03, "to": 0.1, "fade": 0.02}, {"fact": "toWater", "from": 180, "fade": 10}]},
+        {"id": "shoalspecks", "name": "Specks on the shallow bed", "material": "green-shoal", "stage": "ground", "where": [{"fact": "aboveSea", "from": -30, "to": -1, "fade": 1}]}
+    ],
     "knobDefaults": {
         "coastRamp": 0.75,
         "looseSupply": 0.08,
@@ -876,7 +897,15 @@
 
     "ridgestone",
 
-    "ridgeblock"
+    "ridgeblock",
+
+    "passrock",
+
+    "reefstone",
+
+    "divide",
+
+    "reefbank"
 
    ],
 
@@ -890,9 +919,9 @@
 
       "faceLayers": 0.2,
 
-      "faceRock": 0.35,
+      "faceRock": 0.9,
 
-      "faceGrass": 0.8,
+      "faceGrass": 0.5,
 
       "crackMajor": 1,
 
@@ -902,7 +931,9 @@
 
       "faceBlockSize": 11,
 
-      "faceJoint": 0.05
+      "faceJoint": 0.05,
+      "crackMinor": 0.2,
+      "crackHairline": 0.1
 
      }
 
@@ -925,11 +956,12 @@
 
     "ridgestone": {
      "label": "Terraced greenstone",
+     "material": "green-passrock",
      "knobs": {
-      "rockFace": 2,
+      "rockFace": 2, "stepCrease": 1, "moonFolds": 0,
       "faceRock": 1,
       "rockFaceFrom": 0.2,
-      "faceGrass": 0.45,
+      "faceGrass": 0.15,
       "faceLayers": 1.5,
       "faceBlockSize": 9,
       "faceJoint": 1.2,
@@ -939,7 +971,9 @@
       "debrisAmount": 0.6,
       "debrisReach": 60,
       "banding": 1,
-      "crackMajor": 1
+      "crackMajor": 1,
+      "crackSeverity": 1.2,
+      "crackDark": 1
      }
     },
 
@@ -989,6 +1023,46 @@
       "crackMajor": 0.6,
       "debrisAmount": 0
      }
+    },
+
+    "passrock": {
+     "label": "Mossy massif",
+     "material": "green-passrock",
+     "knobs": {
+      "faceRock": 0.45,
+      "faceGrass": 0.8,
+      "faceBed": 8,
+      "faceBlockSize": 6,
+      "shineRock": 0
+     }
+    },
+
+    "reefstone": {
+     "label": "Smooth reef",
+     "knobs": {
+      "rockFace": 1.2,
+      "faceRock": 0.5,
+      "faceGrass": 0.8,
+      "faceLayers": 0.4,
+      "crackMajor": 0.3,
+      "faceWear": 0.15,
+      "faceBlockSize": 14,
+      "faceJoint": 0.05,
+      "faceShade": 0.8
+     }
+    },
+    "divide": {
+     "label": "Gentle divide",
+     "knobs": {
+      "bandLevel": 2,
+      "bandFill": 1,
+      "faceMass": 0
+     }
+    },
+
+    "reefbank": {
+     "label": "Reef channel banks",
+     "knobs": {"faceLayers": 0.2, "faceRock": 0.35, "faceGrass": 0.8, "crackMajor": 1, "rockFace": 1.2, "faceWear": 0.5, "faceBlockSize": 11, "faceJoint": 0.05, "crackMinor": 0.2, "crackHairline": 0.1}
     }
 
    }

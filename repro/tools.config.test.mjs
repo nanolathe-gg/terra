@@ -14,7 +14,7 @@ const root = new URL('..', import.meta.url).pathname, dir = mkdtempSync(join(tmp
 runSite(['--dump-configs', dir]);
 const files = readdirSync(join(dir, 'config')).filter(f => f !== 'catalog.json').sort();
 const configs = Object.fromEntries(files.map(f => [f.replace(/\.json$/, ''), JSON.parse(readFileSync(join(dir, 'config', f), 'utf8'))]));
-const WORLDS = ['green', 'red', 'archipelago', 'moon', 'zhon', 'lush', 'lava', 'desert', 'crystal', 'ice'];
+const WORLDS = ['green', 'red', 'archipelago', 'moon', 'lush', 'lava', 'desert', 'crystal', 'ice'];
 const ENTRIES = [...Object.keys(LANDFORM_SHAPES).filter(k => k !== 'landform'), 'landform', 'fissure', 'smooth', 'erase', 'paint', 'sand', 'grass', 'move'];
 test('every world defines valid library shapes and cards', async () => {
   const {shapeFrom} = await import('../sculpt-scene.js');
@@ -29,6 +29,13 @@ test('every world defines valid library shapes and cards', async () => {
   }
   // A map tool saved from any of them holds only settings a card may hold (sculpt-tools.js copyMapTools).
   for (const w of WORLDS) for (const entry of ENTRIES) for (const key of Object.keys(toolDefaults(configs[w], entry))) assert.ok(CARD_KEYS.has(key), `${w} ${entry}: ${key}`);
+});
+
+test('a default Red ramp reaches the default plateau elevation', () => {
+  const ramp = toolDefaults(configs.red, 'ramp');
+  const plateau = toolDefaults(configs.red, 'plateau');
+  assert.equal(ramp.heightReference, plateau.heightReference);
+  assert.equal(ramp.elevation, plateau.elevation);
 });
 
 test('every world\'s toolbar is valid, its rocks are presets it ships', () => {

@@ -28,7 +28,8 @@ test('every world has a config file, and the services are declared', () => {
     assert.ok(existsSync(join(folder, config.materialTable)), `${world}: table ${config.materialTable} is in the build`);
     assert.ok(!('variants' in config), `${world}: no variants`);
   }
-  assert.ok(JSON.parse(read('config/catalog.json')).worlds.green);
+  const catalog = JSON.parse(read('config/catalog.json'));
+  assert.deepEqual(Object.keys(catalog.worlds).sort(), services.worlds.toSorted());
   assert.equal(services.maps.available, true);
   assert.match(services.maps.url, /^https:\/\/terraform-savelinks\.[a-z0-9-]+\.workers\.dev\/maps$/);
   assert.equal(services.features, undefined);   // features are generated in the page; there is no feature service

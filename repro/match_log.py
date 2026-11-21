@@ -19,6 +19,8 @@ import argparse
 import hashlib
 import json
 import math
+import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -96,11 +98,25 @@ def levers_moved(now, before):
     return sorted(files | {k for k in now if k.startswith('query:')})
 
 
+def paint_counts(repo, world, commit=''):
+    """Paint strokes per window scene, in the checkout or at a commit."""
+    out = {}
+    root = Path(repo)
+    for f in sorted((root / 'repro' / 'scenes').glob(f'{world}-[0-9].json')):
+        try:
+            text = f.read_text() if not commit else subprocess.run(['git', '-C', repo, 'show', f'{commit}:repro/scenes/{f.name}'], capture_output=True, text=True, check=True).stdout
+            out[f.stem] = sum(1 for s in json.loads(text).get('strokes', []) if s and s[0] == 'paint')
+        except (OSError, ValueError, subprocess.CalledProcessError):
+            pass
+    return out
+
+
 def finding_sizes(classes, window):
     return {f'{c}:{m}': s for c, v in classes.get(window, {}).get('classes', {}).items() for m, s in v.get('sizes', {}).items()}
 
 
-LABELS = {'luma': 'luma', 'dark': 'darkest', 'light': 'brightest', 'spread': 'spread', 'band2': 'grain 2px', 'band8': 'texture 8px', 'band32': 'patches 32px', 'edges': 'edges', 'lines': 'lines'}
+LABELS = {'luma': 'luma', 'dark': 'darkest', 'light': 'brightest', 'spread': 'spread', 'band2': 'grain 2px', 'band8': 'texture 8px', 'band32': 'patches 32px', 'edges': 'edges', 'lines': 'lines',
+          'dither': 'dither', 'horizontal': 'horizontal edges'}
 
 
 def class_moves(base_dir, trial_dir, window, top=4):
@@ -115,10 +131,13 @@ def class_moves(base_dir, trial_dir, window, top=4):
     for cls, v in n.items():
         o, ob, r = v['ours'], b.get(cls, {}).get('ours', {}), v['retail']
         for k, label in LABELS.items():
-            if k not in o or k not in ob:
+            if not isinstance(o.get(k), (int, float)) or not isinstance(ob.get(k), (int, float)):
                 continue
             x, y = ob[k], o[k]
-            if k in ('luma', 'dark', 'light'):
+            if k == 'horizontal':
+                size = abs(y - x) / .04
+                text = f"{cls} {label} {x:.0%}->{y:.0%} (retail {r.get(k) or float('nan'):.0%})"
+            elif k in ('luma', 'dark', 'light'):
                 size = abs(y - x) / 4.0
                 text = f"{cls} {label} {x:.0f}->{y:.0f} (retail {r.get(k, float('nan')):.0f})"
             else:
@@ -130,6 +149,96 @@ def class_moves(base_dir, trial_dir, window, top=4):
                 out.append((size, text))
     out.sort(key=lambda s: -s[0])
     return [t for _, t in out[:top]]
+
+
+# A gap stalls when this many attempts aimed at it since its best did not shrink it by IMPROVE, across STALL_KINDS kinds of lever or more.
+# An attempt is one trial, or one probe sweep (consecutive probes of one control with one note). An attempt that declares its aims
+# (match.sh --aim) counts for those gaps only; one without counts as aimed at a gap when it moved ours' number for it by more than MOVED (relative): a trial that leaves a gap alone is
+# not an attempt at it. Declared aims make this exact; inferred ones also count side effects.
+STALL_ATTEMPTS = 8
+STALL_KINDS = 3
+IMPROVE = .15
+MOVED = .10
+STALL_MIN = 1.25   # a gap this close to its threshold is a small finding: not followed for stalls
+
+
+def sweep_key(e):
+    return re.sub(r'^probe ([^=:]+)=[^:]*:', r'probe \1:', e.get('note', ''))
+
+
+def attempts(es):
+    out = []
+    for e in es:
+        if e.get('kind') not in ('trial', 'probe'):
+            continue
+        if e['kind'] == 'probe' and out and out[-1][-1]['kind'] == 'probe' and sweep_key(out[-1][-1]) == sweep_key(e):
+            out[-1].append(e)
+        else:
+            out.append([e])
+    return out
+
+
+def sizes_of(e, ledger_dir):
+    """Every class gap size of a trial, per window: the ledger's own, or (a trial recorded before sizes were) its classes.json."""
+    if 'sizes' in e:
+        return e['sizes']
+    try:
+        classes = json.loads((Path(ledger_dir) / e['trial'] / 'classes' / 'classes.json').read_text())
+    except (OSError, ValueError):
+        return {}
+    e['sizes'] = {name: finding_sizes(classes, name) for name in e.get('windows', {})}
+    return e['sizes']
+
+
+def stalls(es, ledger_dir):
+    """Per gap (window:class:metric) that is still a finding: its best size, the attempts aimed at it since that best, and the kinds of
+    lever those attempts moved. Only gaps that were findings at the base, or that a trial declared as its aim, are followed."""
+    att = attempts(es)
+    if len(att) < 2:
+        return []
+    base = sizes_of(att[0][0], ledger_dir)
+    keys = {f'{w}:{k}' for w, ks in base.items() for k, v in ks.items() if v >= 1 and not k.endswith(':dither')}   # the dither is report-only
+    keys |= {k for a in att for e in a for k in e.get('aim', [])}
+    out = []
+    for key in sorted(keys):
+        w, ck = key.split(':', 1)
+        best = base.get(w, {}).get(ck)
+        prev, since, best_at = best, [], att[0][0]['trial']
+        for a in att[1:]:
+            vals = [(sizes_of(e, ledger_dir).get(w, {}).get(ck), e) for e in a if w in e.get('windows', {})]
+            vals = [(v, e) for v, e in vals if v is not None]
+            if not vals:
+                continue
+            v, e = min(vals, key=lambda x: x[0])
+            aims = {k for x in a for k in x.get('aim', [])}
+            if best is None or v <= best * (1 - IMPROVE):
+                best, best_at, since = v, e['trial'], []
+            elif (key in aims) if aims else (prev is not None and abs(v - prev) > MOVED * max(prev, .1)):
+                since.append(a)
+            prev = v
+        if best is None or best < STALL_MIN or len(since) < STALL_ATTEMPTS:
+            continue
+        kinds = sorted({kind_of(lever) for a in since for e in a for lever in e.get('levers', [])})
+        out.append({'key': key, 'best': best, 'best_at': best_at, 'attempts': len(since), 'from': since[0][0]['trial'], 'kinds': kinds})
+    return sorted(out, key=lambda s: -s['attempts'] * s['best'])
+
+
+def stall_lines(es, ledger_dir, only=None, top=3):
+    lines = []
+    found = [s for s in stalls(es, ledger_dir) if not only or s['key'].split(':', 1)[0] in only]
+    if top and len(found) > top:
+        lines.append(f"  ({len(found) - top} more stalled or stalling gaps: match.sh --log lists them all)")
+    for s in found[:top] if top else found:
+        head = f"{s['key']} (gap {s['best']:.2f} at best, {s['best_at']}): {s['attempts']} attempts at it since {s['from']}"
+        if len(s['kinds']) >= STALL_KINDS:
+            lines.append(f"  STALLED {head}, moving {', '.join(s['kinds'])}, and none shrank it by {IMPROVE:.0%}. Stop tuning it: find which stage"
+                         " carries it (match.sh --stages) and test the missing property with an oracle trial (--patch) before writing a proposal"
+                         " (README.md, \"When a gap stalls\").")
+        else:
+            untried = [k for k, _ in KINDS if k not in s['kinds'] and k != 'other world data']
+            lines.append(f"  STALLING {head}, but only {', '.join(s['kinds']) or 'no file change (queries)'} moved. Try another kind of lever"
+                         f" ({', '.join(untried)}) before you call it stalled.")
+    return lines
 
 
 def record(a):
@@ -146,23 +255,37 @@ def record(a):
     e = {'trial': t.name, 'kind': a.kind, 'time': time.strftime('%Y-%m-%dT%H:%M:%S'), 'note': a.note, 'query': a.query,
          'commit': a.commit, 'diff_sha': hashlib.sha1(diff).hexdigest()[:12] if diff else '', 'diff_lines': diff.count(b'\n'),
          'shape': mean(w['shape'] for w in windows.values()), 'look': mean(w['look'] for w in windows.values()), 'windows': windows,
-         'prints': prints}
+         'prints': prints, 'aim': [k for k in (a.aim or '').split(',') if k],
+         'sizes': {name: finding_sizes(classes, name) for name in windows}}
     prior = entries(a.ledger)
-    base_kind = 'holdout' if a.kind == 'holdout' else 'trial'
-    base = next((p for p in prior if (p['kind'] == 'holdout') == (base_kind == 'holdout')), None)
-    prev = next((p for p in reversed(prior) if (p['kind'] == 'holdout') == (base_kind == 'holdout')), None)
+    # An oracle trial (a scratch shader patch) is compared with the trials but is never a base or a previous trial itself.
+    same = (lambda p: p['kind'] == 'holdout') if a.kind == 'holdout' else (lambda p: p['kind'] in ('trial', 'probe'))
+    base = next((p for p in prior if same(p)), None)
+    prev = next((p for p in reversed(prior) if same(p)), None)
+    if a.kind == 'oracle' and Path(t / 'patch.diff').exists():
+        e['patch'] = sorted(set(line[6:].strip() for line in Path(t / 'patch.diff').read_text().splitlines() if line.startswith('+++ b/')))
     e["levers"] = levers_moved(prints, prev.get('prints', {})) if prev and prints and prev.get('prints') else []
     with open(a.ledger, 'a') as fh:
         fh.write(json.dumps(e) + '\n')
     print(f"\n{e['trial']} ({a.kind}) {a.note!r}{'  query ' + a.query if a.query else ''}")
+    if a.kind == 'oracle':
+        print(f"  ORACLE: scratch shader patch of {', '.join(e.get('patch', []))} ({t}/patch.diff). It shows what an engine change would do;"
+              " it is never kept or ported as is. Cite its numbers and crops in a proposal (REPORT.md).")
     print(f"  renders: the world files {'as committed at the base' if not diff else f'with {e["diff_lines"]} diff lines against the base (candidate.diff)'}"
           f"{' plus the query' if a.query else ''}. A query or probe is on top of every uncommitted edit.")
     if base and base is not e and all(abs(w['look'] - base['windows'].get(n, {}).get('look', -1)) < 1e-9 and abs(w['shape'] - base['windows'].get(n, {}).get('shape', -1)) < 1e-9 for n, w in windows.items()):
         print('  NOTE: renders exactly as the base on every window: this change reaches none of these windows (check gates, which rock the strokes use, or a scene query that overrides it).')
-    if prev and prev.get('diff_sha') == e['diff_sha'] and prev.get('query', '') == e['query']:
+    if a.kind != 'oracle' and prev and prev.get('diff_sha') == e['diff_sha'] and prev.get('query', '') == e['query']:
         print(f"  WARNING: nothing changed since {prev['trial']} (same file diff, same query). Did your edit save? `git diff` shows what a trial renders.")
     if e['levers']:
         print(f"  moved since {prev['trial']}: " + ', '.join(e['levers']))
+    if a.repo and a.world and (Path(a.ledger).parent / 'base-commit').exists():
+        now_p = paint_counts(a.repo, a.world)
+        was_p = paint_counts(a.repo, a.world, (Path(a.ledger).parent / 'base-commit').read_text().strip())
+        more = {w: (was_p.get(w, 0), n) for w, n in now_p.items() if n != was_p.get(w, 0)}
+        if more:
+            print("  map paint strokes vs base: " + ', '.join(f'{w} {x} -> {y}' for w, (x, y) in more.items()) +
+                  ". Each new one needs a by-eye reason, and none copies a stage map (README.md, \"Stages are not a license to paint\").")
     if any(k.startswith(MAP_QUERY) for k in e['levers']):
         print("  (a map setting: to keep it, set it in that window's scene query, not in world.knobDefaults, which the scenes override)")
     if base and len(windows) < len(base['windows']) and any(kind_of(k) != 'map (scene)' for k in e['levers']):
@@ -188,7 +311,12 @@ def record(a):
         print(s)
         if b:
             now = {f['key'] for f in w['findings']}
-            then = {f['key'] for f in b['findings']}
+            # The base's findings as its classes.json holds them now (re-scored when the class metrics change), else as logged.
+            bc = (base_classes or {}).get(name)
+            then = {f['key'] for f in bc['findings']} if bc else {f['key'] for f in b['findings']}
+            known = set(finding_sizes(base_classes or {}, name)) if bc else None
+            if known is not None:
+                now = {k for k in now if k in known or k in then}   # a metric the base was not scored with is not "new since base"
             if then - now:
                 was, size = finding_sizes(base_classes or {}, name), finding_sizes(classes, name)
                 clear = sorted(k for k in then - now if size.get(k, 0) <= CLEAR or size.get(k, 0) <= was.get(k, 9) * 2 / 3)
@@ -211,6 +339,9 @@ def record(a):
         moved = class_moves(a.base, t, name) if a.base and Path(a.base).resolve() != t.resolve() else []
         if moved:
             print('      moved vs base (ours): ' + '; '.join(moved))
+    ledger_dir = Path(a.ledger).parent
+    for line in stall_lines(prior + [e], ledger_dir, only=set(windows)):
+        print(line)
     print(f"  details: {t}/gap.txt, {t}/classes/classes.md, crops {t}/classes/crops/<window>/<class>.png, pairs {t}/scenes/<window>/pair.png")
 
 
@@ -224,17 +355,21 @@ def show(a):
     for e in es[-a.last:] if a.last else es:
         per = ' '.join(f"{fmt(e['windows'][n]['look']) if n in e['windows'] else '-':>9s}" for n in names)
         # A trial of some windows (--window) has no mean comparable with a full trial's: its score is in its window's column.
-        some = e['kind'] != 'holdout' and set(e['windows']) != set(names)
+        some = e['kind'] not in ('holdout',) and set(e['windows']) != set(names)
         shape, look = ('-', '-') if some else (fmt(e['shape']), fmt(e['look']))
         print(f"{e['trial']:12s} {e['kind']:8s} {shape:>5s} {look:>5s}  {per}  {e['note']}{' [' + e['query'] + ']' if e['query'] else ''}")
     print('(per-window columns are the look score, - where a trial did not render that window; lower is closer to retail. The mean'
           ' columns are - for a trial of some windows, and a holdout row\'s are its held-out window\'s)')
     counts = {}
     for e in es:
+        if e['kind'] == 'oracle':
+            continue
         for k in {kind_of(lever) for lever in e.get('levers', [])}:
             counts[k] = counts.get(k, 0) + 1
     if counts:
         print('trials per kind of lever (a trial counts once per kind it moved): ' + ', '.join(f'{k} {counts[k]}' for k, _ in KINDS if k in counts))
+    for line in stall_lines(es, Path(a.ledger).parent, top=0):
+        print(line)
     untried = [k for k, _ in KINDS if k not in counts and k != 'other world data']
     if untried:
         print(f"no trial yet moved: {', '.join(untried)}. A \"cannot\" in the report needs each kind tried or said why it cannot reach the gap (README.md)")
@@ -249,7 +384,7 @@ def main():
     r = sub.add_parser('record')
     r.add_argument('trial')
     r.add_argument('--ledger', required=True)
-    r.add_argument('--kind', default='trial', choices=['trial', 'probe', 'holdout'])
+    r.add_argument('--kind', default='trial', choices=['trial', 'probe', 'holdout', 'oracle'])
     r.add_argument('--note', default='')
     r.add_argument('--query', default='')
     r.add_argument('--commit', default='')
@@ -257,6 +392,7 @@ def main():
     r.add_argument('--base', default='', help='the base trial folder, for per-class changes')
     r.add_argument('--repo', default='', help='the checkout, to record which levers a trial moved')
     r.add_argument('--world', default='')
+    r.add_argument('--aim', default='', help='the findings this trial aims at, window:class:metric, comma separated (match.sh --aim)')
     s = sub.add_parser('show')
     s.add_argument('--ledger', required=True)
     s.add_argument('--last', type=int, default=0)

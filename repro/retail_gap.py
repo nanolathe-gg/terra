@@ -7,7 +7,9 @@ family windows), so a gap of 1 is as far as the spread of the world's own retail
 its `height.*` metrics (the shape: slopes, roughness, water, shore) and over its `pic.*` metrics (the look: luma, colour
 histogram, edges, band-pass energy, thin dark lines); lower is closer, 0 is retail. AGENTS.md rule 10: fix the shape before the
 colour. `in` counts the metrics where ours falls inside the family band. A metric whose band is empty (p90 = p10) or undefined
-for either side is left out.
+for either side is left out. Each metric's gap counts at most GAP_CAP band widths in the means: red-3's waterline drew 230 thin dark
+pixels in a million, 7 band widths on Red's narrow family band, and that one metric made up half of the window's look score. The
+`furthest` list prints the uncapped gap.
 
 With --base (the stats.json of an earlier run, such as the world's renders before a change) each score is followed by the base's
 score and the change; a change below 0 is closer to retail. Exit 0 always: the numbers inform a judgement, they are not a gate.
@@ -15,6 +17,8 @@ score and the change; a change below 0 is closer to retail. Exit 0 always: the n
 import argparse
 import json
 import math
+
+GAP_CAP = 3.0   # a metric counts at most this many family band widths in a window's mean
 
 
 def gaps(world, window):
@@ -25,7 +29,8 @@ def gaps(world, window):
         a, b = window['retail'].get(key), window['ours'].get(key)
         if None in (lo, hi, a, b) or not all(math.isfinite(x) for x in (lo, hi, a, b)) or hi - lo <= 0:
             continue
-        out[key] = {'gap': abs(b - a) / (hi - lo), 'retail': a, 'ours': b, 'inside': lo <= b <= hi}
+        raw = abs(b - a) / (hi - lo)
+        out[key] = {'gap': min(raw, GAP_CAP), 'raw': raw, 'retail': a, 'ours': b, 'inside': lo <= b <= hi}
     return out
 
 
@@ -59,8 +64,8 @@ def main():
         if b:
             line += f"   base shape {fmt(b['shape'])} ({w['shape'] - b['shape']:+.2f})  look {fmt(b['look'])} ({w['look'] - b['look']:+.2f})  in band {b['inside']}"
         print(line)
-        worst = sorted(w['gaps'].items(), key=lambda kv: -kv[1]['gap'])[:args.worst]
-        print('    furthest: ' + '; '.join(f"{k} {v['gap']:.2f} (retail {v['retail']:.3g}, ours {v['ours']:.3g})" for k, v in worst))
+        worst = sorted(w['gaps'].items(), key=lambda kv: -kv[1]['raw'])[:args.worst]
+        print('    furthest: ' + '; '.join(f"{k} {v['raw']:.2f}{' (counts ' + format(GAP_CAP, '.0f') + ')' if v['raw'] > GAP_CAP else ''} (retail {v['retail']:.3g}, ours {v['ours']:.3g})" for k, v in worst))
     if len(now) > 1:
         shape = [w['shape'] for w in now.values() if math.isfinite(w['shape'])]
         look = [w['look'] for w in now.values() if math.isfinite(w['look'])]

@@ -64,6 +64,9 @@ exactly these fields:
   or color gap, at least one material and one surface layer try; for a gap only some windows
   have, the map lane)
 - Closest result: <trial id and why it is still wrong>
+- Stage: <height | light | placement | predither | dither, from stages-NNN/stages.md, with its trust>
+- Oracle: <oracle-NNN: the patch in one line, the gap before and after, the crop path; or why no shader
+  change can test it>
 - Missing piece: one of: new fact | new material node | wider control range |
   new effect | new tool or preset | stroke option | engine change
 - Recommendation: <what to build, in one or two sentences, generic for every world>

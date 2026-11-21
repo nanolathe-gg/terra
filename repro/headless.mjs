@@ -55,10 +55,13 @@ class HeadlessCanvas {
 
 // Where the engine's relative fetches go: the server's files (`server`, a development server base URL), or the checkout's sources with the generated files
 // (the world configs, the catalog) that go run ./cmd/terraform --dump-configs writes with the same Go code the server runs.
+// TERRAFORM_SOURCE_OVERLAY names a folder whose files win over both: a retail match oracle trial's patched shaders (repro/match.sh --patch),
+// fetched files only (the .wgsl shaders and JSON tables; modules are imported, not fetched).
 function fileSource(configs) {
+  const overlay = process.env.TERRAFORM_SOURCE_OVERLAY || '';
   return async path => {
     const name = decodeURIComponent(path.replace(/^\.?\//, '').split(/[?#]/)[0]);
-    for (const file of [join(configs, name), join(REPO, name)]) if (!name.includes('..') && existsSync(file)) return new Response(readFileSync(file), {status: 200});
+    for (const file of [...(overlay ? [join(overlay, name)] : []), join(configs, name), join(REPO, name)]) if (!name.includes('..') && existsSync(file)) return new Response(readFileSync(file), {status: 200});
     return new Response('not found', {status: 404});
   };
 }
@@ -98,6 +101,7 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   const engine = await import('../sculpt-scene.js'), fieldsModule = await import('../sculpt-gpu-fields.js');
   const {configureMap} = await import('../sculpt-map.js'), {TerrainRenderer} = await import('../sculpt-renderer.js');
   const {withWorldMaterials, keepStrokeMaterials, materialsInUse} = await import('../sculpt-materials.js');
+  const {copySurface, withSurfaceMaterials} = await import('../sculpt-material-model.js');
   const {copyRockSettings, applyWorldRock, copyRocks, worldRocks, keepStrokeRocks, rocksInUse, giveRockMaterials} = await import('../sculpt-rock-presets.js');
   const {copyColumn} = await import('../sculpt-column.js'), {copyMapTools} = await import('../sculpt-tools.js');
   const settings = new URLSearchParams(search);
@@ -107,6 +111,8 @@ export async function openScene(scene, search, {strokes = scene.strokes, view = 
   const config = applyWorldRock(await json(`config/${encodeURIComponent(settings.get('biome') || services.defaultWorld)}.json`));
   if (config.biomeId !== scene.biome) throw new Error(`asked for world ${scene.biome}, got ${config.biomeId}`);
   config.services = services;
+  // The map's own surface layers (sculpt.js boot: a map that changed its Surface section holds its list whole), else the world's.
+  if (scene.surface !== undefined) config.surface = withSurfaceMaterials(copySurface(scene.surface), config.surface);
   const worldColumn = {column: config.column}, columnOverride = copyColumn(scene.column);
   let materials = withWorldMaterials(scene.materials, config), materialKey = '[]';   // the map's materials (sculpt.js mapMaterials): the scene's, else the world's
   let rocks = copyRocks(scene.rocks) ?? worldRocks(config), rockKey = '[]';   // the map's rock presets (sculpt.js mapRocks): the scene's, else the world's

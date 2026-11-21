@@ -29,14 +29,13 @@ controls; node settings are the author's tools.
 - **The library** (`materials/textures.json`) holds the shipped materials by
   key. A world names its two in its table: `world.materials: {ground, water}`
   in `materials/<world>.json`.
-- **The world owns its ground and its water** (owner, 2026-11-14). They are
-  world settings like its sliders: where you change one, the world keeps it
-  in this browser and every map drawn in that world shows it. One the world
-  never changed stays the library's, so a library revision reaches it.
-  "Restore built-in settings" returns both to the library's. What the world
-  keeps is marked with the library material it replaces, so a library
-  material keeps its own edit.
-- **A map** holds up to fifteen materials in slots 1 to 15: the world's two,
+- **The map owns its ground and its water** (owner, 2026-11-19, replacing
+  the world-owned materials of 2026-11-14). They are world settings like its
+  sliders, and like every world setting they are saved with the map, whole:
+  a revision of the library never changes a map already made. A new map
+  starts from the built-in world's (the library's). World › Apply look
+  from… the map's own world returns both to the library's.
+- **A map** holds up to 23 materials in slots 1 to 23: the world's two,
   the materials for the surfaces its world names, its rock types' rock
   materials, and its own for landforms and the Paint brush (a stroke's Ground
   choice: `-1` the ground beneath, `0` the world's ground, else a slot; shown
@@ -45,12 +44,10 @@ controls; node settings are the author's tools.
   map opened in a world takes that world's two, in the slots the map already
   gave those roles; its own materials stay.
 - **Saves, undo and share links** carry the map's list, and the world
-  settings a save embeds carry the world's two. Opening a save whose world
-  draws as this browser's changes nothing in the world; one whose world
-  differs (sliders, colors, surface or kept materials) opens as a world of
-  its own, named for the map, and leaves yours unchanged. World › Use for my
-  <world> adopts it and keeps the one it replaces as "<world> before <map>".
-- **A world of your own** (World, New) and a world file carry the two.
+  settings a save embeds carry the world's two. Opening a save opens it with
+  its own world settings; nothing is kept in the browser apart from the map.
+  Another map's look starts a new map from that map (Map › New map with
+  this look) or comes in through World › Apply look from…
 - **Highland ground.** A world may also name a highland material
   (`world.materials.high`): a new map adds it with the role *highland
   ground*, and level raised ground takes it in place of the world's ground
@@ -220,16 +217,15 @@ needs them. The
 material's pass evaluates only the nodes its Material node reaches.
 
 Each material in use has a layer of the cached repeat (512 px: color and
-height in `rgba32float`, shine, the palette-reduced color) and one texel of
-its mean color, about 7 MiB, and one more layer for each Worn or Deposit
+shine in `rgba16float`, art height in `r32float`, the palette-reduced color
+in `rgba8unorm`) and one texel of its mean color, about 4 MiB, and one more layer for each Worn or Deposit
 color it draws. The budget is 128 MiB; past it, the editor keeps the
 materials it has and the status line says so. The terrain shader reads these by world
 position, so a level plain costs at most 256 distinct 32-px tiles.
 Regeneration runs inside the draw cycle, so a fast drag never queues more
 than one run a frame.
 
-The world's own settings for level ground (low-ground tint, the vegetation
-cover table, ground patches) apply over the world's ground material; a
+The world's own settings for level ground (ground patches) apply over the world's ground material; a
 material a stroke chose keeps its own look.
 
 One way for each part of the look. Deep water has no color in World, Colors:
@@ -238,24 +234,6 @@ material and are candidates to fold into it once the owner has judged the
 look: Ground bumps (`plainRelief`, lit noise on level land, above 0 in seven
 worlds) beside a material's Height, and Shine, Ground gloss (`shineGround`,
 above 0 on Lava) beside a material's Shine.
-
-## Status of the shipped materials (2026-11-14)
-
-| World | Ground | Water |
-| --- | --- | --- |
-| Red | owner-approved | good for now (owner) |
-| Green | owner-approved | owner-approved |
-| Lava, Desert, Crystal, Ice, Lush, Moon, Archipelago | patch-swapped against retail | patch-swapped against retail |
-| Lush highland | patch-swapped, first pass | |
-| Ice bergs ground (laid by the Ice floe tool) | first pass by eye | Ice's |
-| Zhon | first pass by eye | first pass by eye |
-
-"Patch-swapped" means two 1x1, two 4x4 and one 8x8 patches of 32-px tiles
-of our export art (lit, palette-reduced) were inserted into a retail flat
-or sea crop and could not be found by eye at 1x, or only faintly (Crystal,
-Ice and Lush highland ground). Desert water and Moon water have no retail
-sea: Desert's follows the Wet Desert planet's, Moon's is a guess. None of
-these has the owner's review yet.
 
 ## Checks
 

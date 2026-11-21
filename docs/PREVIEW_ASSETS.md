@@ -30,12 +30,21 @@ the browser never downloads a GitHub release itself.
 
 ## Updating previews
 
-Start your own Go editor server, then run:
+Start your own Go editor server. The generator uses Chrome for the original
+tool and New map examples and the approved Dawn Node binding for the expanded
+control examples. The binding can be found through `TERRAFORM_WEBGPU` as
+described in `repro/headless.mjs`.
 
 ```sh
 node repro/ui-previews.mjs --server http://127.0.0.1:<yours> --port <cdp>
 go run ./cmd/previews publish
 ```
+
+World examples hold a fixed crop, seed and stroke list while changing one
+setting. Each fixture enables the materials and parent settings the setting
+needs. Shape examples use the same authored path or a fixture specific to that
+feature, such as a shoreline or crystal cluster. The generator rejects a new
+example with identical frames.
 
 The renderer verifies the server's source files match the checkout and records
 a receipt only after the complete render succeeds. If a rendering input changes

@@ -51,6 +51,7 @@ export function shapeControlAvailable(key,kind,p){
   const front=sampleKnots(k.knots),back=sampleKnots(k.back);return front.some((v,i)=>v!==back[i]);
  }
  if(key==='facing')return p.lean>0;
+ if(key==='plateSteps')return plates&&slab&&p.plateHeight>0;
  if(['plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateMaterial','frostNeedles','crystalShoreSeam','plateVary'].includes(key))return plates&&(key==='frostNeedles'?!slab:key==='crystalShoreSeam'||key==='plateVary'?slab:true);
  // A landform's coast pass and its facets are one pass over its result; shore features take it.
  if(kind==='landform'&&['iceFacets','iceFacetSize','facetForm','facetSurface',...LANDFORM_FACET_KEYS].includes(key)&&landformShore(landformSteps(p)))return false;
@@ -79,6 +80,10 @@ export function worldControlRequirement(key,v){
  if(key==='highland')return n('highMaterial')<=0?'The map has no highland material. In Materials, choose one and set Also the world’s to highland ground.':'';
  if(key==='faceMineral')return n('faceClast')>0?'':'Raise Embedded fragment relief to use Mineral contrast: it tints the fragments (the grain\u2019s minerals are the rock material\u2019s).';
  if(['highFrom','highReach'].includes(key))return needs('highland','Highland ground');
+ if(key==='faceSlopeAlign'){
+  const blocks=Math.max(n('faceBlock'),n('faceJoint'),n('faceWhole'),n('faceWholeLarge'),n('faceBreak'),n('faceSpall'));
+  return n('rockFace')>0&&blocks>0||n('debrisAmount')>0&&n('faceBreak')>0?'':'Raise Rock relief: Depth and enable blocks or joints to follow the slope.';
+ }
  if(key==='faceRegular')return worldControlRequirement('faceBlockSize',v);   // it moves every block and joint, as Block size does
  if(key==='faceDetailPatch')return needs('rockFace','Rock relief: Depth')||(Math.max(n('faceCrease'),n('faceScratch'))>0?'':'Raise Pitting, or Scratches and water grooves, to cluster fine detail.');
  const fractures=Math.max(n('faceBreak'),n('faceSpall'),n('faceJoint'));
@@ -157,7 +162,7 @@ export function worldControlRequirement(key,v){
  if(['stepSoftPx','shelfWander','shoalRag'].includes(key))return needs('deepEdge',HARD_STEP);
  // The waterline's stairs and blur are drawn only by a crisp waterline, and a blur replaces the stairs (engine-frag.wgsl, the shore's crisp cut).
  if(key==='shoalShoreSoft')return needs('crispShore','Crisp waterline');
- if(key==='beachWidth'&&n('beachLayer')<=0)return 'This world has no beach of its own. Choose another world\'s Beach, above, to use this setting.';
+ if(['beachWidth','apron'].includes(key)&&n('beachLayer')<=0)return 'This setting needs a world with a beach.';
  if(key==='bedCrackSize')return needs('bedCracks','Cracked bed');
  return '';
 }
@@ -165,7 +170,7 @@ export function worldControlRequirement(key,v){
 // Primary controls describe a visible feature. Fine tuning remains available
 // explicitly (and through search), without filling the default inspector.
 export const WORLD_PRIMARY_CONTROLS=new Set([
- 'faceWhole','faceWholeLarge','faceRegular','sandLee','faceJointWidth','faceSecondary','faceContinuity','faceDetailPatch','faceFresh','faceRind','faceRindDepth','faceRindTone','faceRindWarmth','faceRindRough','faceBreak','faceBedVary','bedCycleVary','faceJointTilt','faceScaleVary','faceFold','faceSpall','faceClast','faceClastSize','faceMineral',
+ 'faceWhole','faceWholeLarge','faceRegular','sandLee','faceJointWidth','faceSecondary','faceContinuity','faceDetailPatch','faceFresh','faceRind','faceRindDepth','faceRindTone','faceRindWarmth','faceRindRough','faceBreak','faceBedVary','bedCycleVary','faceJointTilt','faceSlopeAlign','faceScaleVary','faceFold','faceSpall','faceClast','faceClastSize','faceMineral',
  'runoff','runoffScale','runoffConcentration','runoffCut','runoffStain','debrisAmount','debrisReach','debrisDepth','stoneSort','stoneRound','stoneSlab',
  'plantRelief',
  'bedDip','bedDipDir','faceStretch','faceBlockHeight','faceRound','faceJoint','faceExtrude','faceLamina','faceLaminaSize','faceScratchLength','faceScratchAngle',
@@ -178,11 +183,11 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'absorbDepth','shadowTint',
  'shineGround','shineSlope','shineRock','shineSand','shineCrystal',
  'looseSupply','looseSize','boulders','sand','sandLight','ripple','rippleHeight','wind',
- 'crackSeverity','crackSpacing',
- 'banding','bandLevel','sandBanding','strata','strataContrast',
- 'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedTint','bedBright','bedContrast','bedRelief','bedCracks','shoreEdge',
+ 'crackSeverity','crackSpacing','crackFrom',
+ 'banding','bandLevel','bandFill','sandBanding','strata','strataContrast',
+ 'beachWidth','apron','shallowDepth','deepDepth','crispShore','deepEdge','bedTint','bedBright','bedContrast','bedRelief','bedCracks','shoreEdge','wetBand',
  'baseBand','desertCapFlat',
  'shelfWander','bedFlat',
- 'lavaCrust','lavaPillow','lavaVeins','layerCrease','pockmark',
+ 'lavaCrust','lavaPillow','lavaVeins','layerCrease','stepCrease','pockmark',
  'moonCups','moonRibs','moonFolds','iceCrystal','gougeWeb','iceCrest','iceSoft','iceSnow','iceFall','iceApron','iceFrost','frostGaps'
 ]);

@@ -57,7 +57,14 @@ SHELF_DEPTH = 32   # height units below the sea: retail Green's shelf is light t
 # other never does here (dots too dark, flecks too bright), which a mean or an edge count can miss or even reward. Both pictures use
 # the game's palette, so a percentile lands on a palette color, about 5 luma apart in the grass and rock range: 8 is more than one
 # step.
-THRESHOLDS = {'share': .05, 'luma': 8.0, 'range': 8.0, 'color': 6.0, 'spread': 1.3, 'band': 1.3, 'edges': 1.5, 'lines': 1.6}
+THRESHOLDS = {'share': .05, 'luma': 8.0, 'range': 8.0, 'color': 6.0, 'spread': 1.3, 'band': 1.3, 'edges': 1.5, 'lines': 1.6,
+              'horizontal': .12, 'dither': 1.3, 'palette': .35}
+# Version 2 added `horizontal` (the share of a class's edges that are horizontal lines: red-3's banks drew vertical strokes where retail's
+# run across, round 3), `dither` (the luma s.d. a 1 px blur removes: the output dither's strength, apart from the texture) and `palette`
+# (how far apart the two sides' palette index shares are, as a total variation distance: green rounds 15-17 drew grass index 169 at
+# 12-14% where retail draws 1-4%). A trial-000 scored by an older version is re-scored from its kept pictures (repro/match.sh).
+VERSION = 2
+PALETTE_FILE = Path(__file__).resolve().parent.parent / 'materials' / 'palette.json'
 # Below these both sides are too faint for a ratio to mean anything (a share of pixels).
 FLOORS = {'edges': .004, 'lines': .0003}
 MIN_PIXELS = 4000   # a class with fewer pixels on either side gets no texture comparison
@@ -147,7 +154,19 @@ def texture_maps(rgb):
     th = ndimage.grey_closing(smooth, footprint=DISK5) - smooth
     op = np.max([ndimage.grey_opening(th, footprint=f) for f in FPS], axis=0)
     bands = {s: ndimage.gaussian_filter(L, max(s / 2, .5)) - ndimage.gaussian_filter(L, s) for s in (2, 8, 32)}
-    return {'L': L, 'edge': gm >= EDGE_THRESH, 'thin': op >= THIN_THRESH, 'bands': bands, 'lab': np.stack(srgb_to_lab(rgb.reshape(-1, 3)), axis=1).reshape(rgb.shape[0], rgb.shape[1], 3)}
+    horiz = np.abs(ndimage.sobel(smooth, 0)) > np.abs(ndimage.sobel(smooth, 1))   # brightness changes down the picture: a horizontal line
+    return {'L': L, 'edge': gm >= EDGE_THRESH, 'horiz': horiz, 'resid': L - smooth, 'index': palette_index(rgb), 'thin': op >= THIN_THRESH, 'bands': bands, 'lab': np.stack(srgb_to_lab(rgb.reshape(-1, 3)), axis=1).reshape(rgb.shape[0], rgb.shape[1], 3)}
+
+
+def palette_index(rgb):
+    """The game palette's index of each pixel (-1 off the palette), first index for a color listed twice."""
+    cols = json.loads(PALETTE_FILE.read_text())['indexed']
+    table = {}
+    for i, c in enumerate(cols):
+        table.setdefault((c[0] << 16) | (c[1] << 8) | c[2], i)
+    key = (rgb[..., 0].astype(np.int64) << 16) | (rgb[..., 1].astype(np.int64) << 8) | rgb[..., 2]
+    uniq, inv = np.unique(key, return_inverse=True)
+    return np.array([table.get(int(k), -1) for k in uniq])[inv].reshape(key.shape)
 
 
 def class_stats(rgb, maps, m):
@@ -165,7 +184,14 @@ def class_stats(rgb, maps, m):
         'edges': float(maps['edge'][m].mean()),
         'lines': float(maps['thin'][m].mean()),
         **{f'band{s}': float(b[m].std()) for s, b in maps['bands'].items()},
+        'dither': float(maps['resid'][m].std()),
     })
+    e = maps['edge'] & m
+    out['horizontal'] = float(maps['horiz'][e].mean()) if e.sum() >= 100 else None
+    idx = maps['index'][m]
+    on = idx[idx >= 0]
+    out['palette_on'] = float(on.size / max(idx.size, 1))   # the share of the class's pixels that are palette colors
+    out['palette'] = {int(k): round(float(c) / on.size, 4) for k, c in zip(*np.unique(on, return_counts=True))} if on.size else {}
     return out
 
 
@@ -200,11 +226,30 @@ def sizes(r, o):
     out['color'] = math.dist(r['lab'], o['lab']) / THRESHOLDS['color']
     for key in ('dark', 'light'):
         out[key] = abs(o[key] - r[key]) / THRESHOLDS['range']
-    for key in ('spread', 'band2', 'band8', 'band32', 'edges', 'lines'):
+    for key in ('spread', 'band2', 'band8', 'band32', 'edges', 'lines', 'dither'):
+        if key not in r or key not in o:
+            continue
         t = THRESHOLDS['band' if key.startswith('band') else key]
         q = ratio(r[key], o[key])
         out[key] = 0.0 if max(r[key], o[key]) < FLOORS.get(key, 0) else (abs(math.log(q) / math.log(t)) if math.isfinite(q) and q > 0 else 2.0)
+    if r.get('horizontal') is not None and o.get('horizontal') is not None:
+        out['horizontal'] = abs(o['horizontal'] - r['horizontal']) / THRESHOLDS['horizontal']
+    pd = palette_distance(r, o)
+    if pd is not None:
+        out['palette'] = pd[0] / THRESHOLDS['palette']
     return {k: round(v, 3) for k, v in out.items()}
+
+
+def palette_distance(r, o):
+    """Total variation distance of the two sides' palette index shares (0 the same indices in the same shares, 1 none shared), and the
+    indices whose share differs most. None when either side is off the palette (a render without the output stage)."""
+    if not r.get('palette') or not o.get('palette') or min(r.get('palette_on', 0), o.get('palette_on', 0)) < .95:
+        return None
+    a, b = {int(k): v for k, v in r['palette'].items()}, {int(k): v for k, v in o['palette'].items()}
+    keys = set(a) | set(b)
+    tv = .5 * sum(abs(a.get(k, 0) - b.get(k, 0)) for k in keys)
+    worst = sorted(keys, key=lambda k: -abs(a.get(k, 0) - b.get(k, 0)))[:3]
+    return tv, [(k, a.get(k, 0), b.get(k, 0)) for k in worst]
 
 
 def findings(name, r, o):
@@ -241,9 +286,18 @@ def findings(name, r, o):
             bits.append(f"hue turned {abs(dh):.0f} degrees {'toward yellow/red' if (dh < 0) == (rh < 180) else 'toward green/blue'}")
         rgb = lambda v: '#%02x%02x%02x' % tuple(int(round(max(0, min(255, c)))) for c in v)
         out.append((dc / THRESHOLDS['color'], f'{name}:color', f"{name}: color off by {dc:.0f} (CIELAB) - retail mean {rgb(r['rgb'])}, ours {rgb(o['rgb'])}{'; ' + ', '.join(bits) if bits else ''}"))
+    if r.get('horizontal') is not None and o.get('horizontal') is not None:
+        dh2 = o['horizontal'] - r['horizontal']
+        if abs(dh2) >= THRESHOLDS['horizontal']:
+            out.append((abs(dh2) / THRESHOLDS['horizontal'], f'{name}:horizontal', f"{name}: edge direction - {o['horizontal']:.0%} of ours' edges are horizontal lines, retail's {r['horizontal']:.0%} ({'more' if dh2 > 0 else 'fewer'} lines across the picture than retail)"))
+    pd = palette_distance(r, o)
+    if pd and pd[0] >= THRESHOLDS['palette']:
+        out.append((pd[0] / THRESHOLDS['palette'], f'{name}:palette', f"{name}: palette indices {pd[0]:.0%} apart - " + ', '.join(f'index {k} retail {x:.1%}, ours {y:.1%}' for k, x, y in pd[1])))
     words = {'spread': 'tone spread (luma s.d.)', 'band2': 'fine grain (2 px)', 'band8': 'mid texture (8 px)', 'band32': 'broad patches (32 px)',
-             'edges': 'edge density', 'lines': 'thin dark lines (cracks, creases)'}
+             'edges': 'edge density', 'lines': 'thin dark lines (cracks, creases)', 'dither': 'pixel dither (luma a 1 px blur removes; the output stage, report only)'}
     for key, label in words.items():
+        if key not in r or key not in o:
+            continue
         t = THRESHOLDS['band' if key.startswith('band') else key]
         if max(r[key], o[key]) < FLOORS.get(key, 0):
             continue   # both too faint to matter
@@ -287,13 +341,19 @@ def crop_pair(rpic, opic, at, size, label, path):
     out.save(path)
 
 
+# Share of our height cells above the game's 255 that earns a warning.
+OVER_WARN = 0.02
+
+
 def window(d, out, crop):
     crop_meta = json.loads((d / 'crop.json').read_text())
     rh = np.load(d / 'heights.npy').astype(np.float64)
     rplain = float(crop_meta.get('plain', 0.0))
     data = json.loads((d / 'ours-heights.json').read_text())
     g = int(data['grid'])
-    oh = np.asarray(data['heights'], np.float64).reshape(g, g) - float(data.get('sea', 0.0))
+    raw = np.asarray(data['heights'], np.float64).reshape(g, g)
+    over = float((raw > 255.5).mean())
+    oh = np.clip(raw, 0.0, 255.0) - float(data.get('sea', 0.0))   # the game's byte a cell (repro/stats.py)
     opic_size = Image.open(d / 'ours.png').size[0]
     oh = resample_heights(oh, max(2, round(opic_size / 16)))
     oplain = float(data.get('base', WORLD_BASE.get(d.name.split('-', 1)[0], 24)))
@@ -301,6 +361,8 @@ def window(d, out, crop):
     opic, om, odrop = side(d / 'ours.png', oh, oplain)
     warn = [f'{who} {n}: unmixing dropped {x:.0%} of its pixels as the other side of the waterline (land and water colors alike?)'
             for who, dropped in (('retail', rdrop), ('ours', odrop)) for n, x in dropped.items() if x > UNMIX_WARN]
+    if over > OVER_WARN:
+        warn.append(f'ours: {over:.0%} of the height cells are above 255, the game\'s top height; the export clamps them, and the scores read them clamped. Lower the strokes (round 8)')
     rmaps, omaps = texture_maps(rpic), texture_maps(opic)
     result = {'classes': {}, 'findings': [], 'crops': {}, 'warnings': warn}
     found = []
@@ -363,9 +425,12 @@ def main(argv=None):
             md.append(table_md(d.name, res))
             md += [f'- WARNING: {x}' for x in res['warnings']] + ([''] if res['warnings'] else [])
     out.mkdir(parents=True, exist_ok=True)
+    all_res = {'_version': VERSION, **all_res}
     (out / 'classes.json').write_text(json.dumps(all_res, indent=1))
     (out / 'classes.md').write_text('\n'.join(md))
     for name, res in all_res.items():
+        if name.startswith('_'):
+            continue
         top = res['findings'][:3]
         print(f'{name:16s} ' + ('; '.join(f["text"] for f in top) if top else 'no class gap over threshold'))
         for x in res['warnings']:

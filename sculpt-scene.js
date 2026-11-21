@@ -69,7 +69,7 @@ export const LANDFORM_SHAPES={
 };
 // The worlds' own numbers (their tables' world.shapes), by what they were fitted to:
 // - Red's and Crystal's craters carry no rim in their heights (retail Red and Crystal: rim/depth -.12..0): a .06 lip for the art and a wide bowl.
-// - Red's, Desert's, Moon's and Zhon's hills, mountains and water carry the retired outline options as wander and height variation; Desert's
+// - Red's, Desert's and Moon's hills, mountains and water carry the retired outline options as wander and height variation; Desert's
 //   plateau is the reviewed mesa (ragged feet, foot bumps on the ridges: the retired baseVary and baseBump), and the bare landform takes it too.
 // - Moon's hills are lobed (the retired moonLobes): wander in lobes about 60 px long, from foot to crest.
 // - Crystal's Faceted forms draw a column mound (its old brush: Height 140, 480 wide, Irregularity 40): stepped columns over the mound's
@@ -124,7 +124,7 @@ export const LANDFORM_KEYS=['stepReference','heightReference','elevation','combi
 // the world's river-bed gravel, 20 the rock a cell belongs to: the slot + 1 of a rock recipe, 0 the world's own, engine-common.wgsl rockSlotAt);
 // 21 holds a ground slot + 1; 22-24 are unused placeholders (the flow bake's planes 20-24 went with it). The shape engine's buffers hold seven
 // words a cell (28 planes), so the layout stays as they and the shaders read it.
-export const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','riverBed','rock','ground','s1','s2','s3'];
+export const MASK_KEYS=['mr','ms','mw','mm','md','ml','mc','mb','mf','mx','my','mz','mg','mk','ovErosion','ovDeposits','ovVegetation','ovExposure','surf','riverBed','rock','ground','shoreSlab','s2','s3'];
 export const MASK_CHOICES=[[1,'Rock'],[2,'Snow or ice'],[3,'Wet or dark ground'],[4,'Moss'],[5,'Denser scatter'],[6,'Sparser scatter']];
 export const LUMP_CHOICES=[[16,'Ground lumps'],[17,'Smoother ground']];
 // H3 override planes 14-17 (a signed value v multiplies the control it names by 1 + v; 0 changes nothing): erosion rate (H2's pass),
@@ -211,8 +211,9 @@ export const SHAPE_FIELDS=[
   ['plateLandPx','plate-land-px','Plates: land width (px)',['landform'],0,240,4,1,'Reach from this stroke\'s waterline onto land, with broken pressure ridges.'],
   ['plateSize','plate-size','Plate size (px)',['landform'],8,96,2,1,'Typical width of the interlocking polygonal plates.'],
   ['plateGap','plate-gap','Plate gap (px)',['landform'],0,160,5,10,'Open gap between adjacent plates.'],
-  ['plateHeight','plate-height','Plate height above sea',['landform'],0,240,5,10,'Flat water plates sit this high above sea; land keeps its existing height. Rock slabs: how far the land slabs stand above their seams.'],
-  ['plateMaterial','plate-material','Shore structure',['landform'],1,2,1,1,'2: frost crystals, parallel straight needles in patches of three directions, cut by straight seams, thinning toward deep water (Plate size is the patch, Plate gap the needle spacing; retail Ice). 1: low flat rock slabs that interlock along the shore with dark seams between them, and a shallow ledge under the water (Crystal). The band follows this stroke\'s own waterline, so separate shores stay separate.'],
+  ['plateHeight','plate-height','Plate height',['landform'],0,240,5,10,'Rock slabs: sets the height of the treads, tilted plate tops and joints above and below water. Frost: sets how high the ice plates rise above sea.'],
+  ['plateSteps','plate-steps','Slab steps',['landform'],0,8,0.5,1,'Number of treads across the slab band on each side of the waterline. Higher values make closer steps. Raise Plate height to deepen the relief.'],
+  ['plateMaterial','plate-material','Shore structure',['landform'],1,2,1,1,'2: frost crystals, parallel needles in patches cut by straight seams and thinning toward deep water. 1: interlocking rock slabs with stepped, tilted tops. The band follows this stroke\'s own waterline.'],
   ['frostNeedles','frost-needles','Frost needle share (plate material 2)',['landform'],0,100,5,100,'Frost crystals: the share of patches that carry needles at all; the rest of the band is plain ice. Needles in a patch are also dropped at random, so lines are sparse, fine and of varied length.'],
   // Water looks (card E1): each stroke may keep the world's choice (0) or set its own.
   ['waterDeep','water-deep','Shallow-to-deep edge',['landform'],0,2,1,1,'World default keeps the World panel\'s Shallow-to-deep step. Hard: the shallow color stops at one depth with ragged stairs (retail Green). Faded: the color follows the depth ramp gradually (retail Archipelago).',[[0,'World default'],[1,'Hard'],[2,'Faded']]],
@@ -225,15 +226,15 @@ export const SHAPE_FIELDS=[
   // Local vegetation inside the shape (card C5 stage 2): a change about the world's own cover, 0 none.
   ['styleVegetation','style-vegetation','Local vegetation',['landform'],-100,100,5,100,'Grass and moss cover inside the shape, times 1 + this: below 0 more bare rock, above 0 more cover.'],
   // E10 (Lava): finger size; layer width variation; circle size of the circular layers.
-  ['fingerSize','finger-size','Lobe size',['landform'],20,300,5,100,'Fingers on the joined coast: length and (less) width of each finger. Fingers never reach past this stroke\'s bank.'],
-  ['fingerVary','finger-vary','Lobe variety',['landform'],0,100,5,100,'Shore lobes gather in clusters, and a few grow long and wide (spits and broad lobes) among many small ones. 0: an even row of fingers.'],
+  ['fingerSize','finger-size','Lobe size',['landform'],20,300,5,100,'Length and width of the shore lobes. Each lobe rises into a rounded spine, with room to taper at its tip.'],
+  ['fingerVary','finger-vary','Lobe variety',['landform'],0,100,5,100,'Shore lobes gather in clusters. Some grow into wide spits with forked tips. 0: an even row of fingers.'],
   ['fingerInlet','finger-inlet','Inlet share',['landform'],0,100,5,100,'The share of shore lobes that cut a tapering inlet into the land (water or lava reaching in) instead of a tongue of land reaching out. 0: all tongues.'],
   ['riverDepth','river-depth','Channel depth',['landform'],25,400,5,100,'Rivers: how deep the channel cuts, as a share of its usual depth (a quarter of its width): higher for a narrow river that still runs deep and dark, lower for a shallow, pale one.'],
   ['layerVary','layer-vary','Layer width variation',['landform'],0,100,5,100,'How much each layer\'s width and riser height change along the shore and from one layer to the next, so risers bunch, part and merge as retail\'s do. 0 keeps the even layers.'],
   ['layerCircle','layer-circle','Circle size (px, circular layers)',['landform'],8,80,1,1,'Circular layers: the typical radius of the round bites cut from the bank.'],
   // G7 (Crystal): finer shore slabs.
   // H20b (Crystal): some slabs break into a fine mesh.
-  ['plateVary','plate-vary','Slab variety',['landform'],0,100,5,100,'Rock slabs (Plate material 1): in patches, a slab breaks into a fine mesh of cells about 0.4 of Plate size inside its own outline, so the large seams stay. This sets the share of slabs that break; 0 keeps every slab whole.'],
+  ['plateVary','plate-vary','Slab variation',['landform'],0,100,5,100,'Rock slabs: increases the variation in tread position and plate height, and breaks more underwater plates into smaller pieces.'],
   ['crystalShoreSeam','crystal-shore-seam','Slab seam weight',['landform'],50,65,1,100,'Rock slabs: the crystal-field value of a seam. 50 is the earlier black seam; higher values thin it (the shader inks only below 66) toward the hairline seams of retail\'s shore band.'],
   // Facets (G6, lfcrystal, lfland): one feature of any landform, on/off and coverage, shape, width, step, surface and each shape's own rows.
   ['iceFacets','ice-facets','Facets',['landform'],0,100,5,100,'Breaks the shape into facets of the Facet shape, each as high as the shape at its center, so the section and along curves shape the cluster or ridge they make. This sets how much of it: angular facets and columns cover this share of the surface (the rest stays smooth), prisms stand on this share of their places. On a landform that digs into the ground (Height reference Ground, below 0) the facets are angular, planes fitted to its own surface up and down, and this is how fully they replace it. 0 keeps the smooth surface. A landform with shore features keeps those instead.'],
@@ -259,7 +260,7 @@ export const SHAPE_FIELDS=[
   ['lavaSpread','lava-spread','Layer width spread',['landform'],0,200,5,100,'Contour layers: extra spread in layer width along the shore, on top of Layer width variation (100 is about 2.7 times between the narrowest and the widest). 0: none.'],
 ];
 export const E7_KEYS=['crystalFacet','crystalSizeVar'];
-export const G7_KEYS=['crystalShoreSeam','plateVary'];
+export const G7_KEYS=['crystalShoreSeam','plateVary','plateSteps'];
 // G6 (Ice): the mountain facets' options, wired beside E7's (the card the stroke builds and strokeParams).
 export const G6_KEYS=['iceFacets','iceFacetSize'];
 // Facets: the shape of the facets and their surface (the rest reuse the keys wired above).
@@ -309,12 +310,15 @@ export const DEFAULT_SEED=2701;
 export function borrowBeach(config,settings) {
   const lender=config.beachSources?.[settings.get('beachFrom')];
   if (!lender || config.layers.includes('beach')) return config;
-  config.layers=[...config.layers,'beach']; config.material={...config.material,...lender.material}; config.beachTable=lender.table;
+  config.layers=[...config.layers,'beach']; config.material={...config.material,...lender.material}; config.beachTable=lender.table; config.beachBorrowed=true;
   if (lender.beachMaterial) config.materials={...config.materials,beach:lender.beachMaterial};   // its sand is the lender's beach material (the map's beach role)
   return config;
 }
 export function addDefaults(settings,defaults={}) { for (const [key,value] of Object.entries(defaults||{})) if (!settings.has(key)) settings.set(key,value); return settings; }
-export const pageSettings=(config,search='') => addDefaults(new URLSearchParams(search),config.defaults);
+// A world's built-in settings in the order the renderer reads them (sculpt-renderer.js: engineDefaults over defaults, the address over both), so the
+// page's settings, its panel and a save hold what the picture draws with (sculpt-save.js worldBase reads one key the same way).
+export const worldDefaults=config => ({...(config.defaults||{}),...(config.engineDefaults||{})});
+export const pageSettings=(config,search='') => addDefaults(new URLSearchParams(search),worldDefaults(config));
 // A world setting the page's address may override (a knob trial in a render's query), else the world's value.
 export const worldSetting=(config,settings,key) => settings.has(key)?Number(settings.get(key)):worldDefault(config,key);
 // A height image's node (sculpt-gpu-fields.js heightsFields: the samples and where they lie), as a scene, a save and the undo history hold it: its

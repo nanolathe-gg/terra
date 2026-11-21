@@ -1,10 +1,10 @@
-# Terrain editor export (Card D, phases 1–3)
+# The `.ufo` exporter
 
 Build and inspect installed content:
 
 ```sh
-go build -o /private/tmp/nanolathe-map-editor/agent-D/map-export ./tools/map-editor/export
-/private/tmp/nanolathe-map-editor/agent-D/map-export --catalog
+go build -o /tmp/map-export ./export
+/tmp/map-export --catalog
 ```
 
 `--root DIR` is repeatable; later roots win. With no roots, the command reads
@@ -14,8 +14,8 @@ triples), and `installedNames` (map file basenames). The map names in
 world's planet. All mounted OTA/TNT pairs with that planet contribute to its
 climate medians and `defaultSeaLevel` (the median TNT header sea level).
 For an even source count, both defaults use the upper middle value. `sources`
-lists their logical OTA paths. Missing scene maps, conflicting planets, and
-Zhon can produce `disabledReason` instead of an exportable climate and sea
+lists their logical OTA paths. Missing scene maps and conflicting planets
+can produce `disabledReason` instead of an exportable climate and sea
 default. Disabled worlds omit `defaultSeaLevel`; a median of zero remains
 present. The palette is read in memory, including the ordinary PCX recovery
 fallback.
@@ -23,10 +23,10 @@ fallback.
 Export a local manifest:
 
 ```sh
-/private/tmp/nanolathe-map-editor/agent-D/map-export \
-  --input /private/tmp/editor-export/manifest.json \
-  --out /private/tmp/editor-export/maps \
-  --features-root /private/tmp/nanolathe-map-editor/agent-D/features   # holds pack.json
+/tmp/map-export \
+  --input /tmp/editor-export/manifest.json \
+  --out /tmp/editor-export/maps \
+  --features-root /tmp/editor-export/features   # holds pack.json
 ```
 
 ```json
@@ -74,7 +74,7 @@ before, kept, merged, slots changed, mean, 99th percentile and worst per-tile
 RMS RGB error, the worst slots, milliseconds); `uniqueTiles` is the count before
 merging. A map under the limit never reaches this code and exports the same
 bytes as before. The 252×252 minimap follows
-`research/formats/tnt.md` "Minimap": fit the play area to its long side and
+the TNT format's minimap layout: fit the play area to its long side and
 fill the unused short axis with palette index `0x64`. Each used pixel averages
 all indexed-art RGB values in its source block. Blocks use truncated integer
 boundaries, covering every play-area pixel exactly once; the engine's outer
@@ -105,7 +105,8 @@ A supplied settings object contains every field shown above. Integer values
 are nonnegative signed-32-bit OTA values, with minimum wind no greater than
 maximum wind; surface metal additionally fits the engine's byte store
 (0–255). `lava` is boolean. These are format/store bounds, not retail maxima.
-Starts and settings use the same OTA keys as `internal/mapgen/ota.go`.
+Starts and settings use the same OTA keys as the parent Nanolathe project's
+map generator.
 
 The command writes `<name>.ufo` with stored HPI entries
 `maps/<name>.ota` and `maps/<name>.tnt` (and the feature pack's TDF and GAF), plus `<name>-indexed.png` for image

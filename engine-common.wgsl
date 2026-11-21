@@ -105,8 +105,8 @@ struct Rock {
     absorbDepth: f32,
     shadowTint: f32,
     material: i32,        // its surface material's slot (grain, art height, shine), 0 the world's rock material (u.rockGround)
-    pad2: f32,
-    pad3: f32,
+    crackFrom: f32,       // slope where cracks take their whole hierarchy and the blocks step (facets); majors start at .35 of it
+    faceSlopeAlign: f32,  // 0: joints in the world frame; 1: joints follow the surface
     // Rock surfaces, per recipe (moved from the world uniforms so a shape's rock can carry them): cracks, contour bands, moon pits,
     // cups, ribs and folds, ice crystal strokes, crests, snow caps, fibres and aprons.
     crackDark: f32,
@@ -115,11 +115,14 @@ struct Rock {
     crackNetwork: f32,    // 0: rills down the slope; 1: polygonal plates
     crackSpacing: f32,    // major crack block size, world px
     banding: f32,         // contour banding strength (0: none)
+    bandLevel: f32,       // strength of the bands on near-level ground (slope 0.004-0.09), times the slopes'
+    bandFill: f32,        // extra lines on near-level ground, where the bands run far apart: halves, then quarters, the spacing (0: none)
     crackMinor: f32,      // share of minor cracks inside blocks
     crackHairline: f32,   // share of hairline crazing
     crackBlocks: f32,     // how far blocks step and tilt against each other
     crackMajor: f32,      // share of major cracks
     pockmark: f32,        // dark pits scattered evenly over raised ground and slopes, tops and sides alike (0: none, as before)
+    stepCrease: f32,      // dark crease at the foot of each step on raised ground (a stroke's terraces, a face's ledges), whatever its facing (0: none)
     pockSize: f32,        // pit spacing across the retail glint axis, px
     moonCups: f32,        // lit pits, 2-3 px wide and 4-6 px tall, many on shaded steep faces and few on lit ground (0: none; the pockmark dots are separate)
     moonRibs: f32,        // stringy light and dark strokes down steep faces, shaded by the sun (0: none)
@@ -218,7 +221,7 @@ struct Uniforms {
     shadeDepth: f32,      // share of the directional shading kept (1: all)
     ambient: f32,       // unlit share of the light (0.42; Moon lower: no sky)
     slopeMarks: f32,    // Moon: density of crisp dark marks on slopes (0: none)
-    sandCrown: f32,     // painted sand stays sand to the crown, no rock (Zhon sand bars)
+    sandCrown: f32,     // painted sand stays sand to the crown, no rock (sand bars)
     flatBank: f32,        // low dry banks lit as level ground, no wet band (0: off)
     sandLight: f32,
     sandEdge: f32,
@@ -254,7 +257,6 @@ struct Uniforms {
     bandLine: f32,        // darkness of the line along each riser (the column block's `bands`)
     bandJag: f32,         // pixel-scale wiggle of the band lines, in band steps (0: smooth)
     bandFade: f32,        // slope where bands are gone (they fade from 0.35/0.75 of it)
-    bandLevel: f32,       // strength of the bands on near-level ground (slope 0.004-0.09), times the slopes'
     sun: vec3f,           // the renderer's light, for lit crack walls
     crystalInk: f32,      // crystal outlines: 0 soft 92% dark, 1 crisp pure black
     // Painted masks (card C5).
@@ -307,9 +309,7 @@ struct Uniforms {
     sunColor: vec3f,      // the direct light's colour: multiplies the sun's share of the light, and the glints that mirror it
     skyColor: vec3f,      // the ambient light's colour: multiplies the sky's share (what the shade keeps)
     frostWet: f32,        // Ice frost band: how far cells it marks (protection above 0.02) skip the wet-band darkening above the waterline (0: as before)
-    // E7 (Crystal).
-    crystalShallow: f32,   // shallow water: how strongly it carries a mosaic of small crystal cells (0: as before)
-    crystalShallowPx: f32, // width of those cells, px
+    slabShallows: f32,    // how strongly the lit bed is confined to the physical shore slabs
     // G7 (Crystal craters).
     crystalCraterWeb: f32,     // crater skin (crystal mark .74): how dark the web of thin lines between them is drawn (0: no web)
     crystalCraterWebPx: f32,   // width of the web's cells, px
@@ -318,8 +318,6 @@ struct Uniforms {
     crystalCraterTone: f32,    // cell-to-cell brightness variation (0: one tone)
     crystalCraterLight: f32,   // how much stronger the crater wall's light and shade run than the sun gives (1: as the sun gives)
     crystalSeamEnd: f32,       // the field value where a seam's ink has faded out (0.74 as before; lower draws thinner seams)
-    crystalShallowInk: f32,    // shallow cells' seam ink (0.55 as before)
-    crystalShallowAll: f32,    // how far the mosaic covers shallow water away from slabs too (0: only a fringe round the slabs, as before)
     // E8 (Painted Desert)
     baseBand: f32,         // the grey band at the foot of the raised ground (strata colour 5): its strength, 0 off
     baseBandLow: f32,      // lower edge of its height window, above the plain
@@ -357,7 +355,7 @@ struct Uniforms {
     // G1 (shallow water round 3: Green, Red, Archipelago). Every default is the earlier look.
     shoalRag: f32,        // the shallow-to-deep step's outline: pixel notches of up to this many px, whatever the bed's slope (0: as before)
     shoalShoreSoft: f32,  // Archipelago: the waterline the world draws (a stroke's Hard and Faded stay) is a dithered blend this many px wide (0: a clean line)
-    // Low ground (Zhon's mud lowland): the ground from the sea up to lowReach above it, and the shallows, keep lowGrain of their grain.
+    // Low ground: the ground from the sea up to lowReach above it, and the shallows, keep lowGrain of their grain.
     lowReach: f32,        // height above the sea where low ground ends (its ragged edge fades over the upper half)
     lowGrain: f32,        // 0..1: the share of its grain the low ground's pattern and the water's art and mottle keep (1: as drawn)
     soilRim: f32,         // 0..1: bare soil where the plant cover thins against rock, and a ragged line (not a blend) for rock's edge off the faces (0: as before)
@@ -683,6 +681,13 @@ fn regionalPoint(uv: vec2f) -> vec2f {
     return (q.whole - u.chunkGridOrigin) + q.fract;
 }
 fn maskPoint(p: vec2f) -> vec2f { return regionalPoint((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid); }
+fn shoreSlabCoverage(p: vec2f) -> f32 {
+#ifdef COLOR_PASS
+    return sampleRegionalArray(gridTex, maskPoint(p), 2).a;
+#else
+    return sampleMasks(maskPoint(p), 5).b;
+#endif
+}
 
 // Slope averaged over about 14 px: the relief a painted edge follows changes
 // over tens of pixels, not at the 5 px the shading's slope does.
@@ -719,7 +724,7 @@ fn styleEdge(p: vec2f, f: f32, slope: f32) -> f32 {
 }
 
 #ifdef COLOR_PASS
-// F retains exactly flow/deposit, wear/wetness, material RGBA, fall XY and the ground id (fall layer blue).
+// F retains flow/deposit, wear/wetness, material RGBA, fall XY, ground id and shore slab coverage.
 fn weatherAt(uv:vec2f)->vec2f{return sampleRegionalArray(gridTex,regionalPoint(uv),0).rg;}
 fn timeMap2(uv:vec2f)->vec2f{if(u.weatherMaps<0.5){return vec2f(0);}return sampleRegionalArray(gridTex,regionalPoint(uv),0).ba;}
 fn timeMap3(uv:vec2f)->vec2f{if(u.weatherMaps<0.5){return vec2f(.5);}return sampleRegionalArray(gridTex,regionalPoint(uv),2).rg;}
@@ -946,11 +951,19 @@ fn surfaceHeight(p: vec2f) -> f32 {
     if (rough < 0.001) { return h; }
     let debris = materialChipHeight(p) * rough;
     if (abs(h - u.sea) < 6.0) {
-        // Break only the waterline into small shared geometric irregularities.
-        // The designed shallow-route bed (-7) and broad flats stay untouched.
-        let shoreNoise = terrainNoise(p);
-        let collar = 1.0 - smoothstep(2.0, 6.0, abs(h - u.sea));
-        h += ((shoreNoise.g - 0.5) * 4.0 + (shoreNoise.a - 0.5) * 1.7) * collar * rough;
+        // A low plain can be at the same elevation as a bank. On the dry side,
+        // require nearby water, with a gradual fade as the lowest tap rises past sea level.
+        var shore = 1.0;
+        if (h > u.sea) {
+            let x = min(baseHeight(p - vec2f(6.0, 0.0)), baseHeight(p + vec2f(6.0, 0.0)));
+            let y = min(baseHeight(p - vec2f(0.0, 6.0)), baseHeight(p + vec2f(0.0, 6.0)));
+            shore = 1.0 - smoothstep(u.sea, u.sea + 0.75, min(x, y));
+        }
+        if (shore > 0.0) {
+            let shoreNoise = terrainNoise(p);
+            let collar = 1.0 - smoothstep(2.0, 6.0, abs(h - u.sea));
+            h += ((shoreNoise.g - 0.5) * 4.0 + (shoreNoise.a - 0.5) * 1.7) * collar * rough * shore;
+        }
     }
 #ifdef BAKE
     if (h < -12.0) { return h; }
@@ -1085,13 +1098,6 @@ fn rockMaterialOf(slot:u32)->i32 {
  if(u.rockGround>=0&&u.ground[u32(u.rockGround) & groundMask].cacheLayer>=0){return u.rockGround;}
  return -1;
 }
-// A cache layer's art height at a native pixel q, bilinear between texels (the taps that light it read between pixels).
-fn materialReliefBilinear(q:vec2f,layer:i32)->f32 {
- let size=f32(textureDimensions(groundTex).x);let b=floor(q-.5);let f=q-.5-b;
- let a00=textureLoad(materialHeightTex,vec2i(poolWrap(b,size)),layer,0).x;let a10=textureLoad(materialHeightTex,vec2i(poolWrap(b+vec2f(1,0),size)),layer,0).x;
- let a01=textureLoad(materialHeightTex,vec2i(poolWrap(b+vec2f(0,1),size)),layer,0).x;let a11=textureLoad(materialHeightTex,vec2i(poolWrap(b+vec2f(1,1),size)),layer,0).x;
- return mix(mix(a00,a10,f.x),mix(a01,a11,f.x),f.y);
-}
 fn materialRaw(p:vec2f,slot:u32)->vec3f { return materialRawAt(p,u.ground[slot & groundMask].cacheLayer); }
 fn materialRawAt(p:vec2f,layer:i32)->vec3f {
  return textureLoad(groundTex,vec2i(materialPixel(p)),layer,0).rgb;
@@ -1158,6 +1164,24 @@ fn voxelFold(p:vec3f)->f32 {
 fn voxelRockSpace(p:vec3f)->vec3f {
     let a=radians(u.rock[rs & rockMask].faceLean);let x=p.x*cos(a)+p.y*sin(a);let y=-p.x*sin(a)+p.y*cos(a);
     return vec3f(x,y,p.z+columnOffset(p.xy)+voxelFold(p));
+}
+// Project onto the local tangent plane of the authored surface. Near a
+// planar bank the lateral coordinates stay fixed along its normal. The
+// depth coordinate follows the terrain, with no dependence on sea level,
+// baked relief or the chunk's origin.
+fn voxelFracturePoint(p:vec3f)->vec3f {
+    let align=u.rock[rs & rockMask].faceSlopeAlign;
+    if(align<=0.0){return p;}
+    let gradient=broadGradient(p.xy);
+    let height=baseHeight(p.xy);
+    let nz=inverseSqrt(1.0+dot(gradient,gradient));
+    let dz=p.z-height;
+    let along=gradient*(clamp(dz,-40.0,40.0)*nz*nz);
+    return mix(p,vec3f(p.xy+along,u.base+dz*nz),align);
+}
+fn voxelFractureSpace(p:vec3f,rockPosition:vec3f)->vec3f {
+    if(u.rock[rs & rockMask].faceSlopeAlign<=0.0){return rockPosition;}
+    return voxelRockSpace(voxelFracturePoint(p));
 }
 struct VoxelRock {face:f32,edge:f32,tone:f32}
 // The thinnest bed the face draws, in height units on a vertical face: 2 px up the screen (a height unit is half a pixel) and 4 voxels at

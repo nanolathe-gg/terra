@@ -118,7 +118,7 @@ export class GpuErosion {
       tileArgs = make('erosion tile args', 12, S | GPUBufferUsage.INDIRECT);
       weather = make('time pass height', n * 8), maps = [0, 1, 2].map(k => make('time pass map ' + k, n * 4));
       });current();
-      const uniform = feedUniform(device, {grid, cells: n, rateMask: request.rateMask, maskStride: request.maskStride, sea: seaLevel, spacing, envelope: request.envelope ?? 1, tilesWide: tw});
+      const uniform = feedUniform(device, {grid, cells: n, rateMask: request.rateMask, maskStride: request.maskStride, shownHeights: request.shownHeights, sea: seaLevel, spacing, envelope: request.envelope ?? 1, tilesWide: tw});
       owned.push(uniform);
       device.queue.writeBuffer(paramBuffer, 0, params);
       this.renderer.setColumn();
@@ -239,7 +239,7 @@ export class GpuErosion {
       let encoder=device.createCommandEncoder({label:'erosion cells input'});
       encoder.copyBufferToBuffer(request.planes,0,weather,0,n*8);pass(encoder,'timeDownMain',gc);
       device.queue.submit([encoder.finish()]);
-      coarse=await this.runGpu({...request,planes,masks,maskStride:1,rateMask:request.rateMask&3,grid:gc,spacing:spacing*step,ox:(ox+sx)/step,oy:(oy+sy)/step});
+      coarse=await this.runGpu({...request,planes,masks,maskStride:1,shownHeights:1,rateMask:request.rateMask&3,grid:gc,spacing:spacing*step,ox:(ox+sx)/step,oy:(oy+sy)/step});
       current();if(request.beforeSlice)await request.beforeSlice();current();
       Object.assign(res,{'3.17':{buffer:coarse.weather},'3.18':{buffer:coarse.maps[0]},'3.19':{buffer:coarse.maps[1]},'3.20':{buffer:coarse.maps[2]}});
       encoder=device.createCommandEncoder({label:'erosion cells output'});

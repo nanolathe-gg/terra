@@ -42,7 +42,8 @@ const params = new URLSearchParams(`biome=${scene.biome}&mapX=${MAPX}&mapY=${MAP
 for (const [k, v] of new URLSearchParams(extraQuery)) params.set(k, v);   // the page reads a key's first value, so an appended one would lose
 const search = params.toString();
 const strokes = scene.strokes.map(([kind, points, options]) => [kind, points.map(([x, y]) => [x + OX, y + OY]), options]);
-const writeHeights = (sea, heights) => writeFileSync(`${out}/ours-heights.json`, JSON.stringify({grid: 512, sea, heights}));
+// base: the plain above the sea (repro/stats.py reads it; a map may hold its own, the `plain` setting).
+const writeHeights = (sea, heights, base) => writeFileSync(`${out}/ours-heights.json`, JSON.stringify({grid: 512, sea, heights, ...(Number.isFinite(base) ? {base} : {})}));
 
 if (chrome) await renderInChrome();
 else await renderHeadless().catch(error => { console.error(`render.mjs: ${sceneFile}: ${error.message}`); process.exit(1); });
@@ -56,7 +57,7 @@ async function renderHeadless() {
   const options = s.drawOptions({clay: clayOn, light: 'original'});
   const pixels = await headless.renderWindow(s, {x: OX, y: OY, width: WINDOW, height: WINDOW, options});
   writeFileSync(`${out}/ours.png`, encodePng(WINDOW, WINDOW, pixels));
-  writeHeights(s.config.seaLevel, await headless.windowHeights(s, {x: OX, y: OY}));
+  writeHeights(s.config.seaLevel, await headless.windowHeights(s, {x: OX, y: OY}), s.config.baseHeight - s.config.seaLevel);
   // The picture must not depend on how the map is cut into tiles: the window's four 512 px tiles, baked alone, match the 256 px view tiles.
   const big = await headless.renderWindow(s, {x: OX, y: OY, width: WINDOW, height: WINDOW, tile: 512, options});
   let tiles = 0; for (let i = 0; i < big.length; i += 4) if (big[i] !== pixels[i] || big[i + 1] !== pixels[i + 1] || big[i + 2] !== pixels[i + 2]) tiles++;
@@ -78,7 +79,6 @@ async function renderInChrome() {
     process.exit(1);
   }
   const sceneConfig = await sceneConfigResponse.json();
-  // A host without the exporter (the static site) leaves the export button off, so, as for Zhon, the enabled editor stands in for it.
   if (sceneConfig.biomeId !== scene.biome) {
     console.error(`render.mjs: ${sceneFile}: asked for world ${scene.biome}, the server returned ${sceneConfig.biomeId}`);
     process.exit(1);
@@ -104,8 +104,7 @@ async function renderInChrome() {
     };
     const send = (method, params = {}) => new Promise(r => { const k = ++id; wait.set(k, r); ws.send(JSON.stringify({id: k, method, params})); });
     const ev = async expr => { const r = await send('Runtime.evaluate', {expression: expr, returnByValue: true, awaitPromise: true}); if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text); return r.result?.result?.value; };
-    // A Zhon map cannot export (by design), so its export button never enables: its editor being enabled and the canvas idle stand in.
-    const ready = async () => { for (let i = 0; i < 480; i++) { await sleep(250); if (await ev(`!!window.sculptCanvas && (!document.getElementById('map-export')?.disabled || (${scene.biome === 'zhon'} && !document.getElementById('editor')?.disabled && sculptCanvas.idle().then(() => true)))`)) { if (scene.biome === 'zhon') await sleep(2500); return true; } } return false; };
+    const ready = async () => { for (let i = 0; i < 480; i++) { await sleep(250); if (await ev('!!window.sculptCanvas && !!window.sculptRegion && sculptRegion.canExport()')) { await ev('sculptCanvas.idle()'); return true; } } return false; };
     await send('Runtime.enable'); await send('Page.enable');
     await send('Page.navigate', {url});
     if (!await ready()) throw new Error('editor never became ready: ' + await ev(`document.getElementById('error').textContent`));

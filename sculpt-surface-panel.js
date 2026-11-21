@@ -152,7 +152,7 @@ let rowKey = '';
 const uid = part => `surface-${rowKey}-${part}`.replace(/[^A-Za-z0-9_-]/g, '_');
 const ROCK_TYPED = ['rock', 'crown', 'paintedRock', 'chips'];
 const factSelect = (value, onChange, part) => {
-  const select = el('select', {title: 'What it reads', id: uid(part)}, ...SURFACE_FACTS.map(f => el('option', {value: f, textContent: FACT_LABELS[f][0], selected: f === value})));
+  const select = el('select', {title: 'Choose which terrain or material property the rule reads at each pixel.', id: uid(part)}, ...SURFACE_FACTS.map(f => el('option', {value: f, textContent: FACT_LABELS[f][0], selected: f === value})));
   select.onchange = () => onChange(select.value);
   return select;
 };
@@ -220,7 +220,7 @@ export function mountSurfacePanel(host) {
     const id = uid(label), row = controlRow({id, label: `${label} <output></output>`, range: `min="${min}" max="${max}" step="${step}" value="${value}"`});
     const input = row.querySelector('input[type=range]'), out = row.querySelector('output');
     out.textContent = show(value); row.classList.add('surface-slider');
-    if (title) row.querySelector('.scrub').title = title;
+    if (title) input.dataset.help = title;
     input.oninput = () => { out.textContent = show(Number(input.value)); onInput(Number(input.value), false); };
     input.onchange = () => onInput(Number(input.value), true);
     return row;
@@ -237,7 +237,7 @@ export function mountSurfacePanel(host) {
     const set = (field, v) => edit(i, l => { if (v === undefined) delete l.where[k][field]; else l.where[k][field] = v; }, true);
     const moved = drawn && (drawn.from !== w.from || drawn.to !== w.to);
     return el('div', {className: 'surface-term'}, factSelect(w.fact, f => edit(i, l => { l.where[k].fact = f; }, true), `w${k}-fact`),
-      number('from', w.from, v => set('from', v), undefined, undefined, `w${k}-from`), number('to', w.to, v => set('to', v), undefined, undefined, `w${k}-to`),
+      number('from', w.from, v => set('from', v), 'Lower limit of this condition. Clear it to leave the condition open below.', undefined, `w${k}-from`), number('to', w.to, v => set('to', v), 'Upper limit of this condition. Clear it to leave the condition open above.', undefined, `w${k}-to`),
       number('fade', w.fade ?? .05, v => edit(i, l => { l.where[k].fade = Math.max(v ?? .05, .0001); }, true), 'How gradually it starts and stops', '', `w${k}-fade`),
       remover('Remove this condition', () => edit(i, l => { l.where.splice(k, 1); if (!l.where.length) delete l.where; }, true)),
       ...(moved ? [el('span', {className: 'small surface-spread-now', textContent: `With Spread: ${drawn.from != null ? fmt(drawn.from) : 'open'} to ${drawn.to != null ? fmt(drawn.to) : 'open'}`})] : []));
@@ -339,7 +339,7 @@ export function mountSurfacePanel(host) {
   }
   function materialSelect(layer, i) {
     const builtin = !isMaterialLayer(layer), options = host.library();
-    const select = el('select', {className: 'surface-material', id: uid('material'), title: 'The library material this layer draws (the world’s copy, shared by every layer that draws it)'});
+    const select = el('select', {className: 'surface-material', id: uid('material'), title: 'The library material this layer draws (one copy in this map, shared by every layer that draws it)'});
     if (builtin && layer.material == null) select.append(el('option', {value: '', textContent: 'None: it draws nothing', selected: true}));
     // A material layer with plants may draw no material: its plants grow on whatever lies below.
     if (!builtin && layer.plants) select.append(el('option', {value: '', textContent: 'None: plants only', selected: layer.material == null}));
@@ -410,7 +410,7 @@ export function mountSurfacePanel(host) {
       // A built-in that already draws a role material or its rock type's rock takes it from there (sculpt-material-model.js SURFACE_DRAWABLE).
       const own = builtin && !SURFACE_DRAWABLE.includes(layer.builtin);
       const materialRow = own ? el('p', {className: 'small surface-wide', textContent: `Drawn with ${role?.name ?? BUILTIN_SOURCES[layer.builtin]}: choose it in ${ROCK_TYPED.includes(layer.builtin) ? 'Rock types' : 'the Materials panel'}.`}) : el('div', {className: 'surface-wide surface-line'}, materialSelect(layer, i));
-      if (material && !own) { const b = el('button', {type: 'button', id: uid('edit'), textContent: 'Edit…', title: 'Open its material in the material editor (the world’s: every map in this world shows your edit)'}); b.onclick = () => host.edit(layer, b); materialRow.append(b); }
+      if (material && !own) { const b = el('button', {type: 'button', id: uid('edit'), textContent: 'Edit…', title: 'Open its material in the material editor'}); b.onclick = () => host.edit(layer, b); materialRow.append(b); }
       // Its place in the stack (within its stage) and, for a material layer, removing it: in the open row, so the head keeps room for the name.
       const order = el('div', {className: 'surface-wide surface-line surface-order'}, el('span', {className: 'small', textContent: STAGE_PLACE[stage] + '.'}), move(1, '↑ Raise'), move(-1, '↓ Lower'));
       if (!builtin) order.append(el('button', {type: 'button', textContent: 'Remove', title: 'Remove this layer (its material leaves the map unless a stroke uses it)', onclick: () => { const next = structuredClone(layers); next.splice(i, 1); put(next, true); }}));
@@ -421,7 +421,7 @@ export function mountSurfacePanel(host) {
       // A rock-typed built-in shows the world's rock material's (a rock type with a material of its own keeps that one's).
       const colored = material ?? (own ? role : null);
       if (colored?.own) {
-        const pick = el('input', {type: 'color', value: colored.own, id: uid('color'), title: 'Moves all of the material’s color steps together (the world’s copy, on every map); each step stays editable in the material editor'});
+        const pick = el('input', {type: 'color', value: colored.own, id: uid('color'), title: 'Moves all of the material’s color steps together; each step stays editable in the material editor'});
         const rgb = () => [1, 3, 5].map(k => parseInt(pick.value.slice(k, k + 2), 16) / 255);
         pick.oninput = () => { picking = true; host.recolor(layer, rgb(), false); };
         pick.onchange = () => { picking = false; host.recolor(layer, rgb(), true); build(); };

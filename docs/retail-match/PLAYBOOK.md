@@ -127,6 +127,10 @@ A rock type may name its own rock material.
   - The validator runs the editor's own material check, so it reports a
     broken connection before anything renders.
 
+A material's palette list names entries of `materials/palette.json`'s
+`indexed` list (256 entries, the game's index order), not its `colours`
+(242): round 10's first clump material named the wrong colors.
+
 ### 4. Surface layers (`world.surface`)
 
 **Use for:** where a material shows: rock only on the steepest faces, moss
@@ -163,6 +167,19 @@ thins.
   - Some built-ins draw nothing until a World control is above 0. The
     reference's "needs" column lists which: Bare soil needs `soilRim`,
     Crown rock a rock type's `rockCrown`, and so on.
+  - A layer that draws a material takes a material slot ahead of
+    `world.materials.extra`, so every extra ground moves up one and the
+    scenes' `groundPreset` numbers must follow (round 9 renumbered
+    green-5's paint from 12 to 14). The validator warns when a stroke's
+    slot now lays a layer's or role's material.
+  - A layer's material relief is not lit (only the ground's is). To make a
+    layer read as lit lumps, bake the light into its color with a Light
+    node in the material's graph (round 9's `green-lumps`, a billow through
+    a Light node).
+  - A layer's `slope` fact reads the art's height, which rolls with the
+    map's `undulationArt`. A world layer on gentle grades therefore also
+    draws on any plain whose art rolls; a map that should stay clean sets
+    a low `undulationArt` (round 9: green-3 at .2).
 
 ### 5. Colors
 
@@ -196,6 +213,16 @@ helps one window and hurts another.
     `["paint", [[60, 300], [380, 320]], {"card": {"diameter": 300,
     "amount": 100, "groundPreset": 12}}]`. Append new strokes at the end:
     an inserted one shifts the seeds of every stroke after it.
+  - **Painted styles and overrides:** a `paint` stroke's `paintChannel`
+    scales a world result under the brush: Relief, Cracks and Banding
+    (styles, 8-13), Ground lumps (16/17), and the signed overrides of
+    Time and the surface (18-25: Relaxation, Deposits, Vegetation, Rock
+    exposure). REFERENCE.md lists them. Paint one where the retail map
+    plainly differs from the world's result, and keep the stroke clear of
+    what it should not touch: round 7's Relaxation: less on green-1's
+    coastal plain calmed Time's creases there (kept), but over the whole
+    window it reached the hills (trial-030), and Vegetation: more on
+    green-5 greened the ridge's rock (trial-033).
   - **Shape options:** Steps (`terraces`, `ledge`, `terraceJitter`,
     `breakup`), `gullies`, `cracks`, `talus`, the section `curve` and the
     rest of section 5 of the reference.
@@ -206,8 +233,18 @@ helps one window and hurts another.
     of that relief the art shows: lower it when the heights should roll but
     the picture shows lumps retail does not (round 2's green-5 at
     `undulation` 14 drew crumpled hummocks on its plain; `undulationArt`
-    0.3 kept the heights and smoothed the picture). The validator refuses
-    any other key in a scene's query: World controls are the world's.
+    0.3 kept the heights and smoothed the picture).
+  - **Sea and plain:** the query's `sea` and `plain` (the plain's height
+    above the sea): green-4's low-floored map uses `sea=0&plain=9`.
+  - **Water:** the query's `shallowDepth`, `deepDepth`, `bedTint`,
+    `bedBright`, `bedContrast`, `bedCracks`, `bedRelief`, `bedFlat` and
+    `wetBand`, where this map's
+    water or damp bank plainly differs from the world's (red-2's river stays
+    light to depth 24, red-3's sea darkens from depth 8). Probe the world
+    value first: a map's own value needs a by-eye reason in the report.
+
+  The validator refuses any other key in a scene's query: World controls
+  are the world's.
 - **Try:** edit the scene, then `sh repro/match.sh <world> --window
   <world>-<n> --note "..."`, which renders only that window (about 20 s). A
   map setting can be probed first: `--probe undulation=3,6,10 --window
@@ -277,17 +314,20 @@ moved, class by class, beside retail's value.
 | `*:dark` (ours darker) or `*:light` (ours brighter) | whatever the trial last added: specks, flecks, dither or a material's Gradient ends | the palette list the material reduces to |
 | `flat:edges` too many (regular dimples) | the map's `undulationArt` (art only, the heights keep rolling), `undulation`, `undulationScale` (section 6) | ground material's broad Noise |
 | `slope:color`, `slope:luma` | slope material; `hillLight` | `slopeTexture`, `faceFill`, `creaseShade` |
-| `slope:lines` too few | `banding`, `bandSoftness` (contour hatch), `slopeMarks`, `wrinkles` | the map lane: the window's strokes with Steps and a rock type of their own (section 6) |
+| `slope:lines` too few | `banding`, `bandSoftness` (contour hatch), `slopeMarks`, `wrinkles`; on terraced ground a rock type's `stepCrease` (a dark line at each step foot on raised ground; green-5's ridgestone carries 1) | the map lane: the window's strokes with Steps and a rock type of their own (section 6) |
 | One window's slopes or rock unlike the others' | the map lane: a rock type for that map, its strokes' Steps, `cracks`, `gullies` | a ground of its own |
 | `slope:edges` too many | `reliefAmount`, `worms`, `gentleRelief` | the slope material's fine Noise |
 | `steep:color` grayer, or greener than retail | rock material (the rock type's `material`, else the world's `rock`): its mean color is the face's color, and its own hue variation shows at only a third (`rockGrain`). A material's `color` key recolors its whole graph and palette to that color: drop or change it in a copy of a rock material, or the copy draws the old rock's color (round 5's moss rock did); `faceGrass`; surface rock rule | `faceTone`, `faceRindTone` |
 | `steep:luma` | `faceShade`, `shadeDepth`, `ambient`, `lightCap` | rock material Gradient |
 | `steep:edges` too many (busy faces) | rock type: `rockFace` (depth), `faceBlockSize` up, `faceJoint` down, `faceSecondary` down | `faceWear`, `faceMass` |
-| `steep:lines` too few (retail's dark cracks) | rock type: `crackSeverity`, `crackMajor`, `crackNetwork`, `crackDark`; `faceScratch`, `faceCrease` | `layerCrease`, `creaseShade` |
+| `steep:lines` too few (retail's dark cracks) | rock type: `crackSeverity`, `crackMajor`, `crackNetwork`, `crackDark`; `faceScratch`, `faceCrease`; `stepCrease` where the face is stepped | `layerCrease` (banks only), `creaseShade` |
+| Rock faces without retail's fine down-slope streaks or ribs (a knob, a buttressed ridge) | rock type: `faceScratch` ("Scratches and water grooves") with `faceScratchSize` (spacing), `faceScratchLength` and `faceScratchAngle` 0 (down the face), before a proposal | `gullies` on the map's strokes for the spurs; a rock material with vertical streaks |
+| Broken, chunky rock or ground: blocks with lit edges and shadowed cracks (retail red-2's upland) | rock type: `crackSeverity` above 0, `crackFrom` ("Cracks and facets from slope": lower reaches gentler ground; default .44, majors from a third of it), `crackBlocks` up to 3 ("Facets", how far blocks step and tilt), `crackSpacing` (chunk size). The strokes need a Cracks amount (card `cracks`) above 0, and the ground needs some slope: facets do not draw on level ground | a lit crack material for the fine crumple (art only) |
 | `steep:band8` too low | rock type: `faceBed`, `faceLedge`, `faceLamina`, `faceTone` | rock material pattern |
+| `shore:luma` darker than retail (a dark bank or coast) | `wetBand`, the damp band's height above the water (rock stays damp four times as high; Red's 13 darkened red-3's coast near black, and 1 cleared every shore finding there) | a dry-bank surface layer on `toWater` |
 | `shore:color`, `shore:luma` | beach (a `beach` role material, `beachWidth`), `lowReach`, `lowGrain`, `shoreEdge` | `wetSwath`, `wetGround`, `crispShore`, a surface layer on `toWater` |
 | `deep:color`, `deep:luma` | water material; `deepDepth` | colors |
-| `shelf:color`, `shelf:luma` | `shallowDepth`, `bedTint`, `bedBright`, `shallowTone` | water material |
+| `shelf:color`, `shelf:luma` | `shallowDepth`, `deepDepth`, `bedTint`, `bedBright`, `shallowTone`; a world's material table sets the depths' defaults (Red renders 2 and 42; REFERENCE.md shows the value the page gets). Where one map's water differs (a river light to depth 24, a sea dark from depth 8), its scene's query may set its own (section 6) | water material |
 | `shelf:edges` too few (retail's specks and streaks on the shelf) | `bedContrast` (carries the bed's grain into the shelf tint; Green sets 0.7, and 1.0 took green-1's shelf edges from 0.08x to 0.53x retail), with `bedFlat`, `bedRelief`, `shoalRag`; the shallow-water surface layer. These are world-wide: green-3's and green-7's shelves overshoot at `bedContrast` .85 (round 5). For one map, try the rock type under its water: green-3's own rock type moved its shelf edges .003 to .005 (round 5, trial-054) | the water material, but its grain reaches only the deep water (the shelf is tinted by the water's mean color, `engine-frag.wgsl` `litBed`) |
 | `deep:edges` or `shelf:edges` too many | `bedRelief`, `bedFlat`, `waterSoft`, `shoalRag` | water material's fine Noise |
 | Everything a touch dark or flat | `ambient`, `lightCap`, `sunHeight` | `shadeDepth`, `flatOcclusion` |

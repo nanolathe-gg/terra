@@ -129,7 +129,7 @@ export function groupToolControls(fields,buildRow){
  ['spurCount','Spurs',['spurCount','spurLength','spurSpread','spurWidth','spurTaper','spurHeight','spurForks','spurBulb','crestVary']],
  ['iceFacets','Facets',['iceFacets','facetForm','facetSurface','iceFacetSize','crystalStep','crystalTiers','crystalFacet','crystalSizeVar','crystalSides','crystalStretch','crystalTop','crystalVariation','crystalAlign','bergJitter','bergBreak','bergRough']],
  ['','Impact',['ejecta','buckling','secondaries','secondaryDistance']],
- ['','Shore',['fingers','fingerSize','fingerVary','fingerInlet','riverDepth','shorePlates','plateMaterial','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateVary','frostNeedles','crystalShoreSeam','waterDeep','waterShore','surf']],
+ ['','Shore',['fingers','fingerSize','fingerVary','fingerInlet','riverDepth','shorePlates','plateMaterial','plateWaterPx','plateLandPx','plateSize','plateGap','plateHeight','plateSteps','plateVary','frostNeedles','crystalShoreSeam','waterDeep','waterShore','surf']],
  ['','Cut',['fissureWidth','fissureJag','fissureTaper','fissureCrack','fissureDark'],true],
  ['fissureBranches','Branches',['fissureBranches','fissureBranchLen','fissureBranchSpread']],['fissureNetwork','Fracture network',['fissureNetwork','fissureCell']]
  ];
@@ -178,21 +178,21 @@ export const WORLD_HOMES={
  'Rock types/Headline':ROCK_HEADLINES.join(' '),
  'Rock types/Colors & recipe':'absorbDepth shadowTint',
  'Rock types/Exposure & relief':'rockFace faceRock rockFaceFrom faceExtrude faceMass rockCrown',
- 'Rock types/Blocks & joints':'faceWholeLarge faceRegular faceBlock faceStretch faceBlockHeight faceJointTilt faceScaleVary faceBreak faceRound faceJoint faceJointWidth faceSecondary faceContinuity faceLean',
+ 'Rock types/Blocks & joints':'faceWholeLarge faceRegular faceBlock faceStretch faceBlockHeight faceSlopeAlign faceJointTilt faceScaleVary faceBreak faceRound faceJoint faceJointWidth faceSecondary faceContinuity faceLean',
  'Rock types/Layers':'strata strataContrast strataGrain bedDip bedDipDir bedCycleVary faceBedVary faceLedge faceRun faceFold faceSpall faceLamina faceLaminaSize faceLayers faceGrass',
  'Rock types/Weathering':'faceCrease faceCreaseSize faceScratchSize faceScratchLength faceScratchAngle faceClast faceClastSize faceDetailPatch runoffScale runoffConcentration runoffCut runoffStain',
  'Rock types/Surface & crust':'shineRock shineRockSharp shineRockRough shineRockScale faceShade faceTone faceFresh faceRind faceRindDepth faceRindTone faceRindWarmth faceRindRough faceMineral faceStrata faceWet',
  'Rock types/Stones & debris':'looseSize stoneSort stoneRound stoneSlab debrisAmount debrisReach debrisDepth',
- 'Rock types/Cracks & bands':'crackSpacing crackMajor crackMinor crackHairline crackBlocks crackWidth crackNetwork crackDark banding',
+ 'Rock types/Cracks & bands':'crackSpacing crackFrom crackMajor crackMinor crackHairline crackBlocks crackWidth crackNetwork crackDark banding bandLevel bandFill stepCrease',
  'Rock types/Special surfaces':'pockmark pockSize moonCups moonCupSize moonCupDepth cupStretch moonRibs moonRibDepth moonRibDark moonFolds moonFoldSpacing iceCrystal iceCrest iceSnow iceFall iceApron gougeWeb',
  'Cliffs & stones/Where rock shows':'rimReach shoreRock shoreShelf',
  'Cliffs & stones/Loose stones':'looseSupply boulders',
- 'Cliffs & stones/Bands':'bandSoftness bandLevel sandBanding sandBandSpacing layerCrease desertCapFlat',
+ 'Cliffs & stones/Bands':'bandSoftness sandBanding sandBandSpacing layerCrease desertCapFlat',
  'Cliffs & stones/Special surfaces':'iceFrost lavaCrust lavaPillow lavaChip lavaVeins lavaCalm lavaDusk iceSoft',
  'Sand/':'sandCrown sand sandLee wind sandDust sandGrass sandLight ripple rippleHeight',
  'Water & shores/Depths & edges':'deepDepth waterSoft crispShore deepEdge stepSoftPx shelfWander shoalRag shoalShoreSoft',
- 'Water & shores/Shore & beach':'coastRamp beachWidth apron shoreEdge bankRock frostGaps frostGapReach frostGapSize frostGapDepth',
- 'Water & shores/Water bed':'bedTint bedBright bedContrast bedRelief bedCracks bedCrackSize bedFlat',
+ 'Water & shores/Shore & beach':'coastRamp beachWidth apron shoreEdge bankRock wetBand frostGaps frostGapReach frostGapSize frostGapDepth',
+ 'Water & shores/Water bed':'slabShallows bedTint bedBright bedContrast bedRelief bedCracks bedCrackSize bedFlat',
  'Rain & erosion/':'wetSwath wetGround',
  'Light & shine/Sun & shade':'faceFill flatShadow flatOcclusion lightCap shadeDepth sunTilt ambient creaseShade',
  'Light & shine/Shine':'shineOutside shineSlopeGate shineStretch shineWhite shineGround shineGroundSharp shineGroundRough shineGroundScale shineSlope shineSlopeSharp shineSlopeRough shineSand shineSandSharp shineSandRough shineCrystal shineCrystalSharp shineCrystalRough shineGate shineHeadroom',
@@ -261,6 +261,21 @@ export function mountColumnPanel(read,change,commit,reset){
  const state=()=>{drawStack();$('column-title').textContent='Rock column of '+$('rock-current-name').textContent;const {edited}=read();restore.disabled=!edited;note.textContent=edited?'Map column edited.':'Using the world column unchanged.';};
  function field(parent,label,path,{min,max,step='any',choices,color=false}={}){
   const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement(choices?'select':'input');input.dataset.columnPath=path.join('.');input.setAttribute('aria-label',label);
+  const field=path.includes('beds')?['thickness','hardness','material'][path.at(-1)]:color?'color':label;
+  input.dataset.help=({
+   thickness:'Set the vertical thickness of this bed within each repeat.',
+   hardness:'Set how strongly the bed resists weathering and stands out as a ledge.',
+   material:'Choose the color slot this bed uses when layer colors are enabled.',
+   color:'Set the color of the rock beds that use this slot.',
+   'Starts at height':'Set the height where this section starts repeating upward.',
+   'Height step':'Set the height change from one contour band to the next.',
+   'Line strength':'Set the strength of the column’s contour lines.',
+   'Count height from':'Choose whether section heights start at sea level or at the base plain.',
+   'Bed wander':'Increase the vertical drift of bed boundaries around the terrain.',
+   'Broad wander':'Increase the long-scale bends in the bed boundaries.',
+   'Medium wander':'Increase the medium-scale bends in the bed boundaries.',
+   'Fine wander':'Increase the fine-scale bends in the bed boundaries.',
+  })[field];
   const value=at(read().column,path);if(choices){input.replaceChildren(...choices.map(([v,text])=>new Option(text,v)));input.value=value;}
   else{input.type=color?'color':'number';input.required=true;input.value=color?'#'+value.map(v=>Math.round(v).toString(16).padStart(2,'0')).join(''):value;input.step=step;if(min!==undefined)input.min=min;if(max!==undefined)input.max=max;}
   input.oninput=()=>{input.setCustomValidity('');if(!input.checkValidity()){note.textContent='Enter a value within the displayed limits.';return;}const column=structuredClone(read().column),target=at(column,path.slice(0,-1));target[path.at(-1)]=color?[1,3,5].map(i=>parseInt(input.value.slice(i,i+2),16)):choices?input.value:Number(input.value);if(choices&&typeof value==='number')target[path.at(-1)]=Number(input.value);
@@ -270,7 +285,7 @@ export function mountColumnPanel(read,change,commit,reset){
  }
  // A section or bed added or removed: the edited copy is one change and one undo step, and the panel is drawn again for the new rows.
  function reshape(edit){const column=structuredClone(read().column||{});edit(column);try{change(column);commit();}catch(err){note.textContent=err.message;return;}sync();}
- function button(parent,text,label,onclick,disabled=false){const b=document.createElement('button');b.type='button';b.textContent=text;if(label)b.setAttribute('aria-label',label);b.disabled=disabled;b.onclick=onclick;parent.append(b);return b;}
+ function button(parent,text,label,onclick,disabled=false){const b=document.createElement('button');b.type='button';b.textContent=text;if(label)b.setAttribute('aria-label',label);b.dataset.help=label||({'Add a rock column':'Start a repeating sequence of rock beds.','Add section':'Add a new repeating bed section above the last one.'})[text];b.disabled=disabled;b.onclick=onclick;parent.append(b);return b;}
  function sync(){
   const {column}=read();body.replaceChildren();state();
   // The column's sections (a world or map without any has no column, and adds one here).
@@ -302,5 +317,5 @@ export function mountColumnPanel(read,change,commit,reset){
   column?.wander?.terrain?.forEach((_,i)=>field(options,['Broad wander','Medium wander','Fine wander'][i],['wander','terrain',i]));
   if(column?.colors){const colors=document.createElement('details');colors.className='feature-group';colors.open=true;colors.innerHTML='<summary>Material slot colors</summary>';const fields=document.createElement('div');fields.className='column-options';colors.append(fields);column.colors.forEach((_,i)=>field(fields,`Slot ${i+1}`,['colors',i],{color:true}));body.append(colors);}
  }
- restore.onclick=()=>{reset();sync();};sync();return sync;
+ restore.dataset.help='Replace this rock column with its starting beds and colors.';restore.onclick=()=>{reset();sync();};sync();return sync;
 }

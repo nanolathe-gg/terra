@@ -313,6 +313,31 @@ fn surfaceEdge(share: f32, e: vec4f, p: vec2f, pixel: vec2f) -> f32 {
     if (e.x >= 1.0 && e.y == 0.0) { return share; }
     return clamp((share + surfaceNoise(e, p, pixel) - 0.5) / max(e.x, 0.001) + 0.5, 0.0, 1.0);
 }
+struct ReliefLight { normal: vec3f, sky: f32, direct: f32, flat: f32 }
+var<private> reliefLight: ReliefLight;
+// Fine relief follows each material through the surface stack.
+// Adjacent texels preserve two-pixel patterns that symmetric taps would cancel.
+fn materialReliefLight(m: i32, q: vec2f, projected: bool) -> f32 {
+    if (m < 0 || u.diagnosticView == 6 || reliefLight.direct <= 0.0 || u.shadeDepth <= 0.0 || u.chunkScale >= 2.0) { return 1.0; }
+    let material = u32(m);
+    let cache = u.ground[material & groundMask];
+    if (cache.cacheLayer < 0 || cache.finish.x <= 0.0) { return 1.0; }
+    let normal = reliefLight.normal;
+    let h = materialRelief(q, material);
+    let dx = materialRelief(q + vec2f(1.0, 0.0), material) - h;
+    let dy = materialRelief(q + vec2f(0.0, 1.0), material) - h;
+    // A projected texture moves up half a screen pixel for each unit of height. Use its gradient along the surface.
+    let grad = vec3f(dx, dy, select(0.0, -0.5 * dy, projected));
+    let tangent = grad - normal * dot(normal, grad);
+    let fine = normalize(normal - tangent);
+    let sun = max(0.0, dot(normal, u.light));
+    let sunFine = max(0.0, dot(fine, u.light));
+    let cap = reliefLight.flat * u.lightCap;
+    let base = min(reliefLight.sky + reliefLight.direct * sun, cap);
+    let detailed = min(reliefLight.sky + reliefLight.direct * sunFine, cap);
+    let fade = 1.0 - smoothstep(1.0, 2.0, u.chunkScale);
+    return 1.0 + (detailed - base) * (fade * u.shadeDepth / max(mix(reliefLight.flat, base, u.shadeDepth), 0.02));
+}
 // The stage's layers over `color` in place; `cover` gets each built-in slot's coverage (a union where several layers draw one slot), and
 // `over` the share material layers cover (they lie over what is below, so the built-ins' coverage under them shrinks).
 // Where a pixel reads its ground materials (fragmentMain sets it: the world point, moved on the solid's cut faces to the native pixel they show at).
@@ -365,15 +390,17 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
 #endif
         if (surfacePreviewSeen >= 0.0) { surfacePreviewSeen *= 1.0 - c; }   // a later layer lies over the previewed one
         if (i32(layerRow) == u.surfacePreview) { surfacePreviewCover = c; surfacePreviewSeen = c; }
+        var source = (*src)[k];
+        if (r0.z >= 0.0) {
+            let material = i32(r0.z);
+            source = groundPigment(groundAt, u32(material), surfaceFacts[3], surfaceFacts[4]);
+            source *= materialReliefLight(material, groundAt, false);
+        }
+        if (builtin && stage == 5u && k >= 5u) { source = mix(source, riverBedOver.rgb, riverBedOver.a); }   // sand over a braided river’s gravel
+        *color = mix(*color, source, c);
         if (builtin) {
-            // A built-in that draws a material (docs/SURFACE_LAYERS.md phase 4) lays that material's color by its own share.
-            var source = (*src)[k];
-            if (r0.z >= 0.0) { source = groundPigment(groundAt, u32(r0.z), surfaceFacts[3], surfaceFacts[4]); }
-            if (stage == 5u && k >= 5u) { source = mix(source, riverBedOver.rgb, riverBedOver.a); }   // sand dust and sand: a braided river's gravel
-            *color = mix(*color, source, c);
             (*cover)[k] = select(1.0 - (1.0 - (*cover)[k]) * (1.0 - c), c, (*cover)[k] == 0.0);   // layers of one slot join as a union
         } else {
-            *color = mix(*color, groundPigment(groundAt, u32(r0.z), surfaceFacts[3], surfaceFacts[4]), c);
             for (var j = 0u; j < 7u; j++) { (*cover)[j] *= 1.0 - c; }
             *over = 1.0 - (1.0 - *over) * (1.0 - c);
         }
@@ -721,7 +748,7 @@ fn iceFrostLines(pixel: vec2f, keep: f32) -> f32 {
     return line * mix(0.45, 1.0, rs.w) * step(id.x, keep) * step(0.25, rs.z) * step(0.35, fract(run));
 }
 
-// The beach (Zhon, the one world with the beach layer): sand where the bake found water within reach (beachField), sand bars painted to their crown
+// The beach is sand where the bake found water within reach (beachField), with sand bars painted to their crown
 // (the baked alpha, negative) and the beach's own colour. Beach sand is a shore material, so every read of the baked beach comes through here.
 fn beachColour(pixel: vec2f) -> vec3f { return roleColor(u.beachGround, u.slopeGround, pixel); }
 fn beachMean() -> vec3f { return roleMean(u.beachGround, u.slopeGround); }
@@ -753,32 +780,6 @@ fn crystalSlabWater(color: vec3f, mask: f32, submerged: f32) -> vec3f {
     let jitter = clamp((mask - 0.9) * 10.0, -1.0, 1.0);
     let slab = color * (1.0 + u.crystalSeam * fill * (0.32 + 0.14 * jitter)) * (1.0 - u.crystalSeam * 0.7 * seam);
     return mix(color, slab, submerged);
-}
-
-// Crystal shallows (card E7): retail's shallow Crystal water, everywhere it is
-// shallow, is a mosaic of small crystals: cells about 6-14 px across, each with its
-// own brightness and a slight lean (lighter toward one side), outlined by a thin
-// dark seam. The bed is art in retail (the TNT height grid is 16 px), so this
-// is drawn from position, not from heights. The cells fade out as the water
-// deepens, and stand aside where the larger shore slabs (the crystal field's
-// marks) already cover the water.
-fn crystalShallowWater(color: vec3f, p: vec2f, deep: f32, submerged: f32, slab: f32) -> vec3f {
-    let size = max(u.crystalShallowPx, 4.0);
-    // Two scales, as retail's mosaic has: a share of the water keeps cells 2.2 times as wide, the rest the fine ones.
-    let big = markCells(p / (size * 2.2), vec2i(7919, 0), 0.9, 0.0);
-    var c = markCells(p / size, vec2i(0), 0.9, 0.0);
-    var px = size;
-    if (big.id.y < 0.4) { c = big; px = size * 2.2; }
-    let seam = 1.0 - smoothstep(0.3, 1.2, (c.d2 - c.d1) * 0.5 * px);
-    let lean = dot(c.off, normalize(c.id.zw - 0.5 + vec2f(0.001))) * 0.5;
-    let shade = 1.0 + 0.3 * (c.id.x - 0.5) + 0.35 * lean;
-    // Only a fringe round the slabs: the open sea beyond reach of the slab marks (eight taps 48 px out) stays smooth, as retail's does.
-    var near = smoothstep(0.05, 0.3, slab);
-    for (var k = 0; k < 8; k++) { near = max(near, smoothstep(0.05, 0.3, crystalField(p + vec2f(cos(f32(k) * 0.785398), sin(f32(k) * 0.785398)) * 48.0))); }
-    // Mosaic in all shallows: a submerged reef with no slabs of its own takes the mosaic too.
-    near = max(near, u.crystalShallowAll);
-    let w = u.crystalShallow * submerged * near * (1.0 - smoothstep(0.1, 0.55, deep)) * (1.0 - smoothstep(0.05, 0.3, slab));
-    return color * (1.0 + w * (shade - 1.0)) * (1.0 - w * u.crystalShallowInk * seam);
 }
 
 // A crater's skin is the crystal field's exact value .74 (sculpt.js CRATER_SKIN). A column mound's seam ramps cross that value
@@ -933,21 +934,15 @@ fn shineTerm(pixel: vec2f, p: vec2f, g: vec2f, normal: vec3f, material: vec3f, e
     return vec4f(glint,lit*headroom*(1.0-fresnel));
 }
 
-// H24: how far the crease at the bank steps breaks into dashes of varying darkness along each line, the same on every world.
-const LAVA_CREASE_VARY = 0.2;
-// E10 (Lava): retail draws the step between two shore layers as a dark line whichever way it faces, where a
-// lit riser is only dark on the side turned from the sun. This is that line as a cavity: how far the four
-// neighbours 2.5 px round a point stand above it (the foot of a riser has higher ground on one side; a lip
-// and a flat have none), on the banks only: ground between the sea and the plain, so hills keep their own look.
-fn layerCreaseTerm(p: vec2f) -> f32 {
-    let h = baseHeight(p);
-    let bank = smoothstep(u.sea + 0.5, u.sea + 2.0, h) * (1.0 - smoothstep(u.base - 1.5, u.base - 0.3, h));
-    if (bank <= 0.0) { return 0.0; }
-    const r = 2.5;
-    let around = 0.25 * (baseHeight(p + vec2f(r, 0.0)) + baseHeight(p - vec2f(r, 0.0)) + baseHeight(p + vec2f(0.0, r)) + baseHeight(p - vec2f(0.0, r)));
-    // G5: retail's step lines fade and break along their length; a noise of ~14 px takes whole stretches out and weakens others.
-    let dash = 1.0 - LAVA_CREASE_VARY * (1.0 - smoothstep(0.36, 0.62, terrainNoise(p * 0.07 + vec2f(19.0, 43.0)).b));
-    return bank * smoothstep(0.1, 0.5, around - h) * dash;
+// Sample the foot along the uphill normal. A step is steeper immediately upslope than it is downhill of the foot.
+fn riserCrease(p: vec2f, h: f32, gradient: vec2f) -> f32 {
+    let dir = gradient / max(length(gradient), 0.001);
+    let upslope = baseHeight(p + dir * 1.75) - h;
+    let downslope = h - baseHeight(p - dir * 1.75);
+    let toe = smoothstep(0.08, 0.34, upslope - downslope) * (1.0 - smoothstep(0.06, 0.36, downslope));
+    // Break stretches of the crease so shallow and crumbling steps can lose their line.
+    let weather = smoothstep(0.31, 0.57, terrainNoise(p * 0.072 + vec2f(19.0, 43.0)).b);
+    return toe * mix(0.52, 1.0, weather);
 }
 // E10 (Lava): shine only on slopes, so the plain stays matte while the banks and hills glint (the shine model
 // weighs Lava's ground-coloured faces as ground, which is level ground's weight too). Full strength on a slope of
@@ -1014,7 +1009,8 @@ fn sharpDeepStep(p: vec2f, pixel: vec2f, depthIn: f32) -> f32 {
     let wander = ((shelfNoise(q + 17.0) * 0.55 + shelfNoise(q * 2.7 + 5.0) * 0.3 + shelfNoise(q * 7.0 + 29.0) * 0.15) - 0.5) * 2.0 * u.shelfWander;
     // The wander fades in with depth, so the shore side of the band keeps its own width.
     let d = depth - jitter * 4.0 * max(grad, 0.05);
-    return smoothstep(-0.5, 0.5, (d - (at + wander * smoothstep(1.0, at, depth))) / (max(grad, 0.04) * max(u.stepSoftPx, 1.0)));
+    let wanderAt = waterRamp(min(1.0, at * 0.25), at, depth);
+    return smoothstep(-0.5, 0.5, (d - (at + wander * wanderAt)) / (max(grad, 0.04) * max(u.stepSoftPx, 1.0)));
 }
 
 // Shallow water as the bed under it (card E1): the ground colour already lit at
@@ -1529,7 +1525,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let castShadow = mix(1.0, shadow, mix(u.flatShadow, 1.0, onSlope)) * closeVis * faceSun;
         let occluded = mix(1.0, ao, mix(u.flatOcclusion, 1.0, onSlope));
         let skyShare = u.ambient * (1.0 - cav) + fill;
+        let directWeight = 0.95 * castShadow * (1.0 - 0.45 * cav);
         let sunShare = 0.95 * direct * castShadow * (1.0 - 0.45 * cav);
+        reliefLight = ReliefLight(normal, skyShare, directWeight, flatLight);
         shading = min((skyShare + sunShare) / flatLight, u.lightCap) * occluded;
         // The share of the light that is sky takes the sky's colour and the share that is sun the sun's; white on both is exactly 1.
         lightTint = 1.0 + (skyShare * (u.skyColor - 1.0) + sunShare * (u.sunColor - 1.0)) / max(skyShare + sunShare, 0.0001);
@@ -1635,11 +1633,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         slopeCover *= 1.0 - route * (1.0 - u.rampMaterial);
         // The sampled slope texture carries baked shading that reads as
         // smudges on gentle ground; the fall-line surface lights grass itself.
-        // A sandy slope's streaks are the world's look (Zhon dune slopes),
+        // A sandy slope's streaks are the world's look,
         // not baked shading, so they keep full strength.
         if (u.slopeSand == 0) { slopeCover *= u.slopeTexture; }
         if (u.slopeSand != 0) { slopeCover *= max(smoothstep(0.15, 0.6, beachField(p) + max(bakedFields(p).a, 0.0)), route); }
         surfMask = array<f32, 7>();
+        // The fallback world ground already contributes relief in the bake.
+        if (slopeCover > 0.0 && u.slopeGround != u.groundDefault) {
+            slopeGrass *= materialReliefLight(u.slopeGround, grainPixel(pixel), h > u.sea);
+        }
         surfSrc[0] = slopeGrass; surfMask[0] = slopeCover;
         surfaceStage(1u, &grass, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);   // stage 1: slope cover
         slopeShare = layerCover[0];
@@ -1657,6 +1659,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     rock*=1.0+mineralPatch*.65;
     // H3 item 4: one placement function (landPlace); its thresholds are rows of materials/green.json.
     rock=mix(rock,rock*.42,u.rock[rs & rockMask].runoffStain*clamp(accumulated.x,0.0,1.0));
+    rock *= materialReliefLight(rockMaterialOf(rs), grainPixel(pixel), h > u.sea);
     var exposed = place.exposed;
     // Soil where the cover thins (u.soilRim). Off the faces the rock's share stops being a blend of grass and rock: rock shows where the share
     // beats a threshold that the rock's own patches and a 4 px grain move, so its edge is a ragged line. Just under that threshold, and just
@@ -1724,8 +1727,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     surfMask = array<f32, 7>();
     let crowned = u.rock[rs & rockMask].rockCrown > 0.0;
     if (crowned) {
-        // Some worlds' raised ground is bare rock to its crown (Zhon's
-        // domes), not only where it is steep.
+        // Crown rock covers the raised ground up to its top, including gentle slopes.
         surfSrc[0] = rock; surfMask[0] = smoothstep(u.base + 5.0, u.base + 14.0, baseHeight(p) + (n.g - 0.5) * 6.0) * u.rock[rs & rockMask].rockCrown * (1.0 - route) * (1.0 - sandBar);
     }
     surfaceStage(3u, &material, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);   // stage 3: crown rock
@@ -2124,7 +2126,14 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // A glint is the sun mirrored: it takes the sun's colour, not the sky's.
         color = surfaceSRGB(surfaceLinear(color)*shine.w+shine.xyz);
     }
-    if (u.layerCrease > 0.0) { color *= 1.0 - u.layerCrease * layerCreaseTerm(p); }
+    let raisedCrease = u.rock[rs & rockMask].stepCrease;
+    if (u.layerCrease > 0.0 || raisedCrease > 0.0) {
+        let authored = baseHeight(p);
+        let raised = smoothstep(u.base - 1.5, u.base - 0.3, authored);
+        let bank = smoothstep(u.sea + 0.5, u.sea + 2.0, authored);
+        let strength = mix(u.layerCrease * bank, raisedCrease, raised);
+        if (strength > 0.0) { color *= 1.0 - strength * riserCrease(p, authored, broad); }
+    }
     if (u.rock[rs & rockMask].pockmark > 0.0 && h > u.sea + 1.0 && landform > 0.0) {
         let pits = pockPits(pixel, u.rock[rs & rockMask].pockSize, u.rock[rs & rockMask].pockmark * mix(0.6, 1.0, turned));
         color *= 1.0 - pits * landform * mix(0.5, 0.92, turned);
@@ -2210,7 +2219,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
             }
             colorDepth = mix(bedDepth, sum / 8.0, 0.75);
         }
-        var mottle = ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * smoothstep(2.0, 8.0, bedDepth);
+        // Thin optical ramps need less depth noise so pigment in shallow pools stays coherent.
+        let depthNoise = min(1.0, abs(u.deepDepth - u.shallowDepth) / 10.0);
+        var mottle = ((n.r - 0.5) * 14.0 + (n.g - 0.5) * 5.0) * (smoothstep(2.0, 8.0, bedDepth) * depthNoise);
         if (u.lowGrain < 1.0) { mottle *= lowGrain; }
         colorDepth += mottle;
         // A deep or shallow stroke's water choices (card E1), painted into the
@@ -2228,6 +2239,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (edgeHard > 0.0) { deep = sharpDeepStep(p, pixel, bedDepth); }
         var grain = waterPigment(pixel) - waterMean();
         if (u.lowGrain < 1.0) { grain *= lowGrain; }
+        var slab = 0.0;
+        if (u.slabShallows > 0.0 || u.crystalSeam > 0.0) { slab = shoreSlabCoverage(p); }
+        let slabDepth = smoothstep(u.deepDepth, u.deepDepth + 16.0, bedDepth);
         // Colors choose the water's tint, never replace the bed-light model.
         var water=vec3f(0);
         {
@@ -2264,9 +2278,15 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 // A Shallow until depth past the third colour's depth runs this ramp down: the third colour at the waterline,
                 // the lit bed between the two depths (a submerged shelf), deep beyond. smoothstep leaves reversed edges undefined.
                 let toMid = waterRamp(u.shallowDepth, u.waterMid.a, colorDepth);
-                let toDeep = waterRamp(u.waterMid.a, u.deepDepth, colorDepth);
+                let toDeep = waterRamp(min(u.waterMid.a, u.deepDepth), u.deepDepth, colorDepth);
                 var mid = waterMean() + u.waterMid.rgb + (deepWater - waterMean()) * 0.9;
                 water = mix(mix(shallow, mid, toMid), deepWater, toDeep);
+            }
+            // At full slab strength the bed shows only through the authored plate
+            // footprint. Color averaging across the outer drop cannot make an apron.
+            if (u.slabShallows > 0.0) {
+                let slabBed = mix(shallow, deepWater, max(slabDepth, 0.30 * deep));
+                water = mix(water, mix(deepWater, slabBed, slab), u.slabShallows);
             }
         }
         // Shared bed elevation makes a painted shallow passage persist even
@@ -2289,8 +2309,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
         surfWater = submerged;
         color = mix(color, water * lightTint * (0.92 + 0.08 * shadow), submerged);
-        if (u.crystalSeam > 0.0 && crystalMask > 0.05) { color = crystalSlabWater(color, crystalMask, submerged); }
-        if (u.crystalShallow > 0.0) { color = crystalShallowWater(color, p, deep, submerged, crystalMask); }
+        if (u.crystalSeam > 0.0 && slab > 0.0 && crystalMask > 0.05) {
+            color = crystalSlabWater(color, crystalMask, submerged * slab * (1.0 - slabDepth));
+        }
     }
     if (surfE > 0.0 && surfX < 900.0) {
         // Card P27: static foam, white as lit as the water is. It marks the playable edge on both sides: the lace on the water, the swash on the sand.

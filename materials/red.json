@@ -977,7 +977,8 @@
   "vent": {"params": {"size": 1.4, "thick": 0.8, "rim": 0.45, "rimSat": 1.6}}
  },
  "world": {
-    "materials": {"ground": "red-ground", "water": "red-water", "rock": "red-rock", "slope": "red-slope", "debris": "red-debris", "extra": ["red-rough"], "soil": "red-soil", "snow": "red-snow", "moss": "red-moss", "sand": "red-sand", "band": "red-band", "crystal": "crystals"},
+    "surface": [{"name": "Highland ground", "builtin": "highland"}, {"name": "Slope cover", "builtin": "slopeCover"}, {"name": "Bare soil", "builtin": "soil", "material": "@soil"}, {"name": "Rock", "builtin": "rock"}, {"id": "drybank", "name": "Dry bank by the water", "material": "red-plain", "stage": "land", "where": [{"fact": "toWater", "to": 20, "fade": 10}, {"fact": "aboveSea", "from": 0, "fade": 1}], "amount": 0.8, "edge": {"width": 0.3, "noise": 0.6, "noiseSize": 6}}, {"name": "Beach", "builtin": "beach"}, {"name": "Crown rock", "builtin": "crown"}, {"name": "Base band", "builtin": "baseBand", "material": "@band"}, {"name": "Moss on regrown debris", "builtin": "regrownMoss", "material": "@moss"}, {"name": "Debris fines", "builtin": "fines"}, {"name": "Painted rock", "builtin": "paintedRock"}, {"name": "Painted snow", "builtin": "paintedSnow", "material": "@snow"}, {"name": "Painted moss", "builtin": "paintedMoss", "material": "@moss"}, {"name": "Sand dust", "builtin": "sandDust", "material": "@sand"}, {"name": "Sand", "builtin": "sand", "material": "@sand"}, {"name": "Chips", "builtin": "chips"}, {"name": "Snow on ice crests", "builtin": "iceCrest", "material": "@snow"}, {"name": "Snow on ice tops", "builtin": "iceCap", "material": "@snow"}],
+    "materials": {"ground": "red-plain", "water": "red-water", "rock": "red-bank", "slope": "red-slope", "debris": "red-debris", "extra": ["red-rough", "red-crumple"], "soil": "red-soil", "snow": "red-snow", "moss": "red-moss", "sand": "red-sand", "band": "red-band", "crystal": "crystals"},
     "knobDefaults": {
         "shoreRock": 96,
         "shoreShelf": 96,
@@ -987,7 +988,8 @@
         "crackDark": 0.6,
         "crackWidth": 0.5,
         "banding": 0.6,
-        "reliefAmount": 0.2,
+        "reliefAmount": 0.8,
+        "plainRelief": 0.2,
         "slopeTexture": 0.4,
         "faceSteep": 1,
         "crackSpacing": 28,
@@ -1049,7 +1051,7 @@
         "debrisDepth": 5,
         "looseSize": 7,
         "stoneSort": 0.7,
-        "rockFace": 2,
+        "rockFace": 0.8,
         "faceRock": 1,
         "rockFaceFrom": 0.2,
         "faceRun": 120,
@@ -1077,7 +1079,11 @@
         "shineRockScale": 3,
         "sunTilt": 0,
         "bedCracks": 0.55,
-        "bedCrackSize": 42
+        "bedCrackSize": 42,
+        "wetBand": 2,
+        "crispShore": 0.5,
+        "lightCap": 1,
+        "deepDepth": 18
       },
       "engineDefaults": {
         "erosion": 1,
@@ -1091,7 +1097,11 @@
 
     "darkknob",
 
-    "rubble"
+    "rubble",
+
+    "softface",
+
+    "chunks"
 
    ],
 
@@ -1103,9 +1113,21 @@
 
      "knobs": {
 
-      "faceRindTone": -0.6,
+      "faceRindTone": -0.3,
 
-      "faceRind": 1
+      "faceRind": 1,
+
+      "rockFace": 2,
+
+      "faceTone": 0.05,
+
+      "faceDetailPatch": 0,
+
+      "faceScratch": 3,
+
+      "faceScratchSize": 3,
+
+      "faceScratchLength": 60
 
      }
 
@@ -1135,6 +1157,42 @@
 
      }
 
+    },
+
+    "softface": {
+
+     "label": "Soft face",
+
+     "knobs": {
+
+      "faceRock": 0,
+
+      "rockFaceFrom": 0.5
+
+     }
+
+    },
+
+    "chunks": {
+
+     "label": "Broken chunks",
+
+     "knobs": {
+
+      "crackSeverity": 1,
+
+      "crackBlocks": 1.5,
+
+      "crackSpacing": 48,
+
+      "crackFrom": 0.12,
+
+      "faceRock": 0,
+
+      "rockFaceFrom": 0.5
+
+     }
+
     }
 
    }
@@ -1152,7 +1210,7 @@
    "plateau": {},
    "hill": {"wander": 34, "widthVary": 30, "heightVary": 10},
    "mountain": {"wander": 8},
-   "ramp": {},
+   "ramp": {"elevation": 130},
    "valleyV": {},
    "valleyU": {},
    "valleyT": {},
@@ -1176,7 +1234,7 @@
    {"id": "crater", "label": "Crater", "icon": "crater", "color": "#d5a18b", "group": "shape", "family": "Craters"},
    {"id": "canyon", "label": "Canyon", "icon": "valleyT", "color": "#c98a6e", "group": "shape", "family": "Cuts", "help": "Draw a canyon: a wide, dry valley cut to just above the sea, its walls stepped in five ledges."},
    {"id": "knob", "label": "Knob", "icon": "mountain", "color": "#b3bcca", "group": "shape", "family": "Hills", "help": "Click a dark rock knob: a steep dome 200 px across that rises 90 over the plain, too steep to climb. Retail Red scatters them in loose rows 400 to 500 px apart.", "rock": "darkknob"},
-   {"id": "crescent", "label": "Crescent", "icon": "hill", "color": "#b8d88d", "group": "shape", "family": "Hills", "help": "Drag an arc: a curved ridge with a long back slope on the right of the line and a steep, shaded face on the left, round a hollow.", "rock": "darkknob"},
+   {"id": "crescent", "label": "Crescent", "icon": "hill", "color": "#b8d88d", "group": "shape", "family": "Hills", "help": "Drag an arc: a curved ridge with a long back slope on the right of the line and a steep, shaded face on the left, round a hollow.", "rock": "softface"},
    {"id": "craterlet", "label": "Craterlet", "icon": "crater", "color": "#d5a18b", "group": "shape", "family": "Craters", "help": "Click a small bowl 200 px across, dug 22 into the ground it lands on, with a low lip."},
    {"id": "ringCrater", "label": "Ring crater", "icon": "crater", "color": "#d5a18b", "group": "shape", "family": "Craters", "help": "Click a large crater whose level floor stands 40 over the plain inside a rim 55 over it. Add a Knob at its center for the central peak.", "rock": "rubble"},
    {"id": "basin", "label": "Basin", "icon": "crater", "color": "#d5a18b", "group": "shape", "family": "Craters", "help": "Click a flat-floored basin 1150 px across, its level floor 22 below the ground, just above the sea. Add a low Hill for a central peak."},

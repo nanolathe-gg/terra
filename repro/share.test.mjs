@@ -2,8 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {gunzipSync, gzipSync} from 'node:zlib';
-import {shareText, gzipText, crc32, shareUrl, mapIdFromSearch, withoutMap, mapsService, postMap, getMap} from '../sculpt-share.js';
+import {shareText, gzipText, crc32, shareUrl, mapIdFromHash, mapsService, postMap, getMap} from '../sculpt-share.js';
 import {mapId} from '../deploy/worker/worker.js';
+import {markEdited} from '../sculpt-tools.js';
 
 const text = JSON.stringify({format: 'nanolathe-terrain-sculpt', version: 6, nodes: [{kind: 'hill', x: 1.5}], note: 'é'.repeat(500)});
 
@@ -22,17 +23,20 @@ test('crc32 matches the reference value', () => {
   assert.equal(gzipSync('').length > 0, true);
 });
 
-test('the share link is the page address with ?map=, and a static build links to the site root', () => {
-  assert.equal(shareUrl('http://127.0.0.1:8851/?biome=red&mapX=4#x', 'abcdefghijklmnop'), 'http://127.0.0.1:8851/?map=abcdefghijklmnop');
-  assert.equal(shareUrl('https://terra.nanolathe.gg/b/0123456789/?x=1', 'abcdefghijklmnop'), 'https://terra.nanolathe.gg/?map=abcdefghijklmnop');
-  assert.equal(shareUrl('https://terra.nanolathe.gg/index.html?x=1', 'abcdefghijklmnop'), 'https://terra.nanolathe.gg/?map=abcdefghijklmnop');
+test('share links use #/maps/<id> at the site root', () => {
+  const id = 'abcdefghijklmnop';
+  assert.equal(shareUrl('http://127.0.0.1:8851/?biome=red&mapX=4#x', id), 'http://127.0.0.1:8851/#/maps/' + id);
+  assert.equal(shareUrl('https://terra.nanolathe.gg/b/0123456789/?x=1', id), 'https://terra.nanolathe.gg/#/maps/' + id);
+  assert.equal(shareUrl('https://terra.nanolathe.gg/index.html?x=1', id), 'https://terra.nanolathe.gg/#/maps/' + id);
+  assert.equal(shareUrl('https://example.github.io/terraform/b/0123456789/index.html', id), 'https://example.github.io/terraform/#/maps/' + id);
 });
 
-test('the address: reading the map id and dropping it afterwards', () => {
-  assert.equal(mapIdFromSearch('?biome=red&map=abcdefghijklmnop'), 'abcdefghijklmnop');
-  assert.equal(mapIdFromSearch('?biome=red'), null);
-  assert.equal(withoutMap('http://h/?map=abcdefghijklmnop&biome=red'), 'http://h/?biome=red');
-  assert.equal(withoutMap('http://h/?map=abcdefghijklmnop'), 'http://h/');
+test('the editor reads map fragments and lets the link loader validate the ID', () => {
+  assert.equal(mapIdFromHash('#/maps/abcdefghijklmnop'), 'abcdefghijklmnop');
+  assert.equal(mapIdFromHash('#/maps/'), '');
+  assert.equal(mapIdFromHash('#/maps/too/many'), 'too/many');
+  assert.equal(mapIdFromHash('#notes'), null);
+  assert.equal(mapIdFromHash(''), null);
 });
 
 test('services: a missing or unavailable maps service has a reason', () => {
@@ -61,8 +65,13 @@ test('opening: 404, outage, bad id and damage all leave the map alone and say so
 
 test('share, open, share again gives the same id', async () => {
   // A drawn stroke has no `hidden`; a loaded one has `hidden: false`, keys in another order, and an undefined leftover.
-  const drawn = {format: 'nanolathe-terrain-sculpt', version: 6, nodes: [{kind: 'hill', seed: 3, params: {amount: 70, along: [[0, 1], [1, 0.5]]}}], size: 64, seed: 9};
-  const loaded = JSON.parse(JSON.stringify({seed: 9, size: 64, nodes: [{params: {along: [[0, 1], [1, 0.5]], amount: 70}, hidden: false, seed: 3, kind: 'hill', frame: undefined}], version: 6, format: 'nanolathe-terrain-sculpt'}));
+  const curve = {form: 'hill', knots: [[0, 0], [1, 0]]};
+  const defaults = () => ({curve, amount: 60, along: [[0, 0], [1, 0]]});
+  const stroke = {kind: 'landform', seed: 3, params: {amount: 70, curve, along: [[0, 1], [1, 0.5]]}};
+  const drawn = {format: 'nanolathe-terrain-sculpt', version: 6, nodes: markEdited([stroke], defaults), size: 64, seed: 9};
+  const loaded = JSON.parse(shareText(drawn));
+  loaded.nodes = markEdited([{...loaded.nodes[0], hidden: false, frame: undefined}], defaults);
+  assert.deepEqual(loaded.nodes[0].edited, ['along', 'amount']);
   assert.equal(await mapId(await gzipText(shareText(drawn))), await mapId(await gzipText(shareText(loaded))));
   // What the service stores is the text that was shared, so opening it and sharing it again is a fixed point.
   const text = shareText(drawn);

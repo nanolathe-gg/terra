@@ -5,6 +5,7 @@ import {NODES, NODE_TYPES, accepts, snippetNodes, DITHER, LIBRARY, MAX_NODES, MA
   addMaterial, duplicateMaterial, renameMaterial, setMaterial, assignMaterial, materialUsers, materialText, parseMaterialText, MAP_ROLES, roleOf, roleName, materialStatesApply, gameArtColor} from './sculpt-materials.js';
 import {mountMaterialGraph, CARD, cardHeight} from './sculpt-material-graph.js';
 import {MaterialPreview, TILE, TERRAIN, SWATCH} from './sculpt-material-preview.js';
+import {nodeParameterHelp, nodeInputHelp, nodeKindHelp, DITHER_HELP} from './sculpt-material-help.js';
 import gamePalette from './materials/palette.json' with {type: 'json'};
 
 const $ = id => document.getElementById(id);
@@ -67,12 +68,40 @@ export function mountMaterialEditor(host) {
   });
 
   // The add menu: at the pointer, searchable, and when a wire was dropped in the open it lists only nodes that take it.
-  const menuItems = [...$('node-list').querySelectorAll('button')];
+  const nodeList = $('node-list'), menuItems = [...nodeList.querySelectorAll('button')];
+  for (const b of menuItems) {
+    const {type, kind, snippet} = b.dataset;
+    b.dataset.help = snippet ? 'Add a connected group of nodes that makes this pattern.' : nodeKindHelp(type, kind) ?? NODES[type].help;
+  }
+  const visibleSamples = new Set(), finishedSamples = new Set();
+  let sampleRequest = null;
+  const sampleObserver = new IntersectionObserver(entries => {
+    for (const {target, isIntersecting} of entries) {
+      if (isIntersecting) visibleSamples.add(target);
+      else visibleSamples.delete(target);
+    }
+    paintNextSample();
+  }, {root: nodeList});
+  for (const button of menuItems) sampleObserver.observe(button);
+  // Keep each finished image in its row and ask for one visible example at a time.
+  function paintNextSample() {
+    if (sampleRequest || $('node-menu').hidden) return;
+    const button = menuItems.find(b => !b.hidden && visibleSamples.has(b) && !finishedSamples.has(b));
+    if (!button) return;
+    const request = sampleRequest = {};
+    preview.sample(host.renderer(), button.dataset, (error, pixels) => {
+      if (sampleRequest !== request) return;
+      sampleRequest = null;
+      finishedSamples.add(button);
+      if (!error && pixels) button.querySelector('canvas').getContext('2d').putImageData(new ImageData(pixels, THUMB, THUMB), 0, 0);
+      paintNextSample();
+    });
+  }
   function openMenu(screen, place, wire) {
     if (!material()) return;
     menuAt = {place, wire}; const menu = $('node-menu'), stage = menu.parentElement.getBoundingClientRect();
     for (const b of menuItems) b.dataset.fits = String(!wire || (!b.dataset.snippet && NODES[b.dataset.type].inputs.some(([, , want]) => accepts(want, wire.type))));   // a starting point takes no wire
-    menu.hidden = false; $('node-search').value = ''; filterMenu();
+    menu.hidden = false; $('node-search').value = ''; filterMenu(); nodeList.scrollTop = 0;
     menu.style.left = Math.max(8, Math.min(stage.width - menu.offsetWidth - 8, screen.x - stage.left)) + 'px';
     menu.style.top = Math.max(8, Math.min(stage.height - menu.offsetHeight - 8, screen.y - stage.top)) + 'px';
     $('node-search').focus();
@@ -85,7 +114,7 @@ export function mountMaterialEditor(host) {
     if (e.key === 'Enter') { e.preventDefault(); menuItems.find(b => !b.hidden)?.click(); }
     if (e.key === 'ArrowDown') { e.preventDefault(); menuItems.find(b => !b.hidden)?.focus(); }
   };
-  $('node-list').onkeydown = e => {
+  nodeList.onkeydown = e => {
     const shown = menuItems.filter(b => !b.hidden), at = shown.indexOf(document.activeElement);
     if (e.key === 'ArrowDown') { e.preventDefault(); shown[Math.min(shown.length - 1, at + 1)]?.focus(); }
     if (e.key === 'ArrowUp') { e.preventDefault(); if (at <= 0) $('node-search').focus(); else shown[at - 1].focus(); }
@@ -164,6 +193,7 @@ export function mountMaterialEditor(host) {
     const editOf = fn => { const m = structuredClone(of()); if (!m) return; fn(m); update(setMaterial(materials(), m.slot, m)); };
     // The material's own Color (recolorMaterial): every color step moves together while the picker moves; one undo step when it closes.
     const own = $(`${prefix}-matcolor`);
+    own.dataset.help = 'Recolor the material by shifting all its color steps together.';
     own.oninput = attempt(() => { const m = of(); if (m) editOf(o => Object.assign(o, recolorMaterial(o, rgbOf(own.value).map(v => v / 255), drawn(o)))); });
     own.onchange = commit;
     for (let i = 0; i < MAX_CONTROLS; i++) {
@@ -172,6 +202,7 @@ export function mountMaterialEditor(host) {
       scrub.onchange = commit;
       for (let k = 0; k < MAX_STOPS; k++) {
         const color = $(`${prefix}-color-${i}-${k}`);
+        color.dataset.help = 'Change this published color stop while keeping its brightness and place in the gradient.';
         color.oninput = attempt(() => { const c = target(); if (c) editOf(m => { const stop = m.nodes.find(n => n.id === c.node).stops[k], gain = Math.max(1, ...stop.slice(1)); rgbOf(color.value).forEach((v, j) => { stop[j + 1] = v / 255 * gain; }); }); });
         color.onchange = commit;
       }
@@ -194,7 +225,7 @@ export function mountMaterialEditor(host) {
         }
         $(id('scrub', i)).hidden = !!target.stops; $(id('colors', i)).hidden = !target.stops;
         if (target.stops) { $(id('colors-label', i)).textContent = c.label; for (let k = 0; k < MAX_STOPS; k++) { const stop = target.node.stops[k], input = $(`${prefix}-color-${i}-${k}`); input.hidden = !stop; if (stop) input.value = hex(stop.slice(1).map(v => v / Math.max(1, ...stop.slice(1)) * 255)); } }
-        else { $(id('label', i)).textContent = c.label; setScrub(`${prefix}-${i}`, target.spec, target.node.params[c.param]); }
+        else { $(id('label', i)).textContent = c.label; $(`${prefix}-${i}`).dataset.help = nodeParameterHelp(target.node.type, c.param); setScrub(`${prefix}-${i}`, target.spec, target.node.params[c.param]); }
       }
     };
   }
@@ -229,10 +260,10 @@ export function mountMaterialEditor(host) {
     if (document.activeElement !== $('node-name')) $('node-name').value = n.name;
     $('node-enabled').checked = n.enabled; $('node-enabled').parentElement.hidden = n.type === 'output';   // the Material node is always on
     $('node-help').textContent = spec.help + (n.enabled ? '' : ' This node is off: it passes its first input through, or gives nothing.');
-    $('node-kind-row').hidden = !kinds; if (kinds) { $('node-kind-label').textContent = n.type === 'combine' ? 'Operation' : 'Type'; setOptions($('node-kind'), Object.entries(kinds).map(([k, label]) => [label, k])); $('node-kind').value = n.kind; }
+    $('node-kind-row').hidden = !kinds; if (kinds) { $('node-kind-label').textContent = n.type === 'combine' ? 'Operation' : 'Type'; setOptions($('node-kind'), Object.entries(kinds).map(([k, label]) => [label, k])); $('node-kind').value = n.kind; $('node-kind').dataset.help = nodeKindHelp(n.type, n.kind); }
     for (let i = 0; i < PARAM_ROWS; i++) {
       const p = params[i]; $('node-param-row-' + i).hidden = !p; if (!p) continue;
-      $('node-param-label-' + i).textContent = p.label; setScrub('node-param-' + i, p, n.params[p.key]);
+      $('node-param-label-' + i).textContent = p.label; $('node-param-' + i).dataset.help = nodeParameterHelp(n.type, p.key); setScrub('node-param-' + i, p, n.params[p.key]);
       const on = published(m, n.id, p.key) >= 0; $('node-param-pin-' + i).setAttribute('aria-pressed', String(on)); $('node-param-pin-' + i).title = on ? 'Published in Controls. Click to remove it.' : 'Publish this setting in the material’s Controls';
     }
     for (let i = 0; i < INPUT_ROWS; i++) {
@@ -243,7 +274,7 @@ export function mountMaterialEditor(host) {
       $('node-input-' + i).value = n.in[key] ?? ''; $('node-input-clear-' + i).disabled = !n.in[key];
       // Worn and Deposit draw only on a ground: say so where this material is water or another of the world's surfaces.
       const inert = n.type === 'output' && ['worn', 'deposit'].includes(key) && !materialStatesApply(m);
-      $('node-input-' + i).disabled = inert; $('node-input-' + i).title = inert ? 'Only a ground draws its Worn and Deposit colors: this material is the world’s water or another of its surfaces.' : '';
+      $('node-input-' + i).dataset.help = nodeInputHelp(n.type, key, want); $('node-input-' + i).disabled = inert; $('node-input-' + i).title = inert ? 'Only a ground draws its Worn and Deposit colors: this material is the world’s water or another of its surfaces.' : '';
     }
     // A Constant's color shows the gradient's color fields for its one stop: no bar, position or Remove.
     const single = n.type === 'constant' && !!n.stops;
@@ -327,7 +358,7 @@ export function mountMaterialEditor(host) {
     drawPaletteGrid($('palette-grid'), CELL, new Set(m.palette));
     $('palette-count').textContent = m.palette.length < 2 ? 'No palette: the color stays continuous and the map’s output picks each pixel’s game color.' : `${m.palette.length} of ${MAX_PALETTE} colors. For the game palette the material is reduced to these by error diffusion; true color keeps its continuous color.`;
     $('palette-clear').disabled = !m.palette.length;
-    DITHER.forEach(p => { setScrub('dither-' + p.key, p, m.dither[p.key]); $('dither-' + p.key).disabled = m.palette.length < 2 || (p.key !== 'amount' && m.dither.amount <= 0); });
+    DITHER.forEach(p => { $('dither-' + p.key).dataset.help = DITHER_HELP[p.key]; setScrub('dither-' + p.key, p, m.dither[p.key]); $('dither-' + p.key).disabled = m.palette.length < 2 || (p.key !== 'amount' && m.dither.amount <= 0); });
   }
   $('palette-grid').onclick = attempt(e => { const index = cellAt($('palette-grid'), e, CELL); if (index < 0 || index > 255) return; change(m => { if (m.palette.includes(index)) m.palette = m.palette.filter(i => i !== index); else { if (!gameArtColor(index)) throw Error(`Slot ${index} is a Windows system color the game's map art does not draw with; the material's pixels would be re-reduced to another entry anyway.`); if (m.palette.length >= MAX_PALETTE) throw Error(`A material palette holds at most ${MAX_PALETTE} colors.`); m.palette.push(index); } }); });
   $('palette-clear').onclick = attempt(() => change(m => { m.palette = []; }));
@@ -411,7 +442,7 @@ export function mountMaterialEditor(host) {
   }
   function tile(data, name, role, onclick) {
     const b = document.createElement('button'), c = document.createElement('canvas'), n = document.createElement('span');
-    b.type = 'button'; b.className = 'library-tile'; Object.assign(b.dataset, data, {name: name.toLowerCase()}); b.onclick = onclick;
+    b.type = 'button'; b.className = 'library-tile'; b.dataset.help = data.slot ? 'Open this map material’s graph and settings.' : 'Add an editable copy of this material to the map.'; Object.assign(b.dataset, data, {name: name.toLowerCase()}); b.onclick = onclick;
     c.className = 'library-swatch'; c.width = c.height = SWATCH; c.setAttribute('aria-hidden', 'true');
     n.className = 'library-name'; n.textContent = name; b.append(c, n);
     if (role) { const r = document.createElement('span'); r.className = 'library-role'; r.textContent = role; b.append(r); }
@@ -530,7 +561,7 @@ export function mountMaterialEditor(host) {
   // (its Build or World tab), the focus stays where that click put it.
   function close(returnFocus = true) {
     if (!dialog.open) return;
-    closeMenu(); setDrawer(false); dialog.close(); setFull(false); clearTimeout(pictureTimer); preview.cancel(); pictureKey = thumbKey = pictureMaterial = ''; host.dock(null);
+    closeMenu(); setDrawer(false); dialog.close(); setFull(false); clearTimeout(pictureTimer); preview.cancel(); sampleRequest = null; pictureKey = thumbKey = pictureMaterial = ''; host.dock(null);
     const door = opener?.isConnected ? opener : opener?.id ? document.getElementById(opener.id) : null;
     if (returnFocus) (door && !door.closest('[hidden]') ? door : $('materials-toolbar')).focus({preventScroll: true});
   }
@@ -586,5 +617,5 @@ export function mountMaterialEditor(host) {
   refresh();
   // The Color rows again, once the renderer has read back what the materials are drawn in (sculpt.js renderer.onmeans).
   const refreshColors = () => { for (const [prefix, m] of [['ctl', material()], ...worldRows.map(w => [w.prefix, materials().find(o => o[w.role]) ?? null])]) { const own = $(`${prefix}-matcolor`); if (m && document.activeElement !== own) own.value = hex(drawn(m).map(v => v * 255)); } };
-  return {refresh, refreshColors, open, resetView: () => graph.fit(), refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (dialog.open) { dialog.close(); setFull(false); host.dock(null); } document.removeEventListener('pointerdown', outside, true); clearTimeout(thumbTimer); clearTimeout(pictureTimer); locks.disconnect(); previewBox.disconnect(); graph.dispose(); preview.dispose(); }};
+  return {refresh, refreshColors, open, resetView: () => graph.fit(), refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (dialog.open) { dialog.close(); setFull(false); host.dock(null); } document.removeEventListener('pointerdown', outside, true); clearTimeout(thumbTimer); clearTimeout(pictureTimer); locks.disconnect(); previewBox.disconnect(); sampleObserver.disconnect(); graph.dispose(); preview.dispose(); }};
 }

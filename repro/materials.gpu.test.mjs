@@ -17,7 +17,8 @@ test('a world’s ground repeats, a material edit reaches export art and reverts
     // The world's pair, its surfaces (MAP_ROLES) in their order, the materials its surface layers draw (each layer's library key, its
     // worldLayer, in the list's order), then the extra materials Red's tools lay down (world.materials.extra).
     const layers = [...new Set((s.config.surface || []).map(l => l.material).filter(k => k != null))];
-    assert.deepEqual(own.map(m => [m.source, m.worldGround, m.worldWater, m.worldLayer ?? null]), [['red-ground', true, false, null], ['red-water', false, true, null],
+    assert.deepEqual(own.map(m => [m.source, m.worldGround, m.worldWater, m.worldLayer ?? null]), [
+      [s.config.materials.ground, true, false, null], [s.config.materials.water, false, true, null],
       ...['rock', 'slope', 'debris', 'crystal'].map(k => [s.config.materials[k], false, false, null]), ...layers.map(k => [k, false, false, k]), ...s.config.materials.extra.map(k => [k, false, false, null])]);
     // The material repeats every 512 px; the world's own level-ground settings repeat with its pool, a multiple of that.
     const here = await win(640, 640), pool = groundPool(s.config.material);
@@ -145,4 +146,49 @@ test('a Directional blur at radius 0 leaves its input exactly, and its repeat jo
     assert.ok(same(smear, await win(640 + pool, 640)) && same(smear, await win(640, 640 + pool)));
     assert.deepEqual(s.errors, []);
   } finally { s.dispose(); }
+});
+
+// One smooth ramp with painted rock, optionally covered by an opaque surface layer. All sampled grain comes from height.
+test('fine material height lights rock, slope cover and custom layers independently of rock depth', async () => {
+  const scene = {biome: 'ice', ground: true, surface: [{builtin: 'rock'}, {builtin: 'paintedRock'}], strokes: [
+    ['landform', [[180,560], [480,560], [790,560]], {card: {heightReference: 1, elevation: 120, diameter: 660, lean: 100, wander: 0,
+      widthVary: 0, heightVary: 0, roughness: 0, cracks: 0, rockPreset: -1,
+      curve: {form: 'lfHill', knots: [[0,0], [1,1]], back: [[0,0], [1,1]]}}}],
+    ['paint', [[320,390], [680,390]], {card: {paintChannel: 1, diameter: 260, amount: 100, softness: 0}}],
+  ]};
+  const cover = {id: 'opaque-soil', name: 'Opaque soil', stage: 'snow', material: 'ice-soil', amount: 1};
+  const search = 'biome=ice&mapX=4&mapY=4&iceSoft=0&undulation=0&rockFace=0&sunHeight=35&sunTilt=0&occlusion=0&shadow=0&shadeDepth=1&slopeTexture=1&palette=off';
+  const win = {x: 360, y: 322, width: 304, height: 108};
+  const height = {id: 'height', type: 'noise', kind: 'waves', params: {size: 4, length: 6, direction: 0, detail: 0, layers: 0, seed: 0}};
+  const gray = {id: 'gray', type: 'gradient', stops: [[0,.58,.58,.58], [1,.58,.58,.58]], in: {in: 'height'}};
+  const slope = [{builtin: 'slopeCover'}];
+  const coveredRock = [...scene.surface, cover];
+  for (const mode of ['rock', 'slope', 'covered rock', 'cover']) {
+    const surface = mode === 'slope' ? slope : mode === 'rock' ? scene.surface : coveredRock;
+    const s = await openScene({...scene, surface}, search);
+    try {
+      const own = s.materials;
+      const render = async (relief, light) => {
+        const nodes = [height, gray, {id: 'material', type: 'output', params: {relief}, in: {color: 'gray', height: 'height'}}];
+        const chosen = m => mode === 'cover' ? m.worldLayer === 'ice-soil' : mode === 'slope' ? m.worldSlope : m.worldRock;
+        s.setMaterials(own.map(m => chosen(m) ? {...m, nodes, palette: [], controls: [], frames: []} : m));
+        return renderWindow(s, {...win, options: s.drawOptions({light})});
+      };
+      const west = await render(0, 'original'), westRelief = await render(1.5, 'original');
+      const east = await render(0, 'alternate'), eastRelief = await render(1.5, 'alternate');
+      if (mode === 'covered rock') {
+        assert.ok(same(west, westRelief) && same(east, eastRelief), 'opaque soil hides all the underlying grain');
+      } else {
+        const luma = (image, i) => 0.299 * image[i] + 0.587 * image[i + 1] + 0.114 * image[i + 2];
+        let product = 0, energy = 0;
+        for (let i = 0; i < west.length; i += 4) {
+          const dw = luma(westRelief, i) - luma(west, i), de = luma(eastRelief, i) - luma(east, i);
+          product += dw * de;
+          energy += dw * dw + de * de;
+        }
+        assert.ok(energy > 0 && product < -0.2 * energy, `${mode} grain reverses when the sun moves from west to east`);
+      }
+      assert.deepEqual(s.errors, []);
+    } finally { s.dispose(); }
+  }
 });

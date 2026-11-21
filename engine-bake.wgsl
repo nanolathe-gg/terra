@@ -649,9 +649,8 @@ fn crackShade(c: Crack, width: f32, sun: vec2f, wall: f32) -> vec2f {
     return vec2f(max(core, shadow), lit) * c.open;
 }
 
-// H23: how far a crack's kinks and bends carry, and how far the cracks reach onto gentle slopes (0: steep faces only, 1: onto gentle ground), the same on every world.
+// H23: how far a crack's kinks and bends carry, the same on every world. How far the cracks reach onto gentle slopes is each rock's crackFrom.
 const CRACK_JAGGED = 0.6;
-const CRACK_REACH = 0.6;
 // H23: the elongation of the crack cells along the fall line, the same on every world.
 const CRACK_LENGTH = 2.0;
 
@@ -668,7 +667,7 @@ fn cracks(p: vec2f, fall: vec2f, slope: f32, mask: f32, h: f32, boost: f32) -> v
     let hairShare = max(max(u.rock[rs & rockMask].crackHairline, 0.6 * boost), frost);
     let blockShare = max(u.rock[rs & rockMask].crackBlocks, 0.6 * boost);
     if (mask <= 0.0 || severity <= 0.0 || h < u.sea + 1.0) { return vec4f(0.0); }
-    let start = mix(0.95, 0.10, CRACK_REACH);
+    let start = u.rock[rs & rockMask].crackFrom;
     // Rocky ground takes the whole hierarchy; gentle ground only majors.
     let rocky = smoothstep(start, start * 1.9, slope);
     let gentle = smoothstep(start * 0.35, start * 1.1, slope);
@@ -754,7 +753,7 @@ fn cells(q: vec2f, metric: vec2f, salt: f32, jit: vec2f, count: f32, fall: vec2f
 }
 
 // Beach: dry ground within reach of the water, as the world's coast
-// sections show (Zhon: sand runs ~180 px inland). The reach varies along the
+// sections show. The reach varies along the
 // coast and its inland edge is ragged. Distance to water is found by
 // marching outward in 16 directions.
 fn beachCover(p: vec2f, h: f32, slope: f32) -> f32 {
@@ -773,7 +772,7 @@ fn beachCover(p: vec2f, h: f32, slope: f32) -> f32 {
             if (d >= min(nearWater, nearRise)) { break; }
             let there = baseHeight(p + dir * d);
             let water = there < u.sea && d <= reach * 1.15;
-            // A sand apron gathers round raised rock (Zhon's domes).
+            // A sand apron gathers round raised rock.
             let rise = there > h + 6.0 && d <= apron * 1.15;
             if (!water && !rise) { continue; }
             // Refine the crossing between this step and the last, so the
@@ -806,7 +805,7 @@ fn beachCover(p: vec2f, h: f32, slope: f32) -> f32 {
 // Retail lines are tonal steps, not drawn lines: a riser facing the sun is
 // a light line and one facing away a dark one; they are jagged at pixel
 // scale, broken into dashes, and mostly on gentle slopes (blind round 7).
-fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec3f {
+fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32, level: f32, fill: f32) -> vec3f {
     if (banding <= 0.0 || h < u.sea + 0.5) { return vec3f(0.0); }
     // Low banks drawn level (flatBank, Archipelago) carry no bands either.
     if (u.flatBank > 0.0 && h < u.base - 0.5) { return vec3f(0.0); }
@@ -816,7 +815,7 @@ fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec3
     // Bands on gentle ground have a strength of their own, bandLevel times the slopes' (retail's bands run onto nearly level ground:
     // rings round a bay, lines across a plain, spaced bandSpacing / slope px apart). It covers slopes 0.004 to 0.05 and is gone by 0.09,
     // below where the slope gate rises, so raising it does not crowd a slope that already has enough lines.
-    gate = max(gate, u.bandLevel * smoothstep(0.004, 0.03, slope) * (1.0 - smoothstep(0.05, 0.09, slope)));
+    gate = max(gate, level * smoothstep(0.004, 0.03, slope) * (1.0 - smoothstep(0.05, 0.09, slope)));
     // H5 3a: retail's gentle slopes carry few of the small dashes the risers make there.
     gate *= 1.0 - u.terraceCalm * (1.0 - smoothstep(0.15, 0.40, slope));
     if (gate <= 0.0) { return vec3f(0.0); }
@@ -849,13 +848,27 @@ fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32) -> vec3
     let strength = banding * gate * dash;
     // Distance from the riser's middle, in world px along the slope.
     let px = abs(v - (1.0 - w * 0.5)) * S / max(slope, 0.004);   // a line stays one or two px wide down to the gentlest slope the gate allows
-    let line = (1.0 - smoothstep(0.3, 1.0, px)) * strength * u.bandLine;
+    var line = (1.0 - smoothstep(0.3, 1.0, px)) * strength * u.bandLine;
+    // Fill: on near-level ground the bands run bandSpacing / slope px apart (65 px at slope 0.02), far sparser than retail's hatch on gentle
+    // grades (green-2). Extra sets at half and a quarter of the spacing fade in where the lines run 20-40 and 40-80 px apart, so the bands
+    // the slope already draws stay where they are, and a grade a little steeper keeps its own spacing.
+    if (fill > 0.0) {
+        let levelGate = level * smoothstep(0.004, 0.03, slope) * (1.0 - smoothstep(0.05, 0.09, slope)) * (1.0 - u.terraceCalm * (1.0 - smoothstep(0.15, 0.40, slope)));
+        let gap = S / max(slope, 0.004);
+        for (var k = 1u; k <= 2u; k++) {
+            let n = f32(1u << k);
+            let fade = smoothstep(10.0 * n, 20.0 * n, gap);
+            if (fade <= 0.0) { continue; }
+            let pk = abs(fract(uu * n) - (1.0 - w * 0.5)) * S / n / max(slope, 0.004);
+            line = max(line, (1.0 - smoothstep(0.3, 1.0, pk)) * banding * levelGate * dash * fill * fade * u.bandLine);
+        }
+    }
     // The riser leans downhill (-fall): lit if that faces the sun.
     let facing = dot(-fall, normalize(u.sun.xy + 1e-6));
     return vec3f(offset * strength, line, facing);
 }
 
-// Sand streaks, as on Zhon's sandy slopes and ramps: fine continuous lines
+// Sand streaks on sandy slopes and ramps: fine continuous lines
 // along the contours, a few px apart, curving with the ground (retail ramp
 // sections). Tonal only: a dark line, deeper where the slope faces away
 // from the sun. Returns (line strength, facing).
@@ -1053,13 +1066,22 @@ fn sandRipples(p: vec2f, lambda: f32) -> vec3f {
 fn crustPillows(p: vec2f, fall: vec2f, count: f32, tall: f32) -> vec2f {
     let size = u.pool / count;
     let warp = vec2f(poolNoise(p, 31.0, 3.0), poolNoise(p, 31.0, 17.0)) * 0.22 * u.lavaPillow;
-    let pil = cells((poolPos(p) + warp) / size, vec2f(1.0 / 1.35, 1.0), 5.0, vec2f(0.12, 0.76), count, fall);
+    let q = (poolPos(p) + warp) / size;
+    let pil = cells(q, vec2f(1.0 / 1.20, 1.0), 5.0, vec2f(0.12, 0.76), count, fall);
     let pd = sqrt(vec3f(pil.best, pil.second, pil.third));
     let t = clamp(pd.x / max(pd.y, 1e-3), 0.0, 1.0);
-    let dome = 1.0 - pow(t, 2.4);
-    let triple = 1.0 - smoothstep(0.0, 0.16, pd.z - pd.x);
-    let height = u.lavaPillow * mix(0.035, 0.11, tall) * (dome + 0.7 * (cellHash(pil.id + 36.7).x - 0.5)) - u.lavaPillow * mix(0.03, 0.08, tall) * triple;
-    let dark = mix(0.2, 1.5, tall) * smoothstep(0.80, 0.97, t) + mix(0.6, 2.4, tall) * triple * smoothstep(0.35, 0.8, t);
+    let seed = cellHash(pil.id + 36.7);
+    let dome = sqrt(max(0.0, 1.0 - t * t));
+    let shelf = mix(0.48, 0.73, seed.x);
+    let shelfDistance = (t - shelf) * size * 0.48;
+    let shelfMark = (1.0 - smoothstep(0.40, 1.50, abs(shelfDistance)))
+        * smoothstep(-0.36, 0.35, poolNoise(p, 18.0, 6.0));
+    let tilt = dot((seed - 0.5) * 0.8, q - pil.point);
+    let triple = (1.0 - smoothstep(0.0, 0.13, pd.z - pd.x)) * smoothstep(0.60, 0.98, t);
+    let rim = 1.0 - smoothstep(0.24, 1.35, (pd.y - pd.x) * size);
+    let cap = dome + mix(0.12, 0.28, tall) * (1.0 - smoothstep(-0.9, 0.9, shelfDistance)) + tilt;
+    let height = size * (mix(0.055, 0.17, tall) * cap - mix(0.019, 0.07, tall) * triple);
+    let dark = mix(0.58, 2.0, tall) * rim + mix(0.44, 1.05, tall) * shelfMark + mix(0.4, 1.5, tall) * triple;
     return vec2f(height, dark);
 }
 fn crustChips(p: vec2f, count: f32, tall: f32) -> vec2f {
@@ -1075,7 +1097,8 @@ fn lavaCrust(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
     // Lava's plain undulates up to ~4 units over the base, so the crust starts above that (open ground keeps its own lumps).
     let gate = u.lavaCrust * smoothstep(u.base + 2.5, u.base + 6.5, h);
     // The fall-line relief gives way on the hill and on its foot's slope; the banks well below the plain keep theirs.
-    let calm = u.lavaCalm * max(smoothstep(u.base + 0.2, u.base + 2.5, h), smoothstep(u.base - 0.6, u.base - 0.1, h) * smoothstep(0.06, 0.22, slope));
+    let calm = u.lavaCalm * smoothstep(0.0, 0.35, u.lavaCrust)
+        * max(smoothstep(u.base + 0.2, u.base + 2.5, h), smoothstep(u.base - 0.6, u.base - 0.1, h) * smoothstep(0.06, 0.22, slope));
     if (gate <= 0.0) { return vec3f(0.0, 0.0, calm); }
     let across = vec2f(fall.y, -fall.x);
     let tall = smoothstep(u.base + 18.0, u.base + 70.0, h);
@@ -1085,8 +1108,9 @@ fn lavaCrust(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
     let chipCount = max(1.0, u.pool / u.lavaChip);
     let pillows = mix(crustPillows(p, fall, floor(pillowCount), tall), crustPillows(p, fall, floor(pillowCount) + 1.0, tall), fract(pillowCount));
     let chips = mix(crustChips(p, floor(chipCount), tall), crustChips(p, floor(chipCount) + 1.0, tall), fract(chipCount));
-    var height = pillows.x + chips.x;
-    var dark = max(pillows.y, chips.y);
+    let chipsOnCap = mix(0.84, 0.48, tall);
+    var height = pillows.x + chips.x * chipsOnCap;
+    var dark = max(pillows.y, chips.y * chipsOnCap);
     // Veins hang down the fall line: zero lines of a noise stretched along it, in stretches that begin and end.
     if (u.lavaVeins > 0.0) {
         let qv = vec2f(dot(p, across) / 7.0, dot(p, fall) / 40.0) + 0.5 * vec2f(valueNoise(p / 23.0 + 5.0), valueNoise(p / 23.0 + 9.0));
@@ -1302,7 +1326,7 @@ fn bake(p: vec2f) -> vec4f {
     // Painted banding: fainter scales the world's strength down, stronger
     // doubles it up to twice and never drops below 0.8 times the painted amount.
     let banding = select(u.rock[rs & rockMask].banding * (1.0 + style.z), max(u.rock[rs & rockMask].banding * styleScale(style.z), 0.8 * style.z), style.z > 0.0);
-    let bandsAt = contourBands(p, h, slope, fall, banding);
+    let bandsAt = contourBands(p, h, slope, fall, banding, u.rock[rs & rockMask].bandLevel, u.rock[rs & rockMask].bandFill);
     var bands = bandsAt.xy * (1.0 - route);
     // E11: the dark lines round Archipelago's hills were the first contour risers on the
     // hill's foot.
@@ -1358,7 +1382,7 @@ fn bake(p: vec2f) -> vec4f {
     height += drift;
     // The bed's lumps lie on the sand the bed holds: silt does not smooth them away (the lake's bed is lumpy ground through the tint).
     height += bedLumps;
-    if(u.groundAny!=0){height+=groundHeight(p)*(1.0-smoothstep(.1,.6,slope))*(1.0-buried)*(1.0-faceBake);}   // rock carries its own material's height (rockDetail)
+    if(u.groundAny!=0){height+=groundHeight(p)*(1.0-smoothstep(.1,.6,slope))*(1.0-buried)*(1.0-faceBake);}   // Rock material relief is lit separately in the color pass.
     // Cracks, carved into the relief; sand fills them.
     var crackAt = cracks(p, fall, faceSlope, crackMask * (1.0 - route), h, max(style.y, 0.0)) * (1.0 - buried);
     // Where rock is broken into blocks, the blocks replace part of the

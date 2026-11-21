@@ -5,13 +5,13 @@
 // Each PNG has RETAIL (orange band: the sprites most used on the world's retail maps) and OURS (blue band: the variants of the world's
 // own table, lit by the world's sun as the page does) on the world's ground colour, at 1x and then 2x. Numbers under the pictures:
 // size, drawn pixels, luma octile cut points, mean hue and saturation of the coloured pixels, outline share (boundary pixels per
-// pixel; AquaOre deposits, drawn blue for under water, are left out unless --aqua, which also paints our deposits as under water); retail rows are weighted by uses in the group mean. A world with no retail folder (Zhon) gets ours only.
+// pixel; AquaOre deposits, drawn blue for under water, are left out unless --aqua, which also paints our deposits as under water); retail rows are weighted by uses in the group mean. A world with no retail folder gets ours only.
 import {mkdirSync, writeFileSync, readFileSync, existsSync, mkdtempSync} from 'node:fs';
 import {join, basename} from 'node:path';
 import {runSite} from '../repro/site-cli.mjs';
 import {tmpdir} from 'node:os';
 import {encodePNG, decodePNG} from './feature_gen_png.mjs';
-import {generateFeature, paintDeposit, paintVent, toRGBA, rng} from '../sculpt-feature-gen.js';
+import {generateFeature, paintDeposit, paintVent, ventPaintRadius, toRGBA, rng} from '../sculpt-feature-gen.js';
 import {defaultSet, variants} from '../sculpt-feature-set.js';
 
 const R = process.env.R || '/tmp/nanolathe-map-editor';
@@ -136,7 +136,7 @@ function oursItem(v, i, retailDeposits) {
   const base = {src: 'ours', label: String(i + 1), name: `${v.kind} #${v.index} t${v.type}`, meta: `${v.params.cells || v.footprint.join('x')}`, v};
   if (v.kind === 'deposit' || v.kind === 'vent') {
     const metal = v.kind === 'deposit' ? (retailDeposits[i]?.metal ?? 127) : null;
-    return {...base, name: `${v.kind} #${v.index}` + (metal ? ` m${metal}` : ''), paint: (g, x, y) => (v.kind === 'deposit' ? paintDeposit : paintVent)(g, x, y, v.kind === 'deposit' ? {...v.params, metal, ...(args.includes('--aqua') ? {underwater: true} : {})} : v.params, v.seed, ctx), reach: v.kind === 'deposit' ? 44 : 30};
+    return {...base, name: `${v.kind} #${v.index}` + (metal ? ` m${metal}` : ''), paint: (g, x, y) => (v.kind === 'deposit' ? paintDeposit : paintVent)(g, x, y, v.kind === 'deposit' ? {...v.params, metal, ...(args.includes('--aqua') ? {underwater: true} : {})} : v.params, v.seed, ctx), reach: v.kind === 'deposit' ? 44 : ventPaintRadius(v.params)};
   }
   const f = generateFeature(v.kind, v.params, v.seed, ctx);
   return {...base, body: spriteOf(f.body), shadow: spriteOf(f.shadow), blend: f.shadowBlend, bodyBlend: f.bodyBlend, gameplay: f.gameplay};
