@@ -99,9 +99,14 @@ These notes are by eye, from the base crops in
 Round 17 (branch `match-green-18`, 66 of 300 trials; report in its final
 message, notes and evidence pictures in
 `$R/match/terraform-wt-match-green-18/green/NOTES.md` and `evidence/`).
-Measured, trial-064 against trial-000: mean shape .104 to .094, look .090
-to .093 (the two fixtures below cost look; every other keep lowered it).
+Measured, trial-066 against trial-000: mean shape .104 to .094, look .090
+to .091: green-1's lean fix (a card option used to fix shape) costs look,
+.041 to .046 even after its map choice; every other keep lowered it or left
+it alone.
 Held-out green-7: look .102 to .078, shape unchanged (holdout-001/002).
+The world-rock keep was chosen from green-7's own crop and its only
+measured gain is there (no tuning window draws much slot-0 rock), so
+green-7 is no longer a clean holdout for the world's own rock.
 
 - **World rock (slot 0) = evad's broken-slope numbers** (trial-020): the
   knolls on green-7 lost their soil-terrace rings and read like retail's
@@ -117,9 +122,6 @@ Held-out green-7: look .102 to .078, shape unchanged (holdout-001/002).
   histogram follows retail (shape .146 to .088); the shape lead is closed.
   Look rose .041 to .065, recovered to .046 by **map: undulationArt .15**
   (trial-031).
-- **fixture green-3: the NW island stops short of the top edge**
-  (trial-035): heights now follow, gentle:band32 cleared, but look .071 to
-  .087 (the north face catches the light: steep edges .033 vs .018).
 
 Leads:
 
@@ -139,16 +141,36 @@ Leads:
    crevices at the ridge's west foot in retail (evidence
    g5-gentle-lines-r.png), not a hatch over the plain; world bandLevel
    floods the plain before it draws them (trials 036/037).
-5. **Fixture candidates the shape score punishes:** green-4's NE massif
+5. **Fixture candidates:** green-3's NW island runs off the top edge;
+   shortening its stroke (trial-035) made rows 0-5 follow retail but
+   lowered the north summit (rows 6-8: 28-74 against retail's 66-85) and
+   cost look .071 to .087, so it was reverted: it needs a second stroke or a
+   taller curve, not only shorter points. Green-4's NE massif
    sits about 130 px west of retail's (trial-044, shape .12 to .17);
    green-5's west escarpment 70 px east (trial-052, shape .12 to .19). The
    shape score reads slope and roughness histograms, not where the land is.
+6. **Contour hatch spacing** (the review's question): spacing .9
+   (`world.column.bands`, trial-028) draws a denser hatch on green-2, but
+   it breaks into short level dashes between the lumps instead of retail's
+   continuous wavy lines, and the thin-line count falls to .44x (green-2
+   .218); 1.7 (trial-029) .171. 1.3 is a sharp optimum.
 
-Code reads this round: slope cover's material relief is not lit (trial-057
-rendered as before; bake light into its color instead, trial-058);
-`bankRock` needs bank slope .3-.8 at sea+3 (engine-frag.wgsl), which
-Green's gentle coasts never reach (trials 041/042); `lumpRelief` reaches
-only ground-lump paint (trial-050).
+Still open from round 16: grass palette 169 (the output stage re-dithers;
+owner's decision 25, report only); green-2's line darkness belongs to the
+world (`world.column.bands`), not a rock type; self-shadow depth and
+faceFill are the owner's light.
+
+How this round knows: `bankRock` needs bank slope .3-.8 at sea+3
+(engine-frag.wgsl, read, and trials 041/042 render as before), which
+Green's gentle coasts never reach. Slope cover's material relief did not
+show (trial-057: scores equal to four decimals; trial only, shader not
+read); a Light node baked into its color does (trial-058). `lumpRelief`
+moved nothing on green-5 (trial-050; why is a guess: probably only under
+ground-lump paint). Rock pins: trial-013 against trial-020 changed green-4
+and green-6 only on the strokes' foot fringe, where slot 0 takes over
+(evidence pin-diff-green-4-nw.png, pin-diff-green-6-c.png). `soil` (slot 1)
+does not set the crack keys, so the Knoll and Crescent tools' cracks now
+follow the new world numbers; no window draws them.
 
 ## Pilot notes (2026-11-18)
 
