@@ -34,8 +34,6 @@ struct Rock {
     faceLedge: f32,       // ledge step, 0..1 of the bed
     faceRun: f32,         // typical unbroken ledge length, px
     faceLean: f32,        // scratches and joints lean from the screen's north-south, degrees
-    faceScratch: f32,     // scratch depth, height units
-    faceScratchSize: f32, // scratch spacing, px
     faceBlock: f32,       // joint depth and block tilt, height units
     faceBlockSize: f32,   // px between joints along a bed
     faceGrass: f32,       // how strongly grass takes the ledges, 0..1
@@ -47,8 +45,6 @@ struct Rock {
     faceWet: f32,         // wet streaks: the runnels and open partings darker
     faceShade: f32,       // how dark the rock face's own shadows and creases go (0: the sky still fills them; 1: black)
     faceRock: f32,        // rock's share of a steep face (the rest grass, in clumps and on ledges); a stroke's Local vegetation scales it
-    faceCrease: f32,      // crease depth (fine creases along the contours, the face's grain), height units
-    faceCreaseSize: f32,  // crease spacing, px
     runoff: f32,
     runoffScale: f32,
     runoffConcentration: f32,
@@ -87,8 +83,6 @@ struct Rock {
     faceExtrude: f32, // Extrusion bias: inset to projecting
     faceLamina: f32, // Fine layer relief
     faceLaminaSize: f32, // Fine layer spacing (height units, 6 to 16)
-    faceScratchLength: f32, // Groove length (px)
-    faceScratchAngle: f32, // Groove tilt from vertical (deg)
     looseSize: f32,       // px: the median stone diameter
     stoneRound: f32,      // world material data: 0 angular chips .. 1 rounded stones
     stoneSort: f32,       // world material data: 0 a mixed power-law gravel, 1 one size class sorted by the process (talus coarsens outward, fans and channels fine downslope)

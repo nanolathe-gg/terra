@@ -1093,6 +1093,9 @@
  "world": {
     "materials": {"ground": "crystal-ground", "water": "crystal-water", "rock": "crystal-rock", "slope": "crystal-slope", "debris": "crystal-debris", "soil": "crystal-soil", "snow": "crystal-snow", "moss": "crystal-moss", "sand": "crystal-sand", "band": "crystal-band", "crystal": "crystal-crystals"},
     "knobDefaults": {
+        "fineRelief": 0.42,
+        "fineSize": 10,
+        "fineGrain": -0.71,
         "gougeWeb": 0.75,
         "plainRelief": 0.6,
         "crackSeverity": 0.7,

@@ -1009,9 +1009,6 @@
         "faceSecondary": 0.0,
         "faceLedge": 0.5,
         "faceSpall": 0.0,
-        "faceCrease": 0.0,
-        "faceScratch": 0.8,
-        "faceScratchLength": 30.0,
         "crackBlocks": 0.0,
         "crackMajor": 0.0,
         "faceLamina": 0.5,
@@ -1061,8 +1058,6 @@
         "faceBlockSize": 18,
         "faceLean": 0,
         "faceWear": 0.8,
-        "faceCreaseSize": 6,
-        "faceScratchSize": 6,
         "faceGrass": 0.25,
         "faceLayers": 0,
         "faceMass": 0.5,
@@ -1073,7 +1068,6 @@
         "faceBlockHeight": 4,
         "faceRound": 0.85,
         "faceExtrude": 0.15,
-        "faceScratchAngle": 0,
         "bedDip": 0,
         "bedDipDir": 90,
         "shineRock": 0.4,
@@ -1116,6 +1110,12 @@
 
      "knobs": {
 
+      "fineRelief": 0.36,
+
+      "fineSize": 6,
+
+      "fineGrain": -1.0,
+
       "faceRindTone": -0.3,
 
       "faceRind": 1,
@@ -1124,13 +1124,10 @@
 
       "faceTone": 0.05,
 
-      "faceDetailPatch": 0,
+      "faceDetailPatch": 0
 
-      "faceScratch": 3,
 
-      "faceScratchSize": 3,
 
-      "faceScratchLength": 60
 
      }
 

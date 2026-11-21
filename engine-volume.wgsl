@@ -143,7 +143,7 @@ fn rockSite(p:vec3f)->RockSite {
     useRock(p.xy);
     var site=RockSite(false,0.0,0.0,0.0,0.0,0.0,0.0,-1,0.0);
     let m=rockMaterialOf(rs);let layer=select(-1,u.ground[u32(max(m,0)) & groundMask].cacheLayer,m>=0);let relief=select(0.0,u.ground[u32(max(m,0)) & groundMask].finish.x,layer>=0);
-    if(u.rock[rs & rockMask].rockFace<=0.0||max(max(max(u.rock[rs & rockMask].faceJoint,u.rock[rs & rockMask].faceLamina),relief),max(u.rock[rs & rockMask].faceLedge,max(u.rock[rs & rockMask].faceCrease,u.rock[rs & rockMask].faceScratch)))<=0.0){return site;}
+    if(u.rock[rs & rockMask].rockFace<=0.0||max(max(max(u.rock[rs & rockMask].faceJoint,u.rock[rs & rockMask].faceLamina),relief),u.rock[rs & rockMask].faceLedge)<=0.0){return site;}
     let source=voxelAuthored(p.xy);let guide=voxelGuide(p.xy);let nz=sqrt(max(.000225,1.0-dot(guide.xy,guide.xy)));
     let slope=length(broadGradient(p.xy));let route=routeProtection(p.xy);
     let painted=voxelPaintRock(p.xy);let rim=rimRockAt(p.xy);
@@ -155,20 +155,10 @@ fn rockSite(p:vec3f)->RockSite {
     if(u.rock[rs & rockMask].columnCount>0){let column=voxelColumnCoord(p);let gg=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary),length(source.yz)/max(source.w,.015));gathered=gg.y;hard=gg.x;}
     return RockSite(true,face,face+soil*3.0,u.rock[rs & rockMask].rockFace*.5*voxelRelief(p.xy,slope)*heightGate,gathered,voxelJointWear(hard),face*heightGate,layer,relief);
 }
-// Pits and runnels (Pits, Runnels), a height outward in rock space: 1 to 2 px marks the 2 px solid would blur away, so they are drawn at the
-// hit (rockDetail), not cut.
-fn rockMarks(r:vec3f)->f32 {
-    let pits=(abs(voxelNoise(r/max(2.0,u.rock[rs & rockMask].faceCreaseSize))-.5)-.25)*u.rock[rs & rockMask].faceCrease*2.5;
-    let angle=radians(u.rock[rs & rockMask].faceScratchAngle);
-    let scratched=vec3f(r.x*cos(angle)-r.z*sin(angle),r.y,r.x*sin(angle)+r.z*cos(angle));
-    let runnel=pow(1.0-abs(voxelNoise(scratched/vec3f(max(2.0,u.rock[rs & rockMask].faceScratchSize),max(2.0,u.rock[rs & rockMask].faceScratchSize),u.rock[rs & rockMask].faceScratchLength))*2.0-1.0),4.0)*u.rock[rs & rockMask].faceScratch*.5;
-    return pits-runnel;
-}
 fn rockLayers(p:vec3f,gathered:f32)->f32 { let l=voxelFine(p,voxelColumnCoord(p),gathered);return l.x+l.y; }
 // The height (outward) the solid lacks at p, near the pixel its site was read at.
 fn rockDetail(p:vec3f,site:RockSite)->f32 {
     var h=0.0;let r=voxelRockSpace(p);
-    if(max(u.rock[rs & rockMask].faceCrease,u.rock[rs & rockMask].faceScratch)>0.0&&site.face>.001){h+=rockMarks(r)*voxelDetail(r)*site.face;}
     if(u.rock[rs & rockMask].faceJoint>0.0&&site.face>.001){
         let fracture=voxelFractureSpace(p,r);
         let c=voxelBlocks(fracture,max(4.0,u.rock[rs & rockMask].faceBlockSize));

@@ -69,8 +69,8 @@ test('fracture hierarchy and clustering have effective parents and saved ranges'
   assert.ok(reason(key,{rockFace:2,faceJoint:0}));
   assert.equal(reason(key,{rockFace:2,faceJoint:1}),'');
  }
- assert.ok(reason('faceDetailPatch',{rockFace:2,faceCrease:0,faceGrit:0,faceScratch:0}));
- assert.equal(reason('faceDetailPatch',{rockFace:2,faceCrease:.5}),'');
+ assert.ok(reason('faceDetailPatch',{rockFace:0}));
+ assert.equal(reason('faceDetailPatch',{rockFace:2}),'');
  assert.deepEqual(copyRockSettings({faceContinuity:2,faceJointWidth:4}),{faceContinuity:1,faceJointWidth:3});
 });
 
@@ -92,7 +92,8 @@ test('a map saved before Fine layer spacing began at 6 opens, its spacing at 6',
  const rock={faceWhole:.6,faceWholeLarge:0,faceRegular:.6,faceJointWidth:1,faceSecondary:.9,faceContinuity:.9,faceDetailPatch:.6,faceFresh:.55,faceRind:.65,faceRindDepth:6,faceRindTone:-.3,faceRindWarmth:.1,faceRindRough:.7,bedCycleVary:.6,faceBedVary:1,faceBreak:.4,stoneRound:.05,stoneSlab:.85,faceJointTilt:12,faceScaleVary:.55,faceFold:0,faceSpall:.65,faceClast:0,faceClastSize:12,faceMineral:.3,runoff:.65,runoffScale:24,runoffConcentration:.65,runoffCut:2,runoffStain:.35,debrisAmount:1.1,debrisReach:80,debrisDepth:5,looseSize:7,stoneSort:.7,rockFace:2,faceRock:1,rockFaceFrom:.2,faceBed:3,faceLedge:3.2,faceRun:120,faceBlock:3,faceBlockSize:24,faceLean:0,faceWear:.1,faceCrease:.5,faceCreaseSize:6,faceScratch:.3,faceScratchSize:6,faceShade:.7,faceGrit:.15,faceGrass:.25,faceLayers:.3,faceMass:1,faceTone:.12,faceStrata:.22,faceWet:.2,faceStretch:3.2,faceBlockHeight:.4,faceRound:0,faceJoint:.9,faceExtrude:.2,faceLamina:.65,faceLaminaSize:3,faceScratchLength:50,faceScratchAngle:0,faceGritSize:1.3,bedDip:0,bedDipDir:90,shineRock:.18,shineRockSharp:12,shineRockRough:.25,shineRockScale:3};
  const column={sections:[{start:0,beds:[[2,.85,0],[1,.2,1],[3,.7,2],[1,.3,1]]}],bands:[3.7,.84],wander:{value:5}};
  assert.ok(copyColumn(column));
- // Grit moved to the rock material (its height): a save's Grit relief and size are dropped.
- const {faceGrit,faceGritSize,...kept}=rock;
+ // Grit moved to the rock material (its height): a save's Grit relief and size are dropped. Pitting and Scratches folded into fine relief
+ // (owner, 2026-11-21): a save's pits and grooves are dropped too.
+ const {faceGrit,faceGritSize,faceCrease,faceCreaseSize,faceScratch,faceScratchSize,faceScratchLength,faceScratchAngle,...kept}=rock;
  assert.deepEqual(copyRockSettings(rock),{...kept,faceLaminaSize:6});
 });

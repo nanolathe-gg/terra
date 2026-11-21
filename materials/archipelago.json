@@ -834,6 +834,9 @@
     {"name": "Snow on ice tops","builtin": "iceCap","material": "@snow"}
     ],
     "knobDefaults": {
+        "fineRelief": 0.08,
+        "fineSize": 10,
+        "fineGrain": -0.54,
         "crackSeverity": 0.4,
         "crackMajor": 0.5,
         "banding": 0.2,
@@ -866,8 +869,6 @@
         "faceLedge": 0.6,
         "faceJoint": 0.14,
         "faceSecondary": 0.1,
-        "faceCrease": 0.72,
-        "faceScratch": 0.35,
         "crackMinor": 0.5,
         "crackBlocks": 0.25,
         "crackNetwork": 0.1,

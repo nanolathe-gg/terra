@@ -789,6 +789,9 @@
  "world": {
     "materials": {"ground": "lush-ground", "water": "lush-water", "rock": "lush-rock", "slope": "lush-slope", "debris": "lush-debris", "high": "lush-highland", "extra": ["lush-swamp"], "soil": "lush-soil", "snow": "lush-snow", "moss": "lush-moss", "sand": "lush-sand", "band": "lush-band", "crystal": "crystals"},
     "knobDefaults": {
+        "fineRelief": 0.17,
+        "fineSize": 10,
+        "fineGrain": -0.71,
         "coastRamp": 0.4,
         "looseSupply": 0.08,
         "looseSize": 3.5,
@@ -805,8 +808,6 @@
         "faceGrass": 0.4,
         "faceLayers": 1,
         "reliefAmount": 0.25,
-        "faceScratch": 1,
-        "faceCrease": 1,
         "faceLedge": 1.2,
         "faceWear": 0.15,
         "faceJoint": 0.15,
@@ -861,13 +862,16 @@
 
      "knobs": {
 
+      "fineRelief": 0.12,
+
+      "fineGrain": -0.59,
+
       "faceRindTone": -0.3,
 
       "faceWet": 0.5,
 
       "faceShade": 1,
 
-      "faceScratch": 0.6,
 
       "faceMass": 3,
 
