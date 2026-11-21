@@ -74,12 +74,12 @@ pairs.
 
 ## Start here (round 5)
 
-Round 4 (branch `match-red-4`, 77 of 300 trials; report in the round's final
+Round 4 (branch `match-red-4`, 81 of 300 trials; report in the round's final
 message, notes in `$R/match/terraform-wt-match-red-4/red/NOTES.md`, fitting
 scripts named there) started at main e22c27d1: trial-000 mean shape .13, look
 .22 (red-1 .11/.07, red-2 .14/.09, red-3 .14/.50), held-out red-4 .10/.50.
-It ended at trial-049: shape .12, look .10 (red-1 .11/.07, red-2 .14/.06,
-red-3 .12/.16); red-4 .10/.33 (holdout-005). Kept:
+It ended at trial-081: shape .12, look .09 (red-1 .11/.07, red-2 .14/.06,
+red-3 .12/.15); red-4 .10/.33 (holdout-005). Kept:
 
 - the world rock draws a new coast-bank material, `red-bank` (rust ground,
   3.5 px lumps and 52 px cells lit from the west, thin dark cell borders),
@@ -89,30 +89,37 @@ red-3 .12/.16); red-4 .10/.33 (holdout-005). Kept:
   upland);
 - red-3's sea rebuilt with a sloped floor (`fixture:`), fitted to the retail
   heights by coordinate descent; plain 30, undulation 5;
-- red-3's own water: deepDepth 30, bedBright 1.0.
+- red-3's own water: deepDepth 24 (the hard step sits at the mean of
+  shallowDepth and deepDepth, depth 13, where retail's water turns from light
+  to dark measured on its heights), bedBright 1.0.
 
 Leads:
 
-1. **Sea-coast water as the world's.** red-3's own water (deepDepth 30,
+1. **Sea-coast water as the world's.** red-3's own water (then deepDepth 30,
    bedBright 1.0) takes held-out red-4 from .33 to .22 (holdout-004,
-   diagnostic only). As world defaults it costs red-1 .01 and red-2 .07
+   diagnostic only; deepDepth 24 not checked there). As world defaults it costs red-1 .01 and red-2 .07
    (trial-050) unless red-2 sets bedBright 1.1 in its query and red-1 keeps
    18/1.1. The reviewer's call: one sea look for the world, ponds and rivers
    as maps' own water.
-2. **The deep side of a hard shelf step never mottles.** With deepEdge 1 the
-   step comes from `sharpDeepStep` (engine-frag.wgsl), which reads the bed
-   depth only; the depth mottle (`colorDepth` noise) reaches only the ramp.
-   deepEdge 0 draws retail's 32 px mottle in the deep but blurs the shelf
-   edge (trial-025); see the round's proposal.
+2. **Deep water's 32 px patches** (red-3 .37 at trial-081, retail .87). Read in
+   code, not proved by a trial: with deepEdge 1 the step comes from
+   `sharpDeepStep` (engine-frag.wgsl), which reads the bed depth only, so the
+   depth mottle (`colorDepth` noise) never reaches it. deepEdge 0 (trial-025)
+   raised deep patches .30 to .47 but blurred the shelf edge (shelf edges .018
+   to .004, retail .014). The patches also rise with the step's depth (.30 at
+   deepDepth 18, .37 at 24, .56 at 30; cause not traced). A surface layer
+   cannot reach it: deep water draws the water material's pigment, not the
+   bed (`water = mix(absorbed, deepWater, deep)`); red-water's broad mix did
+   little (trial-026).
 3. **Red-3's bank** still reads darker and blotchier than retail's broad,
    lit, lumpy rough ground with thin polygon cracks (crop trial-049
    red-3/slope.png). Tried: wider Rock paint (060: gentle edges .10x to
    .56x, flat edges 2.4x), Ground lumps paint on the bank (062: look .16 to
    .14, slope edges 1.7x to 2x), red-crumple ground there (074: flat edges
    4.9x), red-bank's light amounts (038/039), rockFace (027-029), world
-   cracks (058). Retail's bank roughness is in the heights (rough_8px .58,
-   ours .17): a coast stroke option for cell-scale height roughness would be
-   the lever.
+   cracks (058). Retail's bank roughness is in the heights: on cells within
+   8 of water, rough_8px .74 against ours .22 (inland .23 against .08). A
+   stroke option for cell-scale height roughness would be the lever.
 4. **Red-2's fixture**: retail's plain sits 35 above the river (crop.json),
    ours 24. plain=35 alone breaks the banks and knob (trial-057: shape .21);
    a refit of the lake strokes at plain 24 against scaled heights did not
