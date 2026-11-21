@@ -18,7 +18,7 @@ import {createGpuFields,createPagedFields,createShapeEngine,TIME_APRON,comparePl
 
 import {shapePaths,clonePaths,pathsWithin,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
 import {selectionTransform,toggleSelection} from './sculpt-selection.js';
-import {shareText,gzipText,shareUrl,mapIdFromSearch,withoutMap,mapsService,postMap,getMap} from './sculpt-share.js';
+import {shareText,gzipText,shareUrl,mapIdFromHash,mapsService,postMap,getMap} from './sculpt-share.js';
 import {openMapStore,importLegacyMaps,mapMeta,mapToReopen,byRecent,mapsInUse,holdMap,newMapId,readTab,writeTab,cleanAddress,startsMap,LEGACY_KEYS} from './sculpt-maps.js';
 import {isRiver,pointsSignature,movedRiver,seedRiverLine} from './sculpt-river.js';
 import {HELP_TOOLS} from './sculpt-help-examples.js';
@@ -38,9 +38,9 @@ let picking=false,pickCard=null;
 const $ = id => document.getElementById(id);
 const canvas = $('terrain'), overlay = $('overlay');
 const experiment = new URLSearchParams(location.search);
-// Saved maps (sculpt-maps.js): each map in this browser is its own entry and this tab edits one. The editor writes nothing to the address; its
-// own reloads leave what the next page needs with the tab, read here once as if it were in the address. A world switch carries a copy of the tab's map
-// into the new world (goToWorld, carryNodes). Scratch pages (`scratch`, the checks' comparison sketches) save nothing.
+// Saved maps (sculpt-maps.js): each map in this browser is its own entry and this tab edits one. Editor reloads leave what the next page needs
+// with the tab, read here once as if it were in the address. A world switch copies the tab's map into the new world (goToWorld, carryNodes).
+// Scratch pages (`scratch`, the checks' comparison sketches) save nothing in browser storage.
 const sessionStore=(()=>{try{return sessionStorage;}catch(_){return null;}})();
 const tabState=readTab(sessionStore);for(const [key,value] of Object.entries(tabState.next??{}))experiment.set(key,String(value));
 const SAVING=!experiment.has('scratch');
@@ -2119,7 +2119,13 @@ let leavingForWorld=false;   // set while a load hands the map to another page
 // Reloads this tab on map `id` (null: none yet) with `next`, what the new page reads as if it were in the address.
 function leaveFor(id,next) {
   if(!writeTab(sessionStore,{map:id,next})){error('This tab cannot keep its place (session storage is blocked). Allow site data and reload.');return false;}
-  location.href=cleanAddress(location.href);return true;
+  const href=cleanAddress(location.href);
+  if (href!==location.href && href===location.href.split('#',1)[0]) {
+    // Clearing just the fragment would keep the old map's document alive.
+    window.history.replaceState(null,'',href);
+    location.reload();
+  } else location.href=href;
+  return true;
 }
 async function loadSketchFile(s,commit=true) {
   pickCard?.close();   // another map: the card's pixel is gone
@@ -2348,12 +2354,13 @@ $('file').addEventListener('change',async () => {
   try { if (file.size>64*1024*1024) throw new Error('This sculpt sketch is too large to load.'); await loadSketchFile(JSON.parse(await file.text())); } catch (err) { error(err.message); }
   finally { loading=false; $('editor').disabled=false; updateControls(); backToPicker(); }
 });
-// Share link: the save, gzipped the same way every time, goes to the save-link service; the link is this page with ?map=<id>. Opening such a
-// link adds the map to the visitor's Maps as a new map (boot, openSharedLink); their own maps stay as they were.
+// Share Link uploads the gzipped save and uses the hash to keep its address. The history entry remembers this tab's local copy on refresh.
 const shareMessage=text => { $('share-message').textContent=text; };
-let lastShare={text:'',id:''};   // the link last made: an unchanged map reuses it instead of uploading again
+const rememberSharedMap=(id,map,url=location.href) => window.history.replaceState({...window.history.state,sharedMap:{id,map}},'',url);
+let lastShare={text:'',id:''},shareRequest=0;
 $('share-menu').addEventListener('toggle',async () => {
   if (!$('share-menu').open) return;
+  const request=++shareRequest, startUrl=location.href;
   $('share-result').hidden=true;
   const service=mapsService(services);
   if (!service.url) { shareMessage(service.reason); return; }
@@ -2361,11 +2368,22 @@ $('share-menu').addEventListener('toggle',async () => {
   shareMessage('Making your link…');
   try {
     const text=await saveDocumentText();
-    const id=text===lastShare.text?lastShare.id:await postMap(service.url,await gzipText(text));lastShare={text,id};
-    $('share-url').value=shareUrl(location.href,id); $('share-result').hidden=false;
+    const id=text===lastShare.text?lastShare.id:await postMap(service.url,await gzipText(text));
+    if (request!==shareRequest || startUrl!==location.href || keepSaved || leavingForWorld) return;
+    const map=tabMapId, kept=await saveWorking();
+    if (request!==shareRequest || startUrl!==location.href || keepSaved || leavingForWorld) return;
+    lastShare={text,id};
+    const link=shareUrl(startUrl,id), address=new URL(cleanAddress(startUrl));
+    address.hash=new URL(link).hash;
+    rememberSharedMap(id,kept?map:null,address);
+    $('share-url').value=link; $('share-result').hidden=false;
     shareMessage('Anyone with this link opens a copy of your map. Later edits are not included.');
     $('share-url').select();
-  } catch (err) { shareMessage(err.message); }
+  } catch (err) { if (request===shareRequest) shareMessage(err.message); }
+});
+window.addEventListener('hashchange', event => {
+  const id=mapIdFromHash(location.hash);
+  if (id!==null && id!==mapIdFromHash(new URL(event.oldURL).hash)) location.reload();
 });
 $('share-copy').addEventListener('click',async () => {
   $('share-url').select();
@@ -2374,19 +2392,27 @@ $('share-copy').addEventListener('click',async () => {
 function announceShared() {
   status('Opened a shared map. It is saved as a new map; your other maps are in Maps.'); shareMessage('Opened a shared map.');
 }
-// Boot: a ?map=<id> address adds that shared map to Maps and makes it this tab's map. The address loses the id at once, so a refresh reopens
-// the copy; a failure leaves the tab's own map and says why once the editor is up.
+// Boot: import a fresh link as a new map. On refresh, reopen the local copy remembered by this history entry, including any local edits.
 async function openSharedLink() {
-  const id=mapIdFromSearch(location.search); if (id===null) return null;
-  window.history.replaceState(null,'',withoutMap(location.href));
-  const service=mapsService(services);
-  if (!service.url) return service.reason;
+  const id=mapIdFromHash(location.hash); if (id===null) return null;
+  const previous=window.history.state?.sharedMap;
   try {
-    const shared=await getMap(service.url,id);
-    if (!shared || shared.format!=='nanolathe-terrain-sculpt' || shared.version!==6 || !Array.isArray(shared.nodes) || shared.nodes.some(n=>!n) || typeof shared.biome!=='string' || (shared.map && !validMapSize(shared.map.unitsX,shared.map.unitsY,shared.seaLevel))) throw new Error('The shared map is not a map this editor can open. Your maps were left as they were.');
-    if (!mapStore) { const token=Math.random().toString(36).slice(2)+Date.now().toString(36); await stashPendingSketch(token,shared); experiment.set('pendingSketch',token); }
-    else { const mine=newMapId(); await mapStore.put(mine,shared,mapMeta(mine,shared)); tabState.map=mine; }
-    experiment.set('shared','1'); experiment.set('biome',shared.biome); experiment.delete('world');
+    let shared;
+    if (mapStore && previous?.id===id && previous.map && !(await mapsInUse()).has(previous.map)) shared=await mapStore.get(previous.map);
+    if (shared) tabState.map=previous.map;
+    else {
+      const service=mapsService(services);
+      if (!service.url) return service.reason;
+      shared=await getMap(service.url,id);
+      if (!shared || shared.format!=='nanolathe-terrain-sculpt' || shared.version!==6 || !Array.isArray(shared.nodes) || shared.nodes.some(n=>!n) || typeof shared.biome!=='string' || (shared.map && !validMapSize(shared.map.unitsX,shared.map.unitsY,shared.seaLevel))) throw new Error('The shared map is not a map this editor can open. Your maps were left as they were.');
+      if (!mapStore) { const token=Math.random().toString(36).slice(2)+Date.now().toString(36); await stashPendingSketch(token,shared); experiment.set('pendingSketch',token); }
+      else {
+        const mine=newMapId(); await mapStore.put(mine,shared,mapMeta(mine,shared)); tabState.map=mine;
+        rememberSharedMap(id,mine);
+      }
+      experiment.set('shared','1');
+    }
+    experiment.set('biome',shared.biome); experiment.delete('world');
     if (shared.map) { experiment.set('mapX',String(shared.map.unitsX)); experiment.set('mapY',String(shared.map.unitsY)); experiment.set('sea',String(shared.seaLevel)); if (savedPlain(shared)!==null) experiment.set('plain',String(savedPlain(shared))); }
     return null;
   } catch (err) { return err.message; }

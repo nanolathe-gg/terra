@@ -30,7 +30,9 @@ async function open(offset){
 const image=page=>page.ev(`(async()=>{const b=await sculptCanvas.debugBake({x:240,y:180,width:160,height:128},1),c=new OffscreenCanvas(b.width,b.height);c.getContext('2d').drawImage(b,0,0);b.close();return Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data);})()`);
 const normalize=({pictures,...s})=>({...s,nodes:s.nodes.map(n=>({...n,hidden:Boolean(n.hidden)}))});
 async function shareLink(page) {
-  await page.ev(`document.getElementById('share-menu').open=true; true`);
+  await page.ev(`document.getElementById('share-menu').open=false; true`);
+  await sleep(100);
+  await page.ev(`document.getElementById('share-url').value=''; document.getElementById('share-menu').open=true; true`);
   for (let i=0;i<220;i++) {
     const href=await page.ev(`document.getElementById('share-url').value`);
     if (href) return new URL(href);
@@ -66,8 +68,11 @@ try{
   assert.equal(saved.rock.crackBlocks,3);
   const link=await shareLink(source);
   assert.equal(link.origin,base.origin);
-  const id=link.searchParams.get('map');
-  assert.match(id,/^[a-z2-7]{16}$/);
+  assert.equal(link.search,'');
+  assert.match(link.hash,/^#\/maps\/[a-z2-7]{16}$/);
+  assert.equal(await source.ev('location.hash'),link.hash);
+  const id=link.hash.split('/').pop();
+  assert.equal((await fetch(link)).status,200);
   const response=await fetch(new URL(maps.pathname+'/'+id,base));
   assert.equal(response.status,200);
   assert.ok(await response.text()===saveText,'The shared JSON differs from the downloaded bytes.');
@@ -95,12 +100,28 @@ try{
   const after=await image(recipient);assert.equal(Buffer.from(after).equals(Buffer.from(before)),true,'rendered pixels differ after a fresh-profile load');
   await recipient.send('Page.navigate',{url:link.href});
   await recipient.ready(`document.getElementById('status').textContent.includes('Opened a shared map')`);
+  assert.equal(await recipient.ev('location.href'),link.href);
   const shared=await recipient.ev('sculptDebug.savedMap()');
   assert.deepEqual(shared.pictures,saved.pictures);
   assert.ok(isDeepStrictEqual(normalize(await recipient.ev('sculptDebug.sketch()')),normalize(saved)),'The opened link differs from the downloaded map.');
   assert.equal((await shareLink(recipient)).href,link.href);
   assert.ok(Buffer.from(await image(recipient)).equals(Buffer.from(before)),'Rendered pixels differ after opening the share link.');
+  const localId=await recipient.ev('sculptDebug.tabMap()');
+  const length=await recipient.ev(`window.sameDocument=true; window.history.length`);
+  await recipient.ev(`const name=document.getElementById('map-name'); name.value='Re-shared fixture'; name.dispatchEvent(new Event('input'));`);
+  const updated=await shareLink(recipient);
+  assert.notEqual(updated.hash,link.hash);
+  assert.equal(await recipient.ev('location.href'),updated.href);
+  assert.deepEqual(await recipient.ev('[window.sameDocument,window.history.length]'),[true,length]);
+  const newer=await fetch(new URL(maps.pathname+'/'+updated.hash.split('/').pop(),base));
+  assert.equal((await newer.json()).mapData.name,'Re-shared fixture');
+  const earlier=await fetch(new URL(maps.pathname+'/'+id,base));
+  assert.ok(await earlier.text()===saveText,'Re-sharing changed the original link');
+  await recipient.send('Page.reload');
+  await recipient.ready(`!window.sameDocument&&sculptRegion.mapData().name==='Re-shared fixture'`);
+  assert.equal(await recipient.ev('sculptDebug.tabMap()'),localId);
+  assert.equal(await recipient.ev('location.href'),updated.href);
   for(const page of [source,recipient])assert.deepEqual(page.errors,[]);
-  const report={sameRecipe:true,sameDownloadAndShareBytes:Buffer.byteLength(saveText),sameLinkAfterOpening:true,matchingPixels:before.length/4,rgbaSHA256:createHash('sha256').update(Buffer.from(before)).digest('hex'),world:saved.worldSettings.name,biome:saved.biome};
+  const report={sameRecipe:true,sameDownloadAndShareBytes:Buffer.byteLength(saveText),sameLinkAfterOpening:true,replacedAddressInPlace:true,sameLocalMapAfterRefresh:true,matchingPixels:before.length/4,rgbaSHA256:createHash('sha256').update(Buffer.from(before)).digest('hex'),world:saved.worldSettings.name,biome:saved.biome};
   writeFileSync(join(out,'report.json'),JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));
 }finally{for(const {ws,browser}of browsers){ws?.close();browser.kill();}}

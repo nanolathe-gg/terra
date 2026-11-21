@@ -33,23 +33,17 @@ export async function gzipText(text) {
   return out;
 }
 
-// The link to a saved map: the page's own address (a static build's versioned folder is replaced by the site root, whose index opens the
-// current build and keeps the query) with ?map=<id>.
+// Share links request the static editor at the site root. The editor reads the map ID from the fragment.
 export function shareUrl(href, id) {
   const url = new URL(href);
-  url.search = ''; url.hash = '';
+  url.search = '';
   url.pathname = url.pathname.replace(/\/b\/[0-9a-f]{10}\/[^/]*$/, '/').replace(/\/index\.html$/, '/');
-  url.searchParams.set('map', id);
+  url.hash = '/maps/' + id;
   return url.toString();
 }
-export function mapIdFromSearch(search) {
-  const id = new URLSearchParams(search).get('map');
-  return id === null ? null : id;
-}
-export function withoutMap(href) {
-  const url = new URL(href);
-  url.searchParams.delete('map');
-  return url.toString();
+export function mapIdFromHash(hash) {
+  const prefix = '#/maps/';
+  return hash.startsWith(prefix) ? hash.slice(prefix.length) : null;
 }
 
 export function mapsService(services) {

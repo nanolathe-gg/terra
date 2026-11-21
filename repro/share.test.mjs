@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {gunzipSync, gzipSync} from 'node:zlib';
-import {shareText, gzipText, crc32, shareUrl, mapIdFromSearch, withoutMap, mapsService, postMap, getMap} from '../sculpt-share.js';
+import {shareText, gzipText, crc32, shareUrl, mapIdFromHash, mapsService, postMap, getMap} from '../sculpt-share.js';
 import {mapId} from '../deploy/worker/worker.js';
 import {markEdited} from '../sculpt-tools.js';
 
@@ -23,17 +23,20 @@ test('crc32 matches the reference value', () => {
   assert.equal(gzipSync('').length > 0, true);
 });
 
-test('the share link is the page address with ?map=, and a static build links to the site root', () => {
-  assert.equal(shareUrl('http://127.0.0.1:8851/?biome=red&mapX=4#x', 'abcdefghijklmnop'), 'http://127.0.0.1:8851/?map=abcdefghijklmnop');
-  assert.equal(shareUrl('https://terra.nanolathe.gg/b/0123456789/?x=1', 'abcdefghijklmnop'), 'https://terra.nanolathe.gg/?map=abcdefghijklmnop');
-  assert.equal(shareUrl('https://terra.nanolathe.gg/index.html?x=1', 'abcdefghijklmnop'), 'https://terra.nanolathe.gg/?map=abcdefghijklmnop');
+test('share links use #/maps/<id> at the site root', () => {
+  const id = 'abcdefghijklmnop';
+  assert.equal(shareUrl('http://127.0.0.1:8851/?biome=red&mapX=4#x', id), 'http://127.0.0.1:8851/#/maps/' + id);
+  assert.equal(shareUrl('https://terra.nanolathe.gg/b/0123456789/?x=1', id), 'https://terra.nanolathe.gg/#/maps/' + id);
+  assert.equal(shareUrl('https://terra.nanolathe.gg/index.html?x=1', id), 'https://terra.nanolathe.gg/#/maps/' + id);
+  assert.equal(shareUrl('https://example.github.io/terraform/b/0123456789/index.html', id), 'https://example.github.io/terraform/#/maps/' + id);
 });
 
-test('the address: reading the map id and dropping it afterwards', () => {
-  assert.equal(mapIdFromSearch('?biome=red&map=abcdefghijklmnop'), 'abcdefghijklmnop');
-  assert.equal(mapIdFromSearch('?biome=red'), null);
-  assert.equal(withoutMap('http://h/?map=abcdefghijklmnop&biome=red'), 'http://h/?biome=red');
-  assert.equal(withoutMap('http://h/?map=abcdefghijklmnop'), 'http://h/');
+test('the editor reads map fragments and lets the link loader validate the ID', () => {
+  assert.equal(mapIdFromHash('#/maps/abcdefghijklmnop'), 'abcdefghijklmnop');
+  assert.equal(mapIdFromHash('#/maps/'), '');
+  assert.equal(mapIdFromHash('#/maps/too/many'), 'too/many');
+  assert.equal(mapIdFromHash('#notes'), null);
+  assert.equal(mapIdFromHash(''), null);
 });
 
 test('services: a missing or unavailable maps service has a reason', () => {

@@ -937,13 +937,14 @@ button, and the weathering progress text.
 | Slider: drag, click, double-click or Enter to type, arrows, Page Up/Down, Home/End, Shift for fine | Every slider row | unchanged |
 | Curve canvases: drag points, double-click to add, double-click or Shift-click to remove, drag the diamond to lean | Cross-section and Length vs. height | unchanged |
 
-## Address parameters
+## Addresses
+
+Share links use `/#/maps/<id>`. Share Link updates the current tab to the latest shared snapshot.
 
 | Parameter | What it does |
 | --- | --- |
 | `?biome= &world= &variant=` | Which world, saved world and look to open |
 | `?mapX= &mapY= &sea=` | Map size in units and the sea level |
-| `?map=<id>` | Open a shared map (save link) |
 | `?scratch=<name>` | A throwaway session that does not touch the saved working map |
 | `?<knob>=<value>` | Any World setting, written to the address as it changes |
 | `?gpuMB= &gpuPages=` | Renderer memory switches (diagnostic) |

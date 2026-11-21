@@ -3,8 +3,8 @@
 //   open, so another tab can tell the map is in use.
 // - A new tab reopens the map edited last unless another tab has it; then the editor shows its picker (Maps).
 // - Opening a file or a share link, New map, and a world switch (a copy in the new world) add an entry: nothing is replaced.
-// - The editor writes nothing to the address. Its own reloads (another world, a new map, an opened file) leave what the next page needs with
-//   the tab (`next`), read once as if it were in the address.
+// - The editor's own reloads (another world, a new map, an opened file) leave what the next page needs with the tab (`next`), read once as
+//   if it were in the address. The share fragment belongs to the current map and is cleared when switching maps.
 // Bodies live in IndexedDB: a map recipe with its world is about 150 KB, and localStorage holds a few MB per site.
 import {copyPictures} from './sculpt-thumbnails.js';
 const DB = 'terraform-maps', BODIES = 'maps', META = 'meta';
