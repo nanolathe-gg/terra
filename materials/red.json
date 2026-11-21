@@ -910,7 +910,7 @@
   "rockCurvature": 0.28,
   "wetBand": 13,
   "shallowDepth": 2,
-  "deepDepth": 18,
+  "deepDepth": 42,
   "grassDetail": 1.0,
   "rockDetail": 1.0,
   "waterDetail": 1.0,
@@ -1082,7 +1082,8 @@
         "bedCrackSize": 42,
         "wetBand": 2,
         "crispShore": 0.5,
-        "lightCap": 1
+        "lightCap": 1,
+        "deepDepth": 18
       },
       "engineDefaults": {
         "erosion": 1,
