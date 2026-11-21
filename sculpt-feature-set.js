@@ -117,6 +117,7 @@ const EXTRA_NUMBERS = {forks:[2,5],ash:[0,1],pieces:[1,8],lump:[0,1],cap:[0,1],s
 function cleanParams(value, config, kind, overrides = false) {
   const examples = [kindData(kind, config), ...featureCatalog(config, kind).map(p => p.data)].filter(Boolean);
   const allowed = new Set(['species','canopyStyle','cells','trunkColor','accentColor',...Object.keys(FORMS[kind] || {}), ...Object.keys(EXTRA_NUMBERS)]);
+  if (kind === 'vent') { allowed.add('holeAspect'); allowed.add('rimLayers'); }
   for (const d of examples) for (const t of d.types || [{params:d.params}]) for (const k of Object.keys(t.params || {})) allowed.add(k);
   const out = {};
   for (const [k, v] of Object.entries(value || {})) {
@@ -126,7 +127,7 @@ function cleanParams(value, config, kind, overrides = false) {
     if (k === 'species') { if (SPECIES.includes(v)) out[k] = v; continue; }
     if (k === 'cells') { const c = cellsOf(v); if(c) out[k] = c.join('x'); continue; }
     if (k in (FORMS[kind] || {}) && (typeof v !== 'number' || !Number.isFinite(v))) continue;
-    const safety = {...VARIATION, ...PATTERN, canopyLift:[0,0.65],reachVariation:[0,0.6],thickVariation:[0,0.6],height:[1,256],width:kind==='tree'?[0.05,2]:[0.05,100],size:[0.05,3],reach:kind==='tree'?[1,256]:[0.05,4],thick:[0.1,8],shadowLen:[0,4],pieces:[1,8],arms:[1,16],forks:[2,5]};
+    const safety = {...VARIATION, ...PATTERN, canopyLift:[0,0.65],reachVariation:[0,0.6],thickVariation:[0,0.6],height:[1,256],width:kind==='tree'?[0.05,2]:[0.05,100],size:[0.05,3],reach:kind==='tree'?[1,256]:[0.05,4],thick:[0.1,8],shadowLen:[0,4],pieces:[1,8],arms:[1,16],forks:[2,5],holeAspect:[1,3.5],rimLayers:[0,1]};
     const limits = overrides ? FORMS[kind]?.[k] || EXTRA_NUMBERS[k] || safety[k] : safety[k];
     if (typeof v === 'number' && Number.isFinite(v)) out[k] = limits ? number(v, limits[0], limits[1], limits[2] ?? limits[0]) : number(v, -10000, 10000, 0);
     else if (typeof v === 'boolean' || typeof v === 'string' && v.length <= 64) out[k] = v;
