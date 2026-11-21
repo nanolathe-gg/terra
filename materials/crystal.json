@@ -1110,11 +1110,13 @@
         "crystalFace": 1.1,
         "crystalInk": 1,
         "crystalTone": 1.16,
-        "crystalSeam": 1,
+        "crystalSeam": 0.65,
         "plateMaterial": 1,
         "plateWaterPx": 90,
         "plateLandPx": 48,
-        "plateSize": 28,
+        "plateSize": 32,
+        "plateHeight": 8,
+        "plateSteps": 3,
         "shineCrystal": 0.55,
         "shineCrystalSharp": 70,
         "shineCrystalRough": 1,
@@ -1138,8 +1140,8 @@
         "crystalCraterLight": 1,
         "crystalShoreSeam": 0.56,
         "crystalSeamEnd": 0.68,
-        "plateVary": 0.5,
-        "bedFlat": 0.8
+        "plateVary": 0.55,
+        "bedFlat": 0.5
       },
       "engineDefaults": {
         "erosion": 1,
@@ -1173,7 +1175,7 @@
 
   "shapes": {
    "crust": {"from": "crystal", "diameter": 620, "elevation": 45, "facetForm": 1, "facetSurface": 1, "iceFacets": 100, "iceFacetSize": 40, "crystalStep": 2, "crystalTiers": 0, "crystalFacet": 50, "wander": 60, "roughness": 40, "heightVary": 20},
-   "islet": {"from": "plateau", "diameter": 480, "elevation": 0, "gullies": 0, "talus": 0, "wander": 40, "shorePlates": 1, "plateMaterial": 1, "plateWaterPx": 120, "plateLandPx": 16, "plateSize": 28, "plateVary": 40},
+   "islet": {"from": "plateau", "diameter": 480, "elevation": 0, "gullies": 0, "talus": 0, "wander": 40, "shorePlates": 1, "plateMaterial": 1, "plateWaterPx": 120, "plateLandPx": 28, "plateSize": 32, "plateVary": 55, "plateHeight": 75, "plateSteps": 3, "plateGap": 10},
    "shards": {"from": "crystal", "diameter": 360, "elevation": 4, "facetForm": 2, "facetSurface": 1, "iceFacets": 35, "iceFacetSize": 44, "crystalTop": 90, "crystalSides": 5, "crystalVariation": 80, "crystalTiers": 100, "wander": 0},
    "knob": {"from": "crystal", "diameter": 180, "elevation": 8, "facetForm": 1, "facetSurface": 1, "iceFacets": 100, "iceFacetSize": 28, "crystalStep": 2, "crystalTiers": 0, "crystalFacet": 50, "wander": 30},
    "outcrop": {"from": "crystal", "diameter": 900, "elevation": 115, "facetForm": 1, "facetSurface": 1, "iceFacets": 100, "iceFacetSize": 44, "crystalStep": 2, "crystalTiers": 0, "crystalFacet": 15, "wander": 70, "roughness": 60, "heightVary": 120, "curve": {"form": "lfCrystal", "knots": [[0, 0], [0.13, 0.25], [0.22, 0.55], [0.3, 0.8], [0.39, 1], [0.57, 0.95], [0.74, 0.8], [0.91, 0.55], [1, 0.35]], "back": [[0, 0], [0.13, 0.25], [0.22, 0.55], [0.3, 0.8], [0.39, 1], [0.57, 0.95], [0.74, 0.8], [0.91, 0.55], [1, 0.35]]}, "varySize": 220},
@@ -1187,7 +1189,7 @@
    "crater": {"curve": {"form": "lfCrater", "knots": [[0, 0], [0.25, -0.02], [0.4, -0.06], [0.5, 0.04], [0.6, 0.3], [0.72, 0.58], [0.83, 0.82], [0.93, 0.97], [1, 1]]}, "iceFacets": 100, "iceFacetSize": 16, "crystalStep": 1, "facetSurface": 1},
    "crystal": {"diameter": 420, "elevation": 130, "wander": 60, "varySize": 170, "facetForm": 1, "iceFacets": 100, "iceFacetSize": 40, "crystalStep": 3, "crystalTiers": 0, "crystalFacet": 50, "crystalSizeVar": 70, "curve": {"form": "lfCrystal", "knots": [[0, 0], [0.1, 0.136], [0.2, 0.293], [0.3, 0.446], [0.4, 0.585], [0.5, 0.708], [0.6, 0.811], [0.7, 0.893], [0.8, 0.952], [0.9, 0.988], [1, 1]], "back": [[0, 0], [0.1, 0.136], [0.2, 0.293], [0.3, 0.446], [0.4, 0.585], [0.5, 0.708], [0.6, 0.811], [0.7, 0.893], [0.8, 0.952], [0.9, 0.988], [1, 1]]}, "facetSurface": 1, "roughness": 60, "heightVary": 40},
    "deep": {"wander": 40, "widthVary": 25, "elevation": -65},
-   "shallow": {"wander": 30, "diameter": 200, "elevation": -9, "shorePlates": 1, "plateMaterial": 1, "plateWaterPx": 110, "plateLandPx": 20, "plateSize": 28, "plateVary": 40},
+   "shallow": {"wander": 30, "diameter": 200, "elevation": -9, "shorePlates": 1, "plateMaterial": 1, "plateWaterPx": 116, "plateLandPx": 28, "plateSize": 30, "plateVary": 55, "plateHeight": 80, "plateSteps": 3.5, "plateGap": 10},
    "river": {},
    "braided": {},
    "landform": {},
