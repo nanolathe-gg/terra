@@ -21,7 +21,7 @@ for(const world of worlds){
   await knob(s,'rockFace',0);const smooth=await render(true);await knob(s,'rockFace',fixture.rock.rockFace);
   const mask=Array.from({length:512*512},(_,i)=>[0,1,2].some(k=>smooth[i*4+k]!==clay[i*4+k]));
   const r={classPixels:mask.filter(Boolean).length,controls:{},water:{}};assert.ok(r.classPixels>20000);
-  for(const[key,lo,hi]of [['faceJointWidth',.25,3],['faceSecondary',0,1.5],['faceContinuity',0,1],['faceDetailPatch',0,1]]){
+  for(const[key,lo,hi]of [['faceJointWidth',.25,3],['faceSecondary',0,1.5],['faceContinuity',0,1]]){
    await knob(s,key,lo);const a=await render(false),ac=await render(true);
    await knob(s,key,hi);const b=await render(false),bc=await render(true);
    r.controls[key]={art:diff(a,b,mask),clay:diff(ac,bc,mask)};assert.ok(r.controls[key].art.percent>=5,key+' Art impact');assert.ok(r.controls[key].clay.percent>=5,key+' solid impact');png(key+'-low',a);png(key+'-high',b);

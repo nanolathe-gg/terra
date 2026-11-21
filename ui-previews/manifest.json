@@ -1008,6 +1008,90 @@
     "label": "1"
    }
   ],
+  "knob-fineRelief": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-fineLevel": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   },
+   {
+    "value": 2,
+    "label": "2"
+   }
+  ],
+  "knob-fineLevelGrain": [
+   {
+    "value": -1,
+    "label": "-1"
+   },
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-fineSize": [
+   {
+    "value": 2,
+    "label": "2 px"
+   },
+   {
+    "value": 17,
+    "label": "17 px"
+   },
+   {
+    "value": 32,
+    "label": "32 px"
+   }
+  ],
+  "knob-fineGrain": [
+   {
+    "value": -1,
+    "label": "-1"
+   },
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
+  "knob-finePits": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
   "knob-flatShadow": [
    {
     "value": 0,
@@ -1146,6 +1230,20 @@
    {
     "value": 0.5,
     "label": "0.5"
+   }
+  ],
+  "knob-fillFollow": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
    }
   ],
   "knob-rockCrown": [
@@ -2068,90 +2166,6 @@
     "label": "1"
    }
   ],
-  "knob-faceCrease": [
-   {
-    "value": 0,
-    "label": "0"
-   },
-   {
-    "value": 3,
-    "label": "3"
-   },
-   {
-    "value": 6,
-    "label": "6"
-   }
-  ],
-  "knob-faceCreaseSize": [
-   {
-    "value": 3,
-    "label": "3 px"
-   },
-   {
-    "value": 14,
-    "label": "14 px"
-   },
-   {
-    "value": 24,
-    "label": "24 px"
-   }
-  ],
-  "knob-faceScratch": [
-   {
-    "value": 0,
-    "label": "0"
-   },
-   {
-    "value": 3,
-    "label": "3"
-   },
-   {
-    "value": 6,
-    "label": "6"
-   }
-  ],
-  "knob-faceScratchSize": [
-   {
-    "value": 3,
-    "label": "3 px"
-   },
-   {
-    "value": 11.5,
-    "label": "11.5 px"
-   },
-   {
-    "value": 20,
-    "label": "20 px"
-   }
-  ],
-  "knob-faceScratchLength": [
-   {
-    "value": 4,
-    "label": "4 px"
-   },
-   {
-    "value": 82,
-    "label": "82 px"
-   },
-   {
-    "value": 160,
-    "label": "160 px"
-   }
-  ],
-  "knob-faceScratchAngle": [
-   {
-    "value": -90,
-    "label": "-90°"
-   },
-   {
-    "value": 0,
-    "label": "0°"
-   },
-   {
-    "value": 90,
-    "label": "90°"
-   }
-  ],
   "knob-faceClast": [
    {
     "value": 0,
@@ -2178,20 +2192,6 @@
    {
     "value": 32,
     "label": "32 px"
-   }
-  ],
-  "knob-faceDetailPatch": [
-   {
-    "value": 0,
-    "label": "0"
-   },
-   {
-    "value": 0.5,
-    "label": "0.5"
-   },
-   {
-    "value": 1,
-    "label": "1"
    }
   ],
   "knob-runoff": [

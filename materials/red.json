@@ -980,6 +980,9 @@
     "surface": [{"name": "Highland ground", "builtin": "highland"}, {"name": "Slope cover", "builtin": "slopeCover"}, {"name": "Bare soil", "builtin": "soil", "material": "@soil"}, {"name": "Rock", "builtin": "rock"}, {"id": "drybank", "name": "Dry bank by the water", "material": "red-plain", "stage": "land", "where": [{"fact": "toWater", "to": 20, "fade": 10}, {"fact": "aboveSea", "from": 0, "fade": 1}], "amount": 0.8, "edge": {"width": 0.3, "noise": 0.6, "noiseSize": 6}}, {"name": "Beach", "builtin": "beach"}, {"name": "Crown rock", "builtin": "crown"}, {"name": "Base band", "builtin": "baseBand", "material": "@band"}, {"name": "Moss on regrown debris", "builtin": "regrownMoss", "material": "@moss"}, {"name": "Debris fines", "builtin": "fines"}, {"name": "Painted rock", "builtin": "paintedRock"}, {"name": "Painted snow", "builtin": "paintedSnow", "material": "@snow"}, {"name": "Painted moss", "builtin": "paintedMoss", "material": "@moss"}, {"name": "Sand dust", "builtin": "sandDust", "material": "@sand"}, {"name": "Sand", "builtin": "sand", "material": "@sand"}, {"name": "Chips", "builtin": "chips"}, {"name": "Snow on ice crests", "builtin": "iceCrest", "material": "@snow"}, {"name": "Snow on ice tops", "builtin": "iceCap", "material": "@snow"}],
     "materials": {"ground": "red-plain", "water": "red-water", "rock": "red-bank", "slope": "red-slope", "debris": "red-debris", "extra": ["red-rough", "red-crumple"], "soil": "red-soil", "snow": "red-snow", "moss": "red-moss", "sand": "red-sand", "band": "red-band", "crystal": "crystals"},
     "knobDefaults": {
+        "fineRelief": 2,
+        "fineSize": 32,
+        "fineGrain": 0,
         "shoreRock": 96,
         "shoreShelf": 96,
         "undulationScale": 80,
@@ -1006,9 +1009,6 @@
         "faceSecondary": 0.0,
         "faceLedge": 0.5,
         "faceSpall": 0.0,
-        "faceCrease": 0.0,
-        "faceScratch": 0.8,
-        "faceScratchLength": 30.0,
         "crackBlocks": 0.0,
         "crackMajor": 0.0,
         "faceLamina": 0.5,
@@ -1027,7 +1027,6 @@
         "faceRegular": 0.3,
         "faceJointWidth": 1.5,
         "faceContinuity": 1,
-        "faceDetailPatch": 0.6,
         "faceRind": 0.65,
         "faceRindDepth": 9,
         "faceRindRough": 0.7,
@@ -1058,8 +1057,6 @@
         "faceBlockSize": 18,
         "faceLean": 0,
         "faceWear": 0.8,
-        "faceCreaseSize": 6,
-        "faceScratchSize": 6,
         "faceGrass": 0.25,
         "faceLayers": 0,
         "faceMass": 0.5,
@@ -1070,7 +1067,6 @@
         "faceBlockHeight": 4,
         "faceRound": 0.85,
         "faceExtrude": 0.15,
-        "faceScratchAngle": 0,
         "bedDip": 0,
         "bedDipDir": 90,
         "shineRock": 0.4,
@@ -1082,7 +1078,7 @@
         "bedCrackSize": 42,
         "wetBand": 2,
         "crispShore": 0.5,
-        "lightCap": 1,
+        "lightCap": 1.2,
         "deepDepth": 18
       },
       "engineDefaults": {
@@ -1113,21 +1109,22 @@
 
      "knobs": {
 
+      "fineRelief": 0.36,
+
+      "fineSize": 6,
+
+      "fineGrain": -1.0,
+
       "faceRindTone": -0.3,
 
       "faceRind": 1,
 
       "rockFace": 2,
 
-      "faceTone": 0.05,
+      "faceTone": 0.05
 
-      "faceDetailPatch": 0,
 
-      "faceScratch": 3,
 
-      "faceScratchSize": 3,
-
-      "faceScratchLength": 60
 
      }
 

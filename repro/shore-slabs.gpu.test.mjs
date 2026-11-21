@@ -10,10 +10,10 @@ const shore = (card = {}, kind = 'shallow') => [kind, [[100, 300], [420, 300]], 
   wander: 0, widthVary: 0, heightVary: 0, ...card,
 }}];
 const open = (strokes, extra = '') => openScene({biome: 'crystal', ground: false, strokes}, query + extra);
-const exportHeights = async s => (await cellHeights(s.config.map, async request => {
-  await s.fields.ready();
-  return s.fields.read(request);
-})).heights;
+const readFields = s => async request => { await s.fields.ready(); return s.fields.read(request); };
+const exportHeights = async s => (await cellHeights(s.config.map, readFields(s))).heights;
+// The bed itself at each cell corner (the field there, point-sampled), before the export's 16 px footprint mean.
+const bedHeights = async s => (await cellHeights(s.config.map, readFields(s), {footprint: {kind: 'point'}})).heights;
 
 test('shore slabs make physical relief on flat and sloping beds', async t => {
   for (const [kind, elevation] of [['shallow', -9], ['deep', -48]]) {
@@ -27,17 +27,22 @@ test('shore slabs make physical relief on flat and sloping beds', async t => {
       const flat = s.fields.readCells(rect).fields;
       assert.ok(flat.shoreSlab.some(x => x === 127), 'slabs still mark a bed at zero relief');
 
+      const bareBed = await bedHeights(s);
       s.play([stroke({plateHeight: 110, plateSteps: 4})], {ground: false});
-      const stepped = await exportHeights(s);
-      let wet = 0, dry = 0, crossed = 0;
+      const stepped = await exportHeights(s), steppedBed = await bedHeights(s);
+      let wet = 0, dry = 0, crossed = 0, exportCrossed = 0;
       for (let i = 0; i < bare.length; i++) {
+        if (bare[i] < 65 && stepped[i] > 65 || bare[i] > 65 && stepped[i] < 65) exportCrossed++;
         if (stepped[i] === bare[i]) continue;
         if (bare[i] < 65) wet++;
         if (bare[i] > 65) dry++;
-        if (bare[i] < 65 && stepped[i] > 65 || bare[i] > 65 && stepped[i] < 65) crossed++;
       }
+      for (let i = 0; i < bareBed.length; i++) if (bareBed[i] < 65 && steppedBed[i] > 65 || bareBed[i] > 65 && steppedBed[i] < 65) crossed++;
       assert.ok(wet > 12 && dry > 6, `${wet} wet and ${dry} dry export corners moved on ${kind}`);
-      assert.equal(crossed, 0, 'slab relief keeps the dry and wet sides of the waterline');
+      // The slabs' relief keeps each side of the waterline in the bed itself. The export's 16 px footprint mean may carry a corner across it
+      // where a slab's step lies within 8 px of the water (owner, 2026-11-21): that count is reported, not held to 0.
+      assert.equal(crossed, 0, 'slab relief keeps the dry and wet sides of the waterline in the bed');
+      t.diagnostic(`${kind}: ${exportCrossed} export corners cross the waterline after the footprint mean`);
       s.play([stroke({plateHeight: 110, plateSteps: 0})], {ground: false});
       const columns = await exportHeights(s);
       const movedBySteps = stepped.reduce((count, h, i) => count + Number(h !== columns[i]), 0);

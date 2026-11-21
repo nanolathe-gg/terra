@@ -10,10 +10,11 @@ export const KNOBS = [
   // Low ground: the ground from the sea up to Reach above it, and the shallows, keep Grain kept of their grain (its color is a surface layer).
   ['Low ground', [['lowReach','Reach (height above the sea)',.5,40,.5,6],['lowGrain','Grain kept (low ground and water)',0,1,.05,1]]],
   ['Ground detail', [['reliefScale','Scale (px)',8,64,1,28],['reliefAmount','Relief strength',0,1.2,.05,.5],['reliefLumps','Lumps',0,1,.05,.7],
-    ['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Ground bumps',0,3,.05,1.2],['lumpRelief','Painted ground bumps',0,8,.1,4],['worms','Wormy relief on slopes',0,1,.05,0]]],
+    ['reliefWarp','Warp (px)',0,24,1,10],['reliefPatchy','Patchiness',0,1,.05,1],['gentleRelief','Gentle-slope relief',0,1,.05,.6],['plainRelief','Ground bumps',0,3,.05,1.2],['lumpRelief','Painted ground bumps',0,8,.1,4],['worms','Wormy relief on slopes',0,1,.05,0],
+    ['fineRelief','Fine relief on slopes',0,2,.05,0],['fineLevel','Fine relief on level ground',0,2,.05,0],['fineLevelGrain','Fine grain on level ground (-1 down the screen, 1 across it)',-1,1,.05,0],['fineSize','Fine relief size (px)',2,32,1,8],['fineGrain','Fine grain (-1 down the fall line, 1 along the contours)',-1,1,.05,0],['finePits','Fine pits on slopes',0,1,.05,0]]],
   ['Lighting', [['flatShadow','Cast shadow on level ground',0,1,.05,0],['flatOcclusion','Occlusion on level ground',0,1,.05,.4],['lightCap','Highlight cap',1,1.6,.01,1.13],['shadeDepth','Directional shading kept',0,1,.05,1],['sunTilt','Light from the south',-1,1,.05,1],['sunHeight','Sun height (degrees above the horizon)',20,75,1,45.2],['ambient','Ambient light',0,.8,.02,.42],['creaseShade','Shade in creases (gully and valley floors, any facing)',0,1,.05,0]]],
   ['Vegetation & flowers', [['lushness','Lushness',-1,1,.05,0],['soilRim','Bare soil where cover thins',0,1,.05,0],['erosionRain','Rain (wets channels and hollows, and wears the ground)',0,2,.05,1],['wetSwath','Moisture',0,1,.05,0],['wetGround','Wet ground: darker and glossy where water lies',0,1,.05,0],['plantRelief','Vegetation relief',0,2,.05,1]]],
-  ['Material coverage', [['hillLight','Slope-cover brightness',.6,1.6,.01,1],['faceFill','Fill light on shaded faces',0,.5,.02,0],['rockCrown','Bare rock to the crown',0,1,.05,0],['sandCrown','Painted sand to the crown (sand bars)',0,1,.05,0],['slopeTexture','Sampled slope texture',0,1,.05,.3],['slopeMarks','Dark slope marks',0,1,.05,0],['wrinkles','Joined slope wrinkles',0,1,.05,0]]],
+  ['Material coverage', [['hillLight','Slope-cover brightness',.6,1.6,.01,1],['faceFill','Fill light on shaded faces',0,.5,.02,0],['fillFollow','Fill light from the side away from the sun',0,1,.05,0],['rockCrown','Bare rock to the crown',0,1,.05,0],['sandCrown','Painted sand to the crown (sand bars)',0,1,.05,0],['slopeTexture','Sampled slope texture',0,1,.05,.3],['slopeMarks','Dark slope marks',0,1,.05,0],['wrinkles','Joined slope wrinkles',0,1,.05,0]]],
   ['Shine', [['shineStretch','Grain streak length (x its width)',1,8,.25,1],['shineWhite','Highlight whiteness (0 material hue, 1 white)',0,1,.05,.35]]],
   ['Shine: ground', [['shineGround','Gloss (highlight strength)',0,2,.05,0],['shineGroundSharp','Reflection sharpness (polish)',2,200,2,24],['shineGroundRough','Micro roughness (grain slope)',0,2,.05,0],['shineGroundScale','Ground, slope cover and sand grain width (px)',1,24,.5,6]]],
   ['Shine: slope cover', [['shineSlope','Gloss (highlight strength)',0,2,.05,0],['shineSlopeSharp','Reflection sharpness (polish)',2,200,2,24],['shineSlopeRough','Micro roughness (grain slope)',0,2,.05,0]]],
@@ -56,11 +57,7 @@ export const KNOBS = [
     ['faceLaminaSize','Fine layer spacing (height units)',6,16,.5,6],['faceLayers','Soil-covered terraces',0,2,.05,0],
     ['faceGrass','Grass on ledges and flat tops',0,1,.05,.8]]],
   ['Rock weathering & detail', [['faceWear','Weathering: rounded edges, open joints',0,1,.05,.35],
-    ['faceCrease','Pitting',0,6,.1,2.5],['faceCreaseSize','Pit size (px)',3,24,1,6],
-    ['faceScratch','Scratches and water grooves',0,6,.1,2.5],['faceScratchSize','Groove spacing (px)',3,20,.5,7],
-    ['faceScratchLength','Groove length (px)',4,160,2,50],['faceScratchAngle','Groove tilt from vertical (deg)',-90,90,5,0],
-    ['faceClast','Embedded fragment relief',0,4,.1,0],['faceClastSize','Embedded fragment size (px)',3,32,1,12],
-    ['faceDetailPatch','Fine detail clustering',0,1,.05,0]]],
+    ['faceClast','Embedded fragment relief',0,4,.1,0],['faceClastSize','Embedded fragment size (px)',3,32,1,12]]],
   ['Rock runoff', [['runoff','Runoff exposure',0,2,.05,0],['runoffScale','Catchment variation size (px)',8,80,2,24],
     ['runoffConcentration','Channel concentration',0,1,.05,.65],['runoffCut','Channel incision',0,8,.1,2],['runoffStain','Mineral staining',0,1,.05,.5]]],
   ['Rock debris', [['debrisAmount','Cliff debris accumulation',0,2,.05,0],['debrisReach','Rockfall reach (px)',8,96,2,56],['debrisDepth','Accumulated bed thickness',0,12,.25,4]]],
@@ -122,7 +119,7 @@ export function applyKnob({key,value,settings,renderer,nodes,seed,sync=true}) {
     return result({});
   }
   if (SHAPE_KNOBS.has(key)) return result({evaluate:0,weather:true});
-  if (key==='sand' || key==='erosionRain') return result({weather:true});
+  if (key==='sand' || key==='erosionRain' || key==='fineRelief' || key==='fineSize' || key==='fineGrain') return result({weather:true});   // the fine relief's field octaves are eroded (sculpt-scene.js timeKnobs)
   return result({});
 }
 

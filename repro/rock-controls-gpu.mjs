@@ -25,8 +25,8 @@ try{
   }
  }
  await set(ROCK_PRESETS.sandstone.knobs);await column(s,{...s.worldColumn.column,sections:ROCK_PRESETS.sandstone.sections,variants:{}});
- await set({faceScratch:4,faceBlock:4,faceLamina:1.5});
- const tests={faceJointTilt:[-40,40],faceScaleVary:[0,1],faceFold:[0,40],faceSpall:[0,3],faceClast:[0,3],faceClastSize:[4,26],faceMineral:[0,1],faceStretch:[.5,3],faceBlockHeight:[.4,4],faceRound:[0,1],faceJoint:[0,2],faceExtrude:[-.7,.7],faceLamina:[0,2],faceLaminaSize:[6,14],faceScratchLength:[6,130],faceScratchAngle:[-45,45],faceWet:[0,1],shineRock:[0,1],shineRockSharp:[4,64],shineRockRough:[0,1]};
+ await set({fineRelief:.5,faceBlock:4,faceLamina:1.5});
+ const tests={faceJointTilt:[-40,40],faceScaleVary:[0,1],faceFold:[0,40],faceSpall:[0,3],faceClast:[0,3],faceClastSize:[4,26],faceMineral:[0,1],faceStretch:[.5,3],faceBlockHeight:[.4,4],faceRound:[0,1],faceJoint:[0,2],faceExtrude:[-.7,.7],faceLamina:[0,2],faceLaminaSize:[6,14],faceWet:[0,1],shineRock:[0,1],shineRockSharp:[4,64],shineRockRough:[0,1]};
  await knob(s,'faceRock',0);const withoutRock=await renderWindow(s,rect);await knob(s,'faceRock',1);const withRock=await renderWindow(s,rect);
  const rockMask=Array.from({length:rect.width*rect.height},(_,i)=>[0,1,2].some(c=>withoutRock[i*4+c]!==withRock[i*4+c]));
  const rockPixels=rockMask.filter(Boolean).length;

@@ -34,6 +34,8 @@ struct FU {
     shownHeights: u32,  // seedMain: 1 when F's heights are already the ones the art shows (the Time cells, timeDownMain); else F holds the
                         // shape fields' planes and the undulation the art hides (plane 6) comes off
     invalidRect: vec4i, // authored edits since this refinement result; empty when current
+    fine: vec4f,        // seedMain: the world rock's Fine relief on slopes, Fine relief size (px), Fine grain, and the pool (px); x 0: none
+    fineBase: f32,      // seedMain: the world's plain (the screen point's height offset, engine-common.wgsl fineSite)
 }
 
 @group(0) @binding(0) var<uniform> fu: FU;
@@ -76,13 +78,75 @@ fn shownGradientAt(x: i32, y: i32) -> f32 {
     return length(vec2f((shownHeight(rx, y) - shownHeight(lx, y)) / (f32(rx - lx) * fu.spacing), (shownHeight(x, by) - shownHeight(x, ty)) / (f32(by - ty) * fu.spacing)));
 }
 
+// ---- Fine relief in the height Time erodes (engine-common.wgsl fineSite, fineOctaves) ----
+// The octaves of FINE_FIELD_FROM px and up of the world rock's Fine relief on slopes, at its slope strength (never level ground's: flat
+// ground stays flat), on Time's cells (4 px: the 8 px octave cannot exist here). The same noise as the draw's (cellHash, the eight pool
+// directions, the screen point), with this pass's own slope: the draw leaves these octaves out where its height is this pass's.
+const FINE_FIELD_FROM = 12.0;
+const FINE_FIELD_FULL = 20.0;
+const FINE_STRETCH = 3.0;
+const FINE_FRAMES = array<vec2f, 8>(vec2f(1.0, 0.0), vec2f(2.0, 1.0), vec2f(1.0, 1.0), vec2f(1.0, 2.0), vec2f(0.0, 1.0), vec2f(-1.0, 2.0), vec2f(-1.0, 1.0), vec2f(-2.0, 1.0));
+const FINE_ANGLES = array<f32, 9>(0.0, 0.4636476, 0.7853982, 1.1071487, 1.5707964, 2.0344439, 2.3561945, 2.6779451, 3.1415927);
+fn cellHash(c: vec2f) -> vec2f {
+    let q = vec2f(dot(c, vec2f(127.1, 311.7)), dot(c, vec2f(269.5, 183.3)));
+    return fract(sin(q) * 43758.5453);
+}
+fn fineWrapNoise(q: vec2f, n: vec2f) -> f32 {
+    let c = floor(q); let f = fract(q); let fade = f * f * (3.0 - 2.0 * f); let w = vec2f(1.0, 0.0);
+    let a = cellHash(c - n * floor(c / n)).x;
+    let b = cellHash((c + w) - n * floor((c + w) / n)).x;
+    let d = cellHash((c + w.yx) - n * floor((c + w.yx) / n)).x;
+    let e = cellHash((c + 1.0) - n * floor((c + 1.0) / n)).x;
+    return mix(mix(a, b, fade.x), mix(d, e, fade.x), fade.y) * 2.0 - 1.0;
+}
+fn fineFrame(q: vec2f, k: u32, cell: f32, salt: f32) -> f32 {
+    let d = FINE_FRAMES[k]; let r = length(d); let pool = fu.fine.w; let grain = fu.fine.z;
+    let cu = cell * (1.0 + FINE_STRETCH * max(grain, 0.0));
+    let cw = cell * (1.0 + FINE_STRETCH * max(-grain, 0.0));
+    let n = max(vec2f(1.0), round(vec2f(pool / (r * cu), pool / (r * cw))));
+    let pq = q - pool * floor(q / pool);
+    let t = vec2f(d.x * pq.x + d.y * pq.y, -d.y * pq.x + d.x * pq.y) * n / pool;
+    return fineWrapNoise(t + vec2f(salt, 2.0 * salt), n);
+}
+fn feedFine(x: i32, y: i32, h: f32) -> f32 {
+    if (fu.fine.x <= 0.0 || fu.fine.y < FINE_FIELD_FROM || h <= fu.sea + 0.5) { return 0.0; }
+    let n = i32(fu.grid); let i = u32(y) * fu.grid + u32(x);
+    let lx = max(0, x - 1); let rx = min(n - 1, x + 1); let ty = max(0, y - 1); let by = min(n - 1, y + 1);
+    let g = vec2f((shownHeight(rx, y) - shownHeight(lx, y)) / (f32(rx - lx) * fu.spacing), (shownHeight(x, by) - shownHeight(x, ty)) / (f32(by - ty) * fu.spacing));
+    let slope = length(g);
+    let strength = fu.fine.x * sm(0.03, 0.5, slope) * (1.0 - clamp(F[fu.cells + i], 0.0, 1.0));
+    if (strength <= 0.0) { return 0.0; }
+    let p = vec2f(f32(fu.ox + x), f32(fu.oy + y)) * fu.spacing;
+    let q = vec2f(p.x, p.y - 0.5 * (shownHeight(x, y) - fu.fineBase));
+    let contour = atan2(-g.y + 0.1, -g.x) + 1.5707964;
+    let acrossFall = atan2(-g.y + 0.5 * slope * slope + 0.1, -g.x) + 1.5707964;
+    var turn = acrossFall - contour;
+    turn = turn - 3.1415927 * round(turn / 3.1415927);
+    var a = contour + turn * (1.0 - sm(-0.3, 0.3, fu.fine.z));
+    a = a - 3.1415927 * floor(a / 3.1415927);
+    var k = 0u;
+    for (var j = 1u; j < 8u; j++) { if (a >= FINE_ANGLES[j]) { k = j; } }
+    let m = clamp((a - FINE_ANGLES[k]) / (FINE_ANGLES[k + 1u] - FINE_ANGLES[k]), 0.0, 1.0);
+    var total = 0.0;
+    var lambda = fu.fine.y;
+    for (var o = 0; o < 6; o++) {
+        let f = sm(FINE_FIELD_FROM, FINE_FIELD_FULL, lambda);
+        if (f <= 0.0) { break; }
+        let cell = 0.5 * lambda;
+        let na = fineFrame(q, k, cell, f32(o) * 7.31); let nb = fineFrame(q, (k + 1u) % 8u, cell, f32(o) * 7.31);
+        total += (na * (1.0 - m) + nb * m) / sqrt((1.0 - m) * (1.0 - m) + m * m) * 0.25 * cell * f;
+        lambda *= 0.5;
+    }
+    return total * strength;
+}
+
 @compute @workgroup_size(8, 8)
 fn seedMain(@builtin(global_invocation_id) id: vec3u) {
     let n = i32(fu.grid);
     let x = i32(id.x); let y = i32(id.y);
     if (x >= n || y >= n) { return; }
     let i = u32(y) * fu.grid + u32(x);
-    let h = F[i];
+    let h = F[i] + feedFine(x, y, F[i]);   // the authored height and the fine relief's field octaves (feedFine)
     // Every state buffer starts with the authored height: the tiles the steps never visit keep it.
     st0[i] = vec4f(h, 0.0, 0.0, 0.0); st1[i] = st0[i]; st2[i] = st0[i];
     var out = vec4f(h, h, 0.0, 0.0);

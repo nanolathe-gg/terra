@@ -1879,7 +1879,7 @@ export function feedPasses(device) {
 }
 // The feed passes' uniform (struct FU of engine-feed.wgsl): 20 words.
 export function feedUniform(device, f) {
-  const buffer = device.createBuffer({label: 'feed uniform', size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}), dv = new DataView(new ArrayBuffer(80));
+  const buffer = device.createBuffer({label: 'feed uniform', size: 112, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}), dv = new DataView(new ArrayBuffer(112));
   const u = ['grid', 'cells', 'ox', 'oy', 'gw', 'gh', 'cw', 'ch', 'mode', 'rateMask'], fl = ['sea', 'spacing', 'envelope'];
   u.forEach((k, i) => { if (['ox', 'oy'].includes(k)) dv.setInt32(i * 4, f[k] ?? 0, true); else dv.setUint32(i * 4, (f[k] ?? 0) >>> 0, true); });
   fl.forEach((k, i) => dv.setFloat32((10 + i) * 4, f[k] ?? 0, true));
@@ -1887,6 +1887,7 @@ export function feedUniform(device, f) {
   dv.setUint32(14 * 4, f.maskStride ?? 7, true);
   dv.setUint32(15 * 4, f.shownHeights ?? 0, true);   // engine-feed.wgsl FU.shownHeights
   const r=f.invalidRect;[r?.x0??1,r?.y0??1,r?.x1??0,r?.y1??0].forEach((v,i)=>dv.setInt32(64+i*4,v,true));
+  (f.fine??[0,0,0,0]).forEach((v,i)=>dv.setFloat32(80+i*4,v,true));dv.setFloat32(96,f.fineBase??0,true);   // engine-feed.wgsl FU.fine, fineBase (seedMain)
   device.queue.writeBuffer(buffer, 0, dv.buffer);
   return buffer;
 }

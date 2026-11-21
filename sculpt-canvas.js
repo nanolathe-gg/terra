@@ -3,7 +3,7 @@ import {createPreviewFields,createPreviewLattice,planPreviewBlocks,previewQualit
 import {selectionGeometry,selectionTransform,hitSelection,drawSelection} from './sculpt-selection.js';
 import {landformElevation,landformGround} from './sculpt-shape-presets.js';
 import {TerrainRenderer} from './sculpt-renderer.js';
-import {drawMapBounds,sampleField,cellHeights,cellHeightTiles} from './sculpt-map.js';
+import {drawMapBounds,sampleField,cornerHeight,footprintApron,cellHeights,cellHeightTiles} from './sculpt-map.js';
 import {mountMapExport} from './sculpt-export.js';
 import {mountMapFeatures} from './sculpt-features.js';
 import {mountPassability} from './sculpt-passability-view.js';
@@ -1077,12 +1077,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   api.subscribeSubmit?.(change=>{if(api.gpuFeedActive?.()){pendingStrokeTime ||= performance.now();invalidate(change);}});
   api.subscribe?.(change=>{pendingStrokeTime ||= performance.now();markCoarse(change?.rect??null);if(!api.gpuFeedActive?.())invalidate(change);});
   function setBusy(on){busy=on;api.setBusy(on);$('weathered-view').disabled=on;find('[data-gpu]').disabled=on;find('[data-heap]').disabled=on;if(!on){if(resizePending)resize();else schedule();}}
-  // The export's own numbers for one feature: an anchor cell's four corner bytes, sampled as sampleHeights samples them, and a
-  // rectangle of export art. Either answers null when the scene changed while it was read.
+  // The export's own numbers for one feature: an anchor cell's four corner bytes, sampled as sampleHeights samples them (each corner's
+  // footprint, read with its apron), and a rectangle of export art. Either answers null when the scene changed while it was read.
   async function exportCorners(x,z){
-    const seq=serial,r=await((api.readHeights??api.read)({x:x*16,y:z*16,width:16,height:16}));checkHeap(r);
-    if(changedSince(seq,{x:x*16-16,y:z*16-16,width:48,height:48}))return null;
-    return [[0,0],[1,0],[0,1],[1,1]].map(([dx,dz])=>Math.round(clamp(sampleField(r,(x+dx)*16,(z+dz)*16),0,255)));
+    const apron=footprintApron(),seq=serial,r=await((api.readHeights??api.read)({x:x*16,y:z*16,width:16,height:16,apron}));checkHeap(r);
+    if(changedSince(seq,{x:x*16-16-apron,y:z*16-16-apron,width:48+2*apron,height:48+2*apron}))return null;
+    return [[0,0],[1,0],[0,1],[1,1]].map(([dx,dz])=>Math.round(clamp(cornerHeight(r,(x+dx)*16,(z+dz)*16),0,255)));
   }
   // held: whether the caller already holds the renderer. The deposit and vent fit (features.fitGround) runs inside a frame, which does; the
   // export's feature pack (stream.bakeArt) runs outside the frames and takes it for the draw.

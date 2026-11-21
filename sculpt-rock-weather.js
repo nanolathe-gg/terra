@@ -1,5 +1,6 @@
 // Local drainage and rockfall sources on a global 4px lattice. No CPU simulation
 // or readback: the bake, voxel solid and material all sample this same field.
+import {entryConstants} from './sculpt-gates.js';
 const STEP=4, HALO=104, ROUNDS=16;
 export function rockWeatherBytes(width,height){return (Math.ceil((width+2*HALO)/STEP)+2)*(Math.ceil((height+2*HALO)/STEP)+2)*96;}
 export class RockWeather {
@@ -12,7 +13,7 @@ export class RockWeather {
     const errors=(await module.getCompilationInfo()).messages.filter(m=>m.type==='error');
     if(errors.length)throw Error(errors.map(m=>`${m.lineNum}: ${m.message}`).join('\n'));
     self.layout=d.createBindGroupLayout({entries:[0,1].map(binding=>({binding,visibility:GPUShaderStage.COMPUTE,texture:{sampleType:'unfilterable-float'}})).concat([{binding:2,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:'write-only',format:'rgba32float'}},{binding:3,visibility:GPUShaderStage.COMPUTE,texture:{sampleType:'unfilterable-float'}},{binding:4,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:'write-only',format:'rgba32float'}},{binding:5,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:'write-only',format:'rgba32float'}}])});
-    self.module=module;self.pipelineLayout=d.createPipelineLayout({bindGroupLayouts:[renderer.commonLayout,self.layout]});self.built=new Map();
+    self.module=module;self.source=code;self.pipelineLayout=d.createPipelineLayout({bindGroupLayouts:[renderer.commonLayout,self.layout]});self.built=new Map();
     await Promise.all([self.build(0),self.build(15)]);
     self.empty=d.createTexture({label:'empty rock weather',size:[1,1],format:'rgba32float',usage:GPUTextureUsage.TEXTURE_BINDING});renderer.track(self.empty,'empty rock weather',16,'shared');renderer.worldResource(self.empty);
     return self;
@@ -20,7 +21,7 @@ export class RockWeather {
   constructor(renderer){this.renderer=renderer;this.owned=[];this.made=new WeakSet();this.final=null;this.source=null;this.rim=null;}
   // Both allowed rock masks are ready at startup: fixed slot 0, and the recipe table.
   build(mask){
-    if(!this.built.has(mask))this.built.set(mask,Promise.all(['rockTerrain','rockRain','rockFlow','rockDeposit'].map(async entryPoint=>[entryPoint,await this.renderer.device.createComputePipelineAsync({label:entryPoint,layout:this.pipelineLayout,compute:{module:this.module,entryPoint,constants:{rockMask:mask}}})]))
+    if(!this.built.has(mask))this.built.set(mask,Promise.all(['rockTerrain','rockRain','rockFlow','rockDeposit'].map(async entryPoint=>[entryPoint,await this.renderer.device.createComputePipelineAsync({label:entryPoint,layout:this.pipelineLayout,compute:{module:this.module,entryPoint,constants:entryConstants(this.source,entryPoint,{rockMask:mask})}})]))
       .then(list=>{this.pipelinesBy??={};this.pipelinesBy[mask]=Object.fromEntries(list);}));
     return this.built.get(mask);
   }

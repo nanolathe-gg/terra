@@ -237,7 +237,7 @@ async function timeHeights(s) {
 }
 // The weathered height over a region, as the page's export reads it (sculpt.js readHeights): a paged map's pages, or the fields' CPU copy with
 // the Time pass's height laid on (sculpt-scene.js weatheredHeights).
-async function readWeathered(s, request) {
+export async function readWeathered(s, request) {
   if (s.paged) return s.fields.readAsync(request, {heights: true});
   await s.fields.ready();
   const r = s.fields.read(request);

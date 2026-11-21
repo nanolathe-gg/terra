@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {extractGates,gateValues,gateKey} from '../sculpt-gates.js';
+import {extractGates,gateValues,gateKey,entryOverrides,entryConstants} from '../sculpt-gates.js';
 const fields=new Map([
  ['layered',{offset:0,kind:'i',count:1,width:1}],
  ['rillDepth',{offset:4,kind:'f',count:1,width:1}],
@@ -70,4 +70,40 @@ test('with the world\'s own rock alone every rock test of the draw and the bake 
   }
   assert.equal(table.stride%16,0);
  }
+});
+
+// Safari fails a pipeline given an override its entry point does not reach (sculpt-gates.js entryOverrides), and one given too few runs
+// with defaults unseen: each case below is a way the scan could count wrong.
+test('entry points get the overrides they reach and no others',()=>{
+ const source=`
+struct Uniforms { lavaCrust: f32, base: f32 }   // a field named as a function is not a call
+@group(0) @binding(0) var<uniform> u: Uniforms;
+override rockMask: u32 = 15u;
+override size: u32 = 8u;
+override gate_lava: bool;
+override gate_sand: bool;
+override doubled = gate_sand;
+var<private> rs: u32 = rockMask;
+/* fn hidden() { gate_lava; } */
+fn lavaCrust(p: f32) -> f32 { if (gate_lava) { return p; } return 0.0; }
+fn rock() -> u32 { return rs; }
+@compute @workgroup_size(size)
+fn sized() { _ = u.lavaCrust; }
+@compute @workgroup_size(1)
+fn viaGlobal() { _ = rock(); }
+@compute @workgroup_size(1)
+fn viaOverride() { if (doubled) { _ = u.base; } }
+@compute @workgroup_size(1)
+fn lava() { _ = lavaCrust(u.base); }
+@compute @workgroup_size(1)
+fn none() { _ = u.base; }
+`;
+ const reach=name=>[...entryOverrides(source,name)].sort();
+ assert.deepEqual(reach('sized'),['size']);
+ assert.deepEqual(reach('viaGlobal'),['rockMask']);
+ assert.deepEqual(reach('viaOverride'),['doubled','gate_sand']);
+ assert.deepEqual(reach('lava'),['gate_lava']);
+ assert.deepEqual(reach('none'),[]);
+ assert.deepEqual(entryConstants(source,'lava',{rockMask:0,gate_lava:true,gate_sand:false}),{gate_lava:true});
+ assert.throws(()=>entryOverrides(source,'missing'),/Missing WGSL entry point/);
 });

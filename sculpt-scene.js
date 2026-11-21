@@ -369,7 +369,8 @@ export function worldShapeKey(context,nodes){
 }
 // The Time pass's knobs (sculpt-erosion.js runGpu), from the renderer's settings: the engine's, the world's, then the address.
 export const timeKnobs=renderer => ({age:renderer.variantNumber('erosionAge',200),rain:renderer.variantNumber('erosionRain',1),talusAngle:renderer.variantNumber('talusAngle',40),
-  envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30)});
+  envelope:renderer.variantNumber('erosionEnvelope',2),sand:renderer.variantNumber('sand',0),wetReach:renderer.variantNumber('wetReach',3),talusFull:renderer.variantNumber('talusFull',2.5),wearFull:renderer.variantNumber('wearFull',1.5),flowK:renderer.variantNumber('flowK',30),
+  fineRelief:renderer.variantNumber('fineRelief',0),fineSize:renderer.variantNumber('fineSize',8),fineGrain:renderer.variantNumber('fineGrain',0)});   // the world rock's fine relief: its field octaves are eroded (engine-feed.wgsl feedFine)
 // H5b: the Time pass of a paged map (createPagedFields setTime): the knobs the pass reads, all of them in the key (so a change drops every page's
 // weather), and the runner a page's window goes through. `material` is materialKnobs' answer.
 export function pagedTime({config,renderer,size,spacing,material}) {
