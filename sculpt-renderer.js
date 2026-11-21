@@ -1088,7 +1088,7 @@ export class TerrainRenderer {
     set('uBanding', number('banding', 0));
     set('uApron', number('apron', 0));
     set('uWorms', number('worms', 0));
-    for (const [key, fallback] of [['fineRelief', 0], ['fineLevel', 0], ['fineSize', 8], ['fineGrain', 0], ['finePits', 0]]) set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
+    for (const [key, fallback] of [['fineRelief', 0], ['fineLevel', 0], ['fineLevelGrain', 0], ['fineSize', 8], ['fineGrain', 0], ['finePits', 0]]) set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
     set('uLooseSupply', number('looseSupply', 0));
     set('uBoulders', number('boulders', 0));
     set('uSoilRim', number('soilRim', 0));

@@ -20,6 +20,7 @@ export const WORLD_HELP = {
   worms: 'Adds short, winding ridges in the slope relief.',
   fineRelief: 'Adds 1 px and larger roughness to the lit relief of this rock\u2019s slopes and faces. The art only: exported heights smooth it away. A rock type that does not set it takes the world\u2019s.',
   fineLevel: 'Adds the same fine roughness to level ground. The art only: exported heights stay level.',
+  fineLevelGrain: 'The grain of the fine relief on level ground: strands down the screen (below 0), even grit (0), or grain stretched across the screen (above 0). A rock type\u2019s own Fine grain holds on its slopes.',
   fineSize: 'The largest bumps of the fine relief, in pixels; it always reaches down to 2 px.',
   fineGrain: 'Turns the fine relief into strands down the fall line (below 0), even grit (0), or ripples and strata along the contours (above 0). On level ground the contours run across the screen.',
   finePits: 'Small dimples on slopes that cast their own 1-2 px shadows, as on cratered rock.',

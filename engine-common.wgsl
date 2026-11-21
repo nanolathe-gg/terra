@@ -260,6 +260,7 @@ struct Uniforms {
     worms: f32,           // wormy regolith relief on slopes (lunar)
     // Fine relief (world): 1 to 32 px art height on the lit surface (fineSite; engine-bake.wgsl bake, engine-frag.wgsl geometryMain).
     fineLevel: f32,       // its slope amplitude on level ground (the world's; amount, size, grain and pits are each rock's, struct Rock)
+    fineLevelGrain: f32,  // level ground's grain (the world's): a rock's Fine grain holds on its slopes only
     fineAny: f32,         // the largest Fine relief on slopes or Fine pits of the rocks in use (writeRocks): 0 with fineLevel 0, none is drawn
     bandSpacing: f32,     // height between bands, height units (the column block's `bands`)
     bandSoftness: f32,    // share of each band that is riser
@@ -1012,7 +1013,7 @@ fn surfaceGradient(p: vec2f) -> vec2f {
 // fall line: its lattice is turned to one of eight directions whose integer steps repeat with the pool (so level ground still repeats with
 // the pool, card tilepool) and stretched along the contours (Grain above 0) or down the fall line (below 0); a pixel blends the two
 // directions either side of its own. At Grain 0 neither axis stretches and the two sides of 0 meet.
-struct FineSite { on: bool, strength: f32, pits: f32, q: vec2f, g: vec2f, frameA: u32, frameB: u32, mixB: f32, field: f32 }
+struct FineSite { on: bool, strength: f32, pits: f32, q: vec2f, g: vec2f, frameA: u32, frameB: u32, mixB: f32, field: f32, grain: f32, levelGrain: f32, steep: f32, levelA: u32, levelB: u32, levelMix: f32 }
 // The octaves of FINE_FIELD_FROM px and up, at the world rock's slope strength (field), are also written into the height the Time pass erodes
 // (engine-feed.wgsl feedFine): on a chunk fed the Time pass's height (u.weatherMaps) the bake leaves out what the field already holds of them.
 const FINE_FIELD_FROM = 12.0;
@@ -1024,7 +1025,7 @@ const FINE_PIT_CELL = 7.0;  // px: at most one pit a cell
 const FINE_PIT_DEPTH = 3.0; // height units at full strength
 fn fineOn() -> bool { return u.fineAny > 0.0 || u.fineLevel > 0.0; }
 fn fineSite(p: vec2f) -> FineSite {
-    var s = FineSite(false, 0.0, 0.0, vec2f(0.0), vec2f(0.0), 0u, 1u, 0.0, 0.0);
+    var s = FineSite(false, 0.0, 0.0, vec2f(0.0), vec2f(0.0), 0u, 1u, 0.0, 0.0, 0.0, 0.0, 0.0, 0u, 1u, 0.0);
     if (!fineOn()) { return s; }
     let h = baseHeight(p);
     if (h <= u.sea + 0.5) { return s; }
@@ -1046,17 +1047,28 @@ fn fineSite(p: vec2f) -> FineSite {
     // away from the contour's perpendicular. The axis turns from one to the other as Grain crosses 0, where neither stretches. Both lean
     // south by 0.1 (in slope) so contours run across the screen on level ground and follow the slope from about 0.1 (a gentle bowl draws
     // no rings).
+    // Slopes take the rock's Fine grain, level ground the world's Fine grain on level ground (fineLevelGrain); between, both are drawn
+    // and mixed by the slope ramp (a single grain where they agree).
+    s.steep = steep;
+    s.grain = u.rock[rs & rockMask].fineGrain;
+    s.levelGrain = u.fineLevelGrain;
+    let slopeFrames = fineFrames(g, slope, s.grain);
+    s.frameA = u32(slopeFrames.x); s.frameB = (s.frameA + 1u) % 8u; s.mixB = slopeFrames.y;
+    let levelFrames = fineFrames(g, slope, s.levelGrain);
+    s.levelA = u32(levelFrames.x); s.levelB = (s.levelA + 1u) % 8u; s.levelMix = levelFrames.y;
+    return s;
+}
+// The two of the eight lattice directions either side of the grain's first axis, and the share of the second: (k, mix).
+fn fineFrames(g: vec2f, slope: f32, grain: f32) -> vec2f {
     let contour = atan2(-g.y + 0.1, -g.x) + 1.5707964;
     let acrossFall = atan2(-g.y + 0.5 * slope * slope + 0.1, -g.x) + 1.5707964;
     var turn = acrossFall - contour;
     turn = turn - 3.1415927 * round(turn / 3.1415927);   // the nearer way round (directions repeat every half turn)
-    var a = contour + turn * (1.0 - smoothstep(-0.3, 0.3, u.rock[rs & rockMask].fineGrain));
+    var a = contour + turn * (1.0 - smoothstep(-0.3, 0.3, grain));
     a = a - 3.1415927 * floor(a / 3.1415927);
     var k = 0u;
     for (var i = 1u; i < 8u; i++) { if (a >= FINE_ANGLES[i]) { k = i; } }
-    s.frameA = k; s.frameB = (k + 1u) % 8u;
-    s.mixB = clamp((a - FINE_ANGLES[k]) / (FINE_ANGLES[k + 1u] - FINE_ANGLES[k]), 0.0, 1.0);
-    return s;
+    return vec2f(f32(k), clamp((a - FINE_ANGLES[k]) / (FINE_ANGLES[k + 1u] - FINE_ANGLES[k]), 0.0, 1.0));
 }
 // valueNoise on a lattice that repeats every n.x cells across and n.y down (wrapNoise with a period an axis).
 fn fineWrapNoise(q: vec2f, n: vec2f) -> f32 {
@@ -1071,15 +1083,21 @@ fn fineWrapNoise(q: vec2f, n: vec2f) -> f32 {
     return mix(mix(a, b, fade.x), mix(d, e, fade.x), fade.y) * 2.0 - 1.0;
 }
 // One octave in one of the eight directions: cells `cell` px across the grain, stretched along it.
-fn fineFrame(q: vec2f, k: u32, cell: f32, salt: f32) -> f32 {
+fn fineFrame(q: vec2f, k: u32, cell: f32, salt: f32, grain: f32) -> f32 {
     let d = FINE_FRAMES[k];
     let r = length(d);
-    let cu = cell * (1.0 + FINE_STRETCH * max(u.rock[rs & rockMask].fineGrain, 0.0));    // along the contours
-    let cw = cell * (1.0 + FINE_STRETCH * max(-u.rock[rs & rockMask].fineGrain, 0.0));   // down the fall line
+    let cu = cell * (1.0 + FINE_STRETCH * max(grain, 0.0));    // along the contours
+    let cw = cell * (1.0 + FINE_STRETCH * max(-grain, 0.0));   // down the fall line
     let n = max(vec2f(1.0), round(vec2f(u.pool / (r * cu), u.pool / (r * cw))));
     let pq = poolPos(q);
     let t = vec2f(d.x * pq.x + d.y * pq.y, -d.y * pq.x + d.x * pq.y) * n / u.pool;
     return fineWrapNoise(t + vec2f(salt, 2.0 * salt), n);
+}
+// One octave of one grain, blended between its two lattice directions (variance kept).
+fn fineGrained(q: vec2f, ka: u32, kb: u32, m: f32, cell: f32, salt: f32, grain: f32) -> f32 {
+    let a = fineFrame(q, ka, cell, salt, grain);
+    let b = fineFrame(q, kb, cell, salt, grain);
+    return (a * (1.0 - m) + b * m) / sqrt((1.0 - m) * (1.0 - m) + m * m);
 }
 // The octaves of wavelength `lambda` px down to 2 px, each weighted by `path` (bake: 1 from 10 px up; hit: 1 under 6 px), at the screen
 // point q. Every octave has slope s.strength: an amplitude of a quarter of its cell.
@@ -1093,10 +1111,12 @@ fn fineOctaves(s: FineSite, q: vec2f, bake: bool) -> f32 {
         let w = select(1.0 - split, split, bake) * smoothstep(1.5, 2.5, lambda);
         if (w > 0.0) {
             let cell = 0.5 * lambda;
-            let a = fineFrame(q, s.frameA, cell, f32(k) * 7.31);
-            let b = fineFrame(q, s.frameB, cell, f32(k) * 7.31);
-            let m = s.mixB;
-            let o = (a * (1.0 - m) + b * m) / sqrt((1.0 - m) * (1.0 - m) + m * m) * 0.25 * cell * w;
+            var n = fineGrained(q, s.frameA, s.frameB, s.mixB, cell, f32(k) * 7.31, s.grain);
+            if (s.levelGrain != s.grain && s.steep < 1.0) {
+                let level = fineGrained(q, s.levelA, s.levelB, s.levelMix, cell, f32(k) * 7.31, s.levelGrain);
+                n = (n * s.steep + level * (1.0 - s.steep)) / sqrt(s.steep * s.steep + (1.0 - s.steep) * (1.0 - s.steep));
+            }
+            let o = n * 0.25 * cell * w;
             let f = select(0.0, smoothstep(FINE_FIELD_FROM, FINE_FIELD_FULL, lambda), bake);
             total += o * (1.0 - f);
             fieldOctaves += o * f;
