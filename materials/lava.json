@@ -627,18 +627,12 @@
      "label": "Dark dome rock",
      "material": "lava-dome",
      "knobs": {
-      "faceRindTone": -0.5,
-      "faceShade": 1,
-      "faceRound": 0.8,
-      "faceWhole": 0.3,
-      "faceBlock": 1.5,
-      "faceBlockSize": 30,
-      "rockFaceFrom": 0.35,
-      "faceMass": 2,
-      "debrisAmount": 0.5,
-      "faceRindDepth": 12,
-      "faceScratch": 0.2,
-      "rockCrown": 1
+      "rockCrown": 0.56,
+      "shineRock": 0.26,
+      "shineRockSharp": 54,
+      "shineRockRough": 0.19,
+      "shineRockScale": 5.4,
+      "stepCrease": 0.43
      }
     },
 
