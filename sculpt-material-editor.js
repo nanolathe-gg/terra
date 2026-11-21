@@ -68,16 +68,40 @@ export function mountMaterialEditor(host) {
   });
 
   // The add menu: at the pointer, searchable, and when a wire was dropped in the open it lists only nodes that take it.
-  const menuItems = [...$('node-list').querySelectorAll('button')];
+  const nodeList = $('node-list'), menuItems = [...nodeList.querySelectorAll('button')];
   for (const b of menuItems) {
     const {type, kind, snippet} = b.dataset;
     b.dataset.help = snippet ? 'Add a connected group of nodes that makes this pattern.' : nodeKindHelp(type, kind) ?? NODES[type].help;
+  }
+  const visibleSamples = new Set(), finishedSamples = new Set();
+  let sampleRequest = null;
+  const sampleObserver = new IntersectionObserver(entries => {
+    for (const {target, isIntersecting} of entries) {
+      if (isIntersecting) visibleSamples.add(target);
+      else visibleSamples.delete(target);
+    }
+    paintNextSample();
+  }, {root: nodeList});
+  for (const button of menuItems) sampleObserver.observe(button);
+  // Keep each finished image in its row and ask for one visible example at a time.
+  function paintNextSample() {
+    if (sampleRequest || $('node-menu').hidden) return;
+    const button = menuItems.find(b => !b.hidden && visibleSamples.has(b) && !finishedSamples.has(b));
+    if (!button) return;
+    const request = sampleRequest = {};
+    preview.sample(host.renderer(), button.dataset, (error, pixels) => {
+      if (sampleRequest !== request) return;
+      sampleRequest = null;
+      finishedSamples.add(button);
+      if (!error && pixels) button.querySelector('canvas').getContext('2d').putImageData(new ImageData(pixels, THUMB, THUMB), 0, 0);
+      paintNextSample();
+    });
   }
   function openMenu(screen, place, wire) {
     if (!material()) return;
     menuAt = {place, wire}; const menu = $('node-menu'), stage = menu.parentElement.getBoundingClientRect();
     for (const b of menuItems) b.dataset.fits = String(!wire || (!b.dataset.snippet && NODES[b.dataset.type].inputs.some(([, , want]) => accepts(want, wire.type))));   // a starting point takes no wire
-    menu.hidden = false; $('node-search').value = ''; filterMenu();
+    menu.hidden = false; $('node-search').value = ''; filterMenu(); nodeList.scrollTop = 0;
     menu.style.left = Math.max(8, Math.min(stage.width - menu.offsetWidth - 8, screen.x - stage.left)) + 'px';
     menu.style.top = Math.max(8, Math.min(stage.height - menu.offsetHeight - 8, screen.y - stage.top)) + 'px';
     $('node-search').focus();
@@ -90,7 +114,7 @@ export function mountMaterialEditor(host) {
     if (e.key === 'Enter') { e.preventDefault(); menuItems.find(b => !b.hidden)?.click(); }
     if (e.key === 'ArrowDown') { e.preventDefault(); menuItems.find(b => !b.hidden)?.focus(); }
   };
-  $('node-list').onkeydown = e => {
+  nodeList.onkeydown = e => {
     const shown = menuItems.filter(b => !b.hidden), at = shown.indexOf(document.activeElement);
     if (e.key === 'ArrowDown') { e.preventDefault(); shown[Math.min(shown.length - 1, at + 1)]?.focus(); }
     if (e.key === 'ArrowUp') { e.preventDefault(); if (at <= 0) $('node-search').focus(); else shown[at - 1].focus(); }
@@ -537,7 +561,7 @@ export function mountMaterialEditor(host) {
   // (its Build or World tab), the focus stays where that click put it.
   function close(returnFocus = true) {
     if (!dialog.open) return;
-    closeMenu(); setDrawer(false); dialog.close(); setFull(false); clearTimeout(pictureTimer); preview.cancel(); pictureKey = thumbKey = pictureMaterial = ''; host.dock(null);
+    closeMenu(); setDrawer(false); dialog.close(); setFull(false); clearTimeout(pictureTimer); preview.cancel(); sampleRequest = null; pictureKey = thumbKey = pictureMaterial = ''; host.dock(null);
     const door = opener?.isConnected ? opener : opener?.id ? document.getElementById(opener.id) : null;
     if (returnFocus) (door && !door.closest('[hidden]') ? door : $('materials-toolbar')).focus({preventScroll: true});
   }
@@ -593,5 +617,5 @@ export function mountMaterialEditor(host) {
   refresh();
   // The Color rows again, once the renderer has read back what the materials are drawn in (sculpt.js renderer.onmeans).
   const refreshColors = () => { for (const [prefix, m] of [['ctl', material()], ...worldRows.map(w => [w.prefix, materials().find(o => o[w.role]) ?? null])]) { const own = $(`${prefix}-matcolor`); if (m && document.activeElement !== own) own.value = hex(drawn(m).map(v => v * 255)); } };
-  return {refresh, refreshColors, open, resetView: () => graph.fit(), refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (dialog.open) { dialog.close(); setFull(false); host.dock(null); } document.removeEventListener('pointerdown', outside, true); clearTimeout(thumbTimer); clearTimeout(pictureTimer); locks.disconnect(); previewBox.disconnect(); graph.dispose(); preview.dispose(); }};
+  return {refresh, refreshColors, open, resetView: () => graph.fit(), refreshPreview: () => { pictureKey = ''; refreshPictures(); }, dispose() { if (dialog.open) { dialog.close(); setFull(false); host.dock(null); } document.removeEventListener('pointerdown', outside, true); clearTimeout(thumbTimer); clearTimeout(pictureTimer); locks.disconnect(); previewBox.disconnect(); sampleObserver.disconnect(); graph.dispose(); preview.dispose(); }};
 }

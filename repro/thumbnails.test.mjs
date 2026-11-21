@@ -41,7 +41,7 @@ test('a tool picture frames the whole stroke at a zoom step, inside the fixture'
   const xs = TOOL_PATH.map(p => p[0]), ys = TOOL_PATH.map(p => p[1]), box = {ax: Math.min(...xs), ay: Math.min(...ys), bx: Math.max(...xs), by: Math.max(...ys)};
   const small = toolFrame({...box, r: 150}), wide = toolFrame({...box, r: 500});
   for (const f of [small, wide]) {
-    assert.equal(f.width / f.scale, 2 * TOOL_PICTURE.width); assert.equal(f.height / f.scale, 2 * TOOL_PICTURE.height);
+    assert.equal(f.width / f.scale, TOOL_PICTURE.width); assert.equal(f.height / f.scale, TOOL_PICTURE.height);
     assert.ok(f.x >= 0 && f.y >= 0 && f.x + f.width <= 2048 && f.y + f.height <= 2048);
   }
   assert.ok(small.scale < wide.scale);

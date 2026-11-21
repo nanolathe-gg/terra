@@ -10,7 +10,9 @@
 import {HELP_PATH} from './sculpt-help-examples.js';
 
 export const MAP_PICTURE = 128;                          // the long side of the map's picture, px
-export const TOOL_PICTURE = {width: 104, height: 76};    // the toolbar's picture box is 46 px high; twice that, near the hover examples' 260 x 190 shape
+// A tool's picture, drawn at the size it renders: the toolbar's box (46 px high) shows it drawn down, the hover card (260 px wide) near its size.
+// It stays in the page, so its size costs no save.
+export const TOOL_PICTURE = {width: 208, height: 152};
 const QUALITY = .72;
 const MAX_IMAGE = 32 * 1024;                             // characters of a data URL kept on load; a 128 px WebP is about 5 K
 const IMAGE_RE = /^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/;
@@ -55,8 +57,8 @@ export function mapPictureSize(playWidth, playHeight) {
 
 // The tool fixture: a level plain at the world's base height, 2048 px square, the hover examples' path moved to its middle. A picture's
 // frame is the stroke's reach (`reach`: {ax, ay, bx, by, r}, as the editor's nodeReach gives it) at the first of a few zoom steps that holds it
-// whole (a 104 x 76 picture drawn down from 208 x 152 pixels at 2, 4 or 8 art pixels each), so a small hill and a wide plateau both fill theirs.
-const FIXTURE = 2048, SPACING = 4, GRID = FIXTURE / SPACING + 1, RENDER = {width: 2 * TOOL_PICTURE.width, height: 2 * TOOL_PICTURE.height}, MARGIN = 96;
+// whole (208 x 152 pixels at 2, 4 or 8 art pixels each), so a small hill and a wide plateau both fill theirs.
+const FIXTURE = 2048, SPACING = 4, GRID = FIXTURE / SPACING + 1, RENDER = TOOL_PICTURE, MARGIN = 96;
 const pathMiddle = (() => { const xs = HELP_PATH.map(p => p[0]), ys = HELP_PATH.map(p => p[1]); return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2]; })();
 export const TOOL_PATH = HELP_PATH.map(([x, y]) => [Math.round(x - pathMiddle[0] + FIXTURE / 2), Math.round(y - pathMiddle[1] + FIXTURE / 2)]);
 export function toolFrame({ax, ay, bx, by, r}) {

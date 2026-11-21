@@ -168,8 +168,17 @@ try{
   assert(frames.some(f=>f>0&&f<10));assert(frames.includes(10));assert(frames.some((f,i)=>i&&f<frames[i-1]));report.animation={frames};
   const hoverScreen=await send('Page.captureScreenshot',{format:'png'});writeFileSync(join(out,'hover.png'),Buffer.from(hoverScreen.result.data,'base64'));
   await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});await sleep(300);assert.deepEqual(await ev('[...document.querySelectorAll("#visual-help .help-sprite")].map(e=>Number(e.dataset.frame))'),[0,10]);await sleep(500);assert.deepEqual(await ev('[...document.querySelectorAll("#visual-help .help-sprite")].map(e=>Number(e.dataset.frame))'),[0,10]);report.reducedMotion='static endpoint pair';await key('Escape');await sleep(250);assert.equal(await ev('document.getElementById("visual-help").childElementCount'),0);await send('Emulation.setEmulatedMedia',{features:[]});
+  // Focusing a World control can scroll its inspector. The scroll must not cancel keyboard help.
+  await click('#tab-world');await click('#wsec-world');
+  const sun='.scrub[data-source="knob-sunHeight"]';
+  await ev(`(()=>{const e=document.querySelector('${sun}');e.focus();e.closest('.inspector-content').dispatchEvent(new Event('scroll'));})()`);
+  for(let i=0;i<40&&!await ev('document.querySelector("#visual-help .help-sprite")');i++)await sleep(100);
+  assert.match(await ev('document.getElementById("visual-help").innerText'),/sun’s angle/);
+  assert.match(await ev(`document.querySelector('${sun}').getAttribute('aria-describedby')`),/visual-help/);
+  await key('Escape');assert.equal(await ev('document.getElementById("visual-help").hidden'),true);
+  report.worldHelp='animated help follows keyboard focus through a scroll';
   // Re-sync a gated world row after compact controls have mounted.
-  await click('#tab-world');await ev(`(()=>{const p=document.getElementById('knob-lavaCrust');p.value=1;p.dispatchEvent(new Event('input',{bubbles:true}));})()`);await ready();assert.equal(await ev('document.getElementById("knob-lavaPillow").disabled'),false);
+  await ev(`(()=>{const p=document.getElementById('knob-lavaCrust');p.value=1;p.dispatchEvent(new Event('input',{bubbles:true}));})()`);await ready();assert.equal(await ev('document.getElementById("knob-lavaPillow").disabled'),false);
   await ev(`(()=>{const p=document.getElementById('knob-lavaCrust');p.value=0;p.dispatchEvent(new Event('input',{bubbles:true}));})()`);await ready();await ev(`import('/sculpt-find.js').then(m=>m.goTo(document.getElementById('knob-lavaPillow')))`);await sleep(100);
   const gated='.scrub[data-source="knob-lavaPillow"]';const gp=await point(gated);await sleep(50);
   assert.deepEqual(await ev(`(()=>{const e=document.getElementById('knob-lavaPillow'),s=e.parentElement.querySelector('.scrub'),n=e.parentElement.querySelector('.control-requirement');return [e.disabled,s.getAttribute('aria-disabled'),s.querySelector('input').disabled,n.hidden,getComputedStyle(n).display,n.textContent.length>0]})()`),[true,'true',true,false,'block',true]);

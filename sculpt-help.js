@@ -25,14 +25,14 @@ export function mountHelp(){
   const tip=element('aside','visual-help');tip.id='visual-help';tip.hidden=true;tip.setAttribute('role','tooltip');document.body.append(tip);
   const reduced=matchMedia('(prefers-reduced-motion: reduce)');
   const previews=fetch('ui-previews/manifest.json').then(r=>r.ok?r.json():null).catch(()=>null);
-  let hoverTimer,frameTimer,owner,revision=0;
+  let hoverTimer,frameTimer,owner,trigger,revision=0;
   const describe=(target, add)=>{
     if(!target)return;
     const ids=(target.getAttribute('aria-describedby')||'').split(/\s+/).filter(id=>id&&id!==tip.id);
     if(add)ids.push(tip.id);
     if(ids.length)target.setAttribute('aria-describedby',ids.join(' '));else target.removeAttribute('aria-describedby');
   };
-  const hide=()=>{clearTimeout(hoverTimer);clearTimeout(frameTimer);revision++;describe(owner,false);owner=null;tip.hidden=true;tip.replaceChildren();};
+  const hide=()=>{clearTimeout(hoverTimer);clearTimeout(frameTimer);revision++;describe(owner,false);owner=null;trigger=null;tip.hidden=true;tip.replaceChildren();};
   // A tool in a rail flyout takes its card beside the flyout, not over the flyout's other tools.
   const position=target=>{const r=target.getBoundingClientRect(),a=(target.closest('.tool-flyout')||target).getBoundingClientRect();tip.style.left=Math.max(8,Math.min(innerWidth-tip.offsetWidth-8,a.left<innerWidth/2?a.right+10:a.left-tip.offsetWidth-10))+'px';tip.style.top=Math.max(8,Math.min(innerHeight-tip.offsetHeight-8,r.top))+'px';};
   const show=target=>{
@@ -60,7 +60,13 @@ export function mountHelp(){
     tip.replaceChildren(element('strong',''));tip.firstChild.textContent=name+(control?.dataset.note?` (${control.dataset.note})`:'');
     const example=!tool&&source.matches('input,select');
     const valid=()=>owner===target&&revision===token&&!tip.hidden&&target.isConnected&&target.getClientRects().length>0;
-    if(tool||example){
+    // A tool's own picture, drawn in this map's world (sculpt-thumbnails.js, on its button once drawn), comes before the shape's Green example.
+    const live=tool?target.querySelector('.tool-pic')?.getAttribute('src'):null;
+    if(live?.startsWith('data:image/webp;base64,')){
+      const art=element('div','help-art'),image=new Image();image.alt=name+' terrain example';image.src=live;art.append(image);
+      tip.append(art,element('small','help-caption','Rendered in this map’s world'));
+    }
+    else if(tool||example){
       const art=element('div','help-art',tool?illustration(shape):''),caption=element('small','help-caption','Illustration');
       if(tool)tip.append(art,caption);
       previews.then(index=>{
@@ -98,18 +104,18 @@ export function mountHelp(){
   };
   const target=e=>{
     if(!(e.target instanceof Element)||e.target.matches('.scrub-entry'))return null;
-    const t=e.target.closest('.scrub, input, select, textarea, button, summary, canvas[title], canvas[data-help], a[data-help]');
+    const t=e.target.closest('.scrub, input, select, textarea, button, summary, canvas[id], canvas[title], canvas[data-help], a[data-help]');
     if(!t)return null;
     return t.matches('.tool-palette button:not(.rail-button), .scrub, .control > select, canvas[title], [data-help]')||Object.hasOwn(EDITOR_HELP,t.id)||t.title||t.labels?.[0]?.title?t:null;
   };
-  const queue=t=>{hide();hoverTimer=setTimeout(()=>show(t),500);};
-  document.addEventListener('pointerover',e=>{const t=target(e);if(t&&!e.buttons&&!t.contains(e.relatedTarget))queue(t);});
-  document.addEventListener('pointerout',e=>{const t=target(e);if(t&&!t.contains(e.relatedTarget))hide();});
-  document.addEventListener('focusin',e=>{const t=target(e);if(t)queue(t);});
-  document.addEventListener('focusout',e=>{if(target(e))hide();});
+  const queue=(t,kind)=>{hide();trigger=kind;hoverTimer=setTimeout(()=>show(t),500);};
+  document.addEventListener('pointerover',e=>{const t=target(e);if(t&&!e.buttons&&!t.contains(e.relatedTarget))queue(t,'pointer');});
+  document.addEventListener('pointerout',e=>{const t=target(e);if(trigger==='pointer'&&t&&!t.contains(e.relatedTarget))hide();});
+  document.addEventListener('focusin',e=>{const t=target(e);if(t)queue(t,'focus');});
+  document.addEventListener('focusout',e=>{if(trigger==='focus'&&target(e))hide();});
   document.addEventListener('pointerdown',hide);
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!tip.hidden){e.preventDefault();e.stopPropagation();hide();}},true);
-  document.addEventListener('scroll',hide,true);
+  document.addEventListener('scroll',()=>{if(trigger==='focus'){if(owner)position(owner);}else hide();},true);
   document.addEventListener('visibilitychange',()=>{if(document.hidden)hide();});
   reduced.addEventListener('change',()=>{if(owner)show(owner);});
 }
