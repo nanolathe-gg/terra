@@ -847,7 +847,7 @@ export async function mountMapFeatures(api) {
   },true);
   canvas.addEventListener('pointerleave',() => { if (!gesture) { hover=null; api.schedule(); } },true);
   const typing=target => ['INPUT','SELECT','TEXTAREA'].includes(target?.tagName) || target?.isContentEditable;
-  const OPEN_ABOVE='details.top-menu[open],details.share-menu[open],details.status-details[open],.rail-button[aria-expanded="true"],#pane-map:not([hidden]),#pane-graphics:not([hidden]),#pane-export:not([hidden]),.app.curves-large';
+  const OPEN_ABOVE='details.top-menu[open],details.link-menu[open],details.status-details[open],.rail-button[aria-expanded="true"],#pane-map:not([hidden]),#pane-graphics:not([hidden]),#pane-export:not([hidden]),.app.curves-large';
   // The Surface gallery counts only while it shows (closeTop leaves one open behind another tab alone).
   const openAbove=() => doc.querySelector(OPEN_ABOVE) || doc.getElementById('find-results')?.hidden===false || (doc.getElementById('surface-add')?.getAttribute('aria-expanded')==='true' && doc.getElementById('surface-add').getClientRects().length>0);
   doc.addEventListener('keydown',event => {
