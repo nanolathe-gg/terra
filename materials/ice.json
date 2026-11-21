@@ -796,10 +796,10 @@
  "world": {
     "materials": {"ground": "ice-ground", "water": "ice-water", "rock": "ice-rock", "slope": "ice-slope", "debris": "ice-debris", "extra": ["ice-bergs-ground"], "soil": "ice-soil", "snow": "ice-snow", "moss": "ice-moss", "sand": "ice-sand", "band": "ice-band", "crystal": "ice-crystals"},
     "knobDefaults": {
-        "fineRelief": 1.2,
+        "fineRelief": 0,
         "fineLevel": 0.4,
         "fineSize": 8,
-        "fineGrain": -0.5,
+        "fineGrain": 0,
         "plainRelief": 0.6,
         "crackSeverity": 0,
         "crackMajor": 0.4,
@@ -922,6 +922,9 @@
      "label": "Glacier ice",
      "material": "ice-blueice",
      "knobs": {
+      "fineRelief": 1.2,
+      "fineSize": 8,
+      "fineGrain": -0.5,
       "faceRindTone": 0.45,
       "faceRind": 0.8,
       "faceShade": 0.45,
