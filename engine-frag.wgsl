@@ -755,32 +755,6 @@ fn crystalSlabWater(color: vec3f, mask: f32, submerged: f32) -> vec3f {
     return mix(color, slab, submerged);
 }
 
-// Crystal shallows (card E7): retail's shallow Crystal water, everywhere it is
-// shallow, is a mosaic of small crystals: cells about 6-14 px across, each with its
-// own brightness and a slight lean (lighter toward one side), outlined by a thin
-// dark seam. The bed is art in retail (the TNT height grid is 16 px), so this
-// is drawn from position, not from heights. The cells fade out as the water
-// deepens, and stand aside where the larger shore slabs (the crystal field's
-// marks) already cover the water.
-fn crystalShallowWater(color: vec3f, p: vec2f, deep: f32, submerged: f32, slab: f32) -> vec3f {
-    let size = max(u.crystalShallowPx, 4.0);
-    // Two scales, as retail's mosaic has: a share of the water keeps cells 2.2 times as wide, the rest the fine ones.
-    let big = markCells(p / (size * 2.2), vec2i(7919, 0), 0.9, 0.0);
-    var c = markCells(p / size, vec2i(0), 0.9, 0.0);
-    var px = size;
-    if (big.id.y < 0.4) { c = big; px = size * 2.2; }
-    let seam = 1.0 - smoothstep(0.3, 1.2, (c.d2 - c.d1) * 0.5 * px);
-    let lean = dot(c.off, normalize(c.id.zw - 0.5 + vec2f(0.001))) * 0.5;
-    let shade = 1.0 + 0.3 * (c.id.x - 0.5) + 0.35 * lean;
-    // Only a fringe round the slabs: the open sea beyond reach of the slab marks (eight taps 48 px out) stays smooth, as retail's does.
-    var near = smoothstep(0.05, 0.3, slab);
-    for (var k = 0; k < 8; k++) { near = max(near, smoothstep(0.05, 0.3, crystalField(p + vec2f(cos(f32(k) * 0.785398), sin(f32(k) * 0.785398)) * 48.0))); }
-    // Mosaic in all shallows: a submerged reef with no slabs of its own takes the mosaic too.
-    near = max(near, u.crystalShallowAll);
-    let w = u.crystalShallow * submerged * near * (1.0 - smoothstep(0.1, 0.55, deep)) * (1.0 - smoothstep(0.05, 0.3, slab));
-    return color * (1.0 + w * (shade - 1.0)) * (1.0 - w * u.crystalShallowInk * seam);
-}
-
 // A crater's skin is the crystal field's exact value .74 (sculpt.js CRATER_SKIN). A column mound's seam ramps cross that value
 // too, so a pixel counts as skin only when it and its four neighbours three px off all read it.
 fn skinBand(m: f32) -> f32 { return 1.0 - smoothstep(0.012, 0.03, abs(m - 0.74)); }
@@ -2240,6 +2214,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (edgeHard > 0.0) { deep = sharpDeepStep(p, pixel, bedDepth); }
         var grain = waterPigment(pixel) - waterMean();
         if (u.lowGrain < 1.0) { grain *= lowGrain; }
+        var slab = 0.0;
+        if (u.slabShallows > 0.0 || u.crystalSeam > 0.0) { slab = shoreSlabCoverage(p); }
+        let slabDepth = smoothstep(u.deepDepth, u.deepDepth + 16.0, bedDepth);
         // Colors choose the water's tint, never replace the bed-light model.
         var water=vec3f(0);
         {
@@ -2280,6 +2257,12 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 var mid = waterMean() + u.waterMid.rgb + (deepWater - waterMean()) * 0.9;
                 water = mix(mix(shallow, mid, toMid), deepWater, toDeep);
             }
+            // At full slab strength the bed shows only through the authored plate
+            // footprint. Color averaging across the outer drop cannot make an apron.
+            if (u.slabShallows > 0.0) {
+                let slabBed = mix(shallow, deepWater, max(slabDepth, 0.30 * deep));
+                water = mix(water, mix(deepWater, slabBed, slab), u.slabShallows);
+            }
         }
         // Shared bed elevation makes a painted shallow passage persist even
         // far from shore; there is no fixed-width coastal blue collar.
@@ -2301,8 +2284,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         }
         surfWater = submerged;
         color = mix(color, water * lightTint * (0.92 + 0.08 * shadow), submerged);
-        if (u.crystalSeam > 0.0 && crystalMask > 0.05) { color = crystalSlabWater(color, crystalMask, submerged); }
-        if (u.crystalShallow > 0.0) { color = crystalShallowWater(color, p, deep, submerged, crystalMask); }
+        if (u.crystalSeam > 0.0 && slab > 0.0 && crystalMask > 0.05) {
+            color = crystalSlabWater(color, crystalMask, submerged * slab * (1.0 - slabDepth));
+        }
     }
     if (surfE > 0.0 && surfX < 900.0) {
         // Card P27: static foam, white as lit as the water is. It marks the playable edge on both sides: the lace on the water, the swash on the sand.

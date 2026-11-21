@@ -38,6 +38,7 @@ const shineBase = {shineGround: 1, shineGroundRough: .7, shineSlope: 1, shineSlo
 // Each setting varies once while the fixture and the other settings stay fixed.
 // The prerequisites bring the relevant terrain and material into view.
 function worldExample(group, key) {
+  if (key === 'slabShallows') return {world: 'crystal', strokes: [feature('shallow', {diameter: 390, elevation: -12, shorePlates: 1, plateLandPx: 48, plateWaterPx: 82, plateHeight: 75, plateSteps: 3})], base: {...waterBase, shoreRock: 0, shoreShelf: 0}};
   if (key === 'beachWidth' || key === 'apron') return {world: 'zhon', strokes: key === 'apron' ? [wall] : [coast], base: {rockFace: 0, shoreRock: 0, shoreShelf: 0}};
   if (key === 'bankRock') return {world: 'green', strokes: [coastHeight], base: {erosion: 0, faceRock: .9, rockFaceFrom: 2, shoreRock: 0, shoreShelf: 0, coastRamp: 1}};
   if (group === 'Water' || group === 'Water detail')

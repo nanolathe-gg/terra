@@ -309,9 +309,7 @@ struct Uniforms {
     sunColor: vec3f,      // the direct light's colour: multiplies the sun's share of the light, and the glints that mirror it
     skyColor: vec3f,      // the ambient light's colour: multiplies the sky's share (what the shade keeps)
     frostWet: f32,        // Ice frost band: how far cells it marks (protection above 0.02) skip the wet-band darkening above the waterline (0: as before)
-    // E7 (Crystal).
-    crystalShallow: f32,   // shallow water: how strongly it carries a mosaic of small crystal cells (0: as before)
-    crystalShallowPx: f32, // width of those cells, px
+    slabShallows: f32,    // how strongly the lit bed is confined to the physical shore slabs
     // G7 (Crystal craters).
     crystalCraterWeb: f32,     // crater skin (crystal mark .74): how dark the web of thin lines between them is drawn (0: no web)
     crystalCraterWebPx: f32,   // width of the web's cells, px
@@ -320,8 +318,6 @@ struct Uniforms {
     crystalCraterTone: f32,    // cell-to-cell brightness variation (0: one tone)
     crystalCraterLight: f32,   // how much stronger the crater wall's light and shade run than the sun gives (1: as the sun gives)
     crystalSeamEnd: f32,       // the field value where a seam's ink has faded out (0.74 as before; lower draws thinner seams)
-    crystalShallowInk: f32,    // shallow cells' seam ink (0.55 as before)
-    crystalShallowAll: f32,    // how far the mosaic covers shallow water away from slabs too (0: only a fringe round the slabs, as before)
     // E8 (Painted Desert)
     baseBand: f32,         // the grey band at the foot of the raised ground (strata colour 5): its strength, 0 off
     baseBandLow: f32,      // lower edge of its height window, above the plain
@@ -685,6 +681,13 @@ fn regionalPoint(uv: vec2f) -> vec2f {
     return (q.whole - u.chunkGridOrigin) + q.fract;
 }
 fn maskPoint(p: vec2f) -> vec2f { return regionalPoint((p / (u.size - 1.0) * (u.grid - 1.0) + 0.5) / u.grid); }
+fn shoreSlabCoverage(p: vec2f) -> f32 {
+#ifdef COLOR_PASS
+    return sampleRegionalArray(gridTex, maskPoint(p), 2).a;
+#else
+    return sampleMasks(maskPoint(p), 5).b;
+#endif
+}
 
 // Slope averaged over about 14 px: the relief a painted edge follows changes
 // over tens of pixels, not at the 5 px the shading's slope does.
@@ -721,7 +724,7 @@ fn styleEdge(p: vec2f, f: f32, slope: f32) -> f32 {
 }
 
 #ifdef COLOR_PASS
-// F retains exactly flow/deposit, wear/wetness, material RGBA, fall XY and the ground id (fall layer blue).
+// F retains flow/deposit, wear/wetness, material RGBA, fall XY, ground id and shore slab coverage.
 fn weatherAt(uv:vec2f)->vec2f{return sampleRegionalArray(gridTex,regionalPoint(uv),0).rg;}
 fn timeMap2(uv:vec2f)->vec2f{if(u.weatherMaps<0.5){return vec2f(0);}return sampleRegionalArray(gridTex,regionalPoint(uv),0).ba;}
 fn timeMap3(uv:vec2f)->vec2f{if(u.weatherMaps<0.5){return vec2f(.5);}return sampleRegionalArray(gridTex,regionalPoint(uv),2).rg;}

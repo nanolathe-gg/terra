@@ -1129,8 +1129,7 @@
         "shineWhite": 1,
         "crystalFacet": 0.7,
         "crystalSizeVar": 0.7,
-        "crystalShallow": 1,
-        "crystalShallowPx": 8,
+        "slabShallows": 1,
         "crystalCraterWeb": 0.35,
         "crystalCraterWebPx": 18,
         "crystalCraterWobble": 4,
@@ -1140,12 +1139,10 @@
         "crystalShoreSeam": 0.56,
         "crystalSeamEnd": 0.68,
         "plateVary": 0.5,
-        "crystalShallowInk": 0.45,
         "bedFlat": 0.8
       },
       "engineDefaults": {
         "erosion": 1,
-        "crystalShallowAll": 1,
         "erosionRain": 0,
         "erosionEnvelope": 0.12
       },

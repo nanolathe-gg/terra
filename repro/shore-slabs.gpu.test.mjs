@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {openScene} from './headless.mjs';
+import {openScene, renderWindow} from './headless.mjs';
 import {cellHeights} from '../sculpt-map.js';
 
 const query = 'biome=crystal&scratch=1&mapX=1&mapY=1&sea=65&plain=20&erosion=0';
@@ -47,5 +47,46 @@ test('shore slabs make physical relief on flat and sloping beds', async t => {
     } finally {
       s.dispose();
     }
+  }
+});
+
+test('at the same depth, the packed color pass shows the bed only at physical slabs', async () => {
+  const stroke = shore({plateWaterPx: 75, plateLandPx: 0, diameter: 380});
+  const empty = shore({shorePlates: 0, diameter: 380});
+  const window = {x: 192, y: 222, width: 128, height: 160};
+  const s = await open([empty], '&slabShallows=1&crystalSeam=0&shallowDepth=0&deepDepth=10');
+  try {
+    const unmarked = await renderWindow(s, window);
+    const bareHeights = await exportHeights(s);
+    s.play([stroke], {ground: false});
+    const covered = await renderWindow(s, window);
+    assert.deepEqual(await exportHeights(s), bareHeights);
+    const difference = y => {
+      let count = 0;
+      for (let x = 12; x < window.width - 12; x++) {
+        const at = 4 * (y * window.width + x);
+        if (unmarked[at] !== covered[at] || unmarked[at + 1] !== covered[at + 1] || unmarked[at + 2] !== covered[at + 2]) count++;
+      }
+      return count;
+    };
+    const upperShelf = Array.from({length: 25}, (_, i) => difference(17 + i)).reduce((a,b) => a+b);
+    const center = Array.from({length: 12}, (_, i) => difference(74 + i)).reduce((a,b) => a+b);
+    assert.ok(upperShelf > 300, `${upperShelf} changed pixels over the owned shelf`);
+    assert.equal(center, 0, 'the equal-depth bed outside the band still shows only open water');
+    const rect = {x0: 0, y0: 0, x1: s.worldGrid - 1, y1: s.worldGrid - 1};
+    const originalMask = s.fields.readCells(rect).fields.shoreSlab;
+    const cutter = ['deep', [[240, 235], [300, 235]], {card: {
+      diameter: 92, elevation: -40, wander: 0, widthVary: 0, heightVary: 0, shorePlates: 0, combine: 1,
+    }}];
+    s.play([stroke, ['deep', cutter[1], {card: {...cutter[2].card, elevation: 8, diameter: 40}}]], {ground: false});
+    await s.fields.ready();
+    assert.deepEqual(s.fields.readCells(rect).fields.shoreSlab, originalMask, 'an ineffective cut keeps the slab marks');
+    s.play([stroke, cutter], {ground: false});
+    await s.fields.ready();
+    const cutMask = s.fields.readCells(rect).fields.shoreSlab;
+    assert.ok(originalMask.some((v, i) => v === 127 && cutMask[i] === 0), 'replaced terrain loses its slab mark');
+    assert.deepEqual(s.errors, []);
+  } finally {
+    s.dispose();
   }
 });

@@ -899,9 +899,7 @@ export class TerrainRenderer {
     }
     this.f('uShadeBlue', variant.has('shadeBlue') ? Number(variant.get('shadeBlue')) : 0);
     this.f('uFrostWet', variant.has('frostWet') ? Number(variant.get('frostWet')) : 0);
-    // E7 (Crystal): shallow water's crystal mosaic.
-    this.f('uCrystalShallow', variant.has('crystalShallow') ? Number(variant.get('crystalShallow')) : 0);
-    this.f('uCrystalShallowPx', variant.has('crystalShallowPx') ? Number(variant.get('crystalShallowPx')) : 10);
+    this.f('uSlabShallows', Math.min(1, Math.max(0, Number(variant.get('slabShallows')) || 0)));
     // G7 (Crystal): the craters' web and light; the defaults leave every world as it was.
     this.f('uCrystalCraterWeb', variant.has('crystalCraterWeb') ? Number(variant.get('crystalCraterWeb')) : 0);
     this.f('uCrystalCraterWebPx', variant.has('crystalCraterWebPx') ? Number(variant.get('crystalCraterWebPx')) : 14);
@@ -910,8 +908,6 @@ export class TerrainRenderer {
     this.f('uCrystalCraterTone', variant.has('crystalCraterTone') ? Number(variant.get('crystalCraterTone')) : 0);
     this.f('uCrystalCraterLight', variant.has('crystalCraterLight') ? Number(variant.get('crystalCraterLight')) : 1);
     this.f('uCrystalSeamEnd', variant.has('crystalSeamEnd') ? Number(variant.get('crystalSeamEnd')) : 0.74);
-    this.f('uCrystalShallowInk', variant.has('crystalShallowInk') ? Number(variant.get('crystalShallowInk')) : 0.55);
-    this.f('uCrystalShallowAll', variant.has('crystalShallowAll') ? Number(variant.get('crystalShallowAll')) : 0);
     // E11: shallow water round 2; every default is the earlier look.
     this.f('uShelfWander', variant.has('shelfWander') ? Number(variant.get('shelfWander')) : 0);
     this.f('uStepSoftPx', variant.has('stepSoftPx') ? Number(variant.get('stepSoftPx')) : 1);
