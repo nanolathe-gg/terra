@@ -74,14 +74,15 @@ export function sampleField(r,x,y) {
 // lattice weights, the same for every corner at the same fraction of a lattice cell, summed in one order, so a corner reads the same bytes
 // from any read that holds its footprint (regional determinism). A read asks for FOOTPRINT_APRON px past its corners: the taps' reach plus a
 // lattice cell (16 px covers any lattice up to a corner's spacing).
-// kind 'gauss' (radius = sigma, taps to 3 sigma) and 'point' (the field at the corner) are for measurement only (fine-relief prototype).
+// kind 'point' (the field at the corner, before the mean) is for checks that ask where the surface itself lies (repro/heights.gpu.test.mjs).
+// The box was chosen over a Gaussian of sigma 8 (owner, 2026-11-21).
 export const CORNER_FOOTPRINT={kind:'box',radius:8};
-export const footprintReach=(f=CORNER_FOOTPRINT) => f.kind==='point'?0:f.kind==='gauss'?Math.ceil(3*f.radius):f.radius;
+export const footprintReach=(f=CORNER_FOOTPRINT) => f.kind==='point'?0:f.radius;
 export const footprintApron=(f=CORNER_FOOTPRINT) => f.kind==='point'?0:footprintReach(f)+16;
 function footprintTaps(f) {
   if (f.kind==='point') return [[0,1]];
   const reach=footprintReach(f),taps=[];let sum=0;
-  for (let t=-reach;t<=reach;t++) { const w=f.kind==='gauss'?Math.exp(-t*t/(2*f.radius*f.radius)):(Math.abs(t)===reach?.5:1);taps.push([t,w]);sum+=w; }
+  for (let t=-reach;t<=reach;t++) { const w=Math.abs(t)===reach?.5:1;taps.push([t,w]);sum+=w; }
   return taps.map(([t,w]) => [t,w/sum]);
 }
 // One axis: the lattice weights of the taps about c px, on a read of n samples `step` px apart from world sample `origin`: {first, weights},
