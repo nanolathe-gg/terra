@@ -1,4 +1,4 @@
-"""The impact of one control (docs/TERRAIN_ENGINE.md, "Every kept control must matter"): the share
+"""The impact of one control (AGENTS.md rule 9, "Every kept control must visibly matter"): the share
 of a surface class that visibly changes between the control's minimum and its maximum, on Green's
 three windows.
 
