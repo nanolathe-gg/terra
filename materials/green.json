@@ -954,6 +954,7 @@
 
     "ridgestone": {
      "label": "Terraced greenstone",
+     "material": "green-passrock",
      "knobs": {
       "rockFace": 2, "stepCrease": 1, "moonFolds": 0,
       "faceRock": 1,
