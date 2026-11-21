@@ -1423,6 +1423,7 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
     if (talus > 0.0) { F[PH * cells + i] = clamp(base + talus, u.minH, u.maxH); talusGround(i, sm(0.0, 8.0, talus)); claimRock(i); }
     else { claimRockMargin(i, wx, wy, trunk, tShare, base, x, y, cells); }
     if (ej > 0.0) { F[PH * cells + i] = clamp(F[PH * cells + i] + ej, u.minH, u.maxH); }
+    if ((talus > 0.0 || ej > 0.0) && u.lfcForm == 0u) { clearReplacedSlab(i, cells, F[PH * cells + i] - base); }
     return;
   }
   // Shared shore features seed the actual sea crossings inside this shape, including cuts and joined paths.
@@ -1440,7 +1441,8 @@ fn stampLandform(@builtin(global_invocation_id) g: vec3u) {
   if (u.combine == 0u) { value = max(base, value); } else if (u.combine == 1u) { value = min(base, value); }
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
   if (ej > 0.0 || lipK < 1.0) { F[PH * cells + i] = clamp(select(value, base + (value - base) * lipK, value > base) + ej, u.minH, u.maxH); }
-  clearReplacedSlab(i, cells, F[PH * cells + i] - base);
+  // Columns and prisms can restore the ground below this temporary envelope.
+  if (u.lfcForm == 0u) { clearReplacedSlab(i, cells, F[PH * cells + i] - base); }
   // P28 point bar: its sand goes to the cover plane, as a Sand brush's does, and draws through the painted-sand path.
   if (pick.z > 0.0) { let vb = F[PV * cells + i]; F[PV * cells + i] = vb + (1.0 - vb) * pick.z; }
   // The braided bed (riverfix): its share also marks the bed plane (mask 19), where the draw lays the world's river-bed gravel over the sand, and BR_PEBBLES of
@@ -1952,6 +1954,7 @@ fn coastBeach(@builtin(global_invocation_id) g: vec3u) {
     result = sea + max(mix(rel, beach, strength), min(rel, 0.05));
   }
   F[PH * cells + i] = clamp(result, u.minH, u.maxH);
+  clearReplacedSlab(i, cells, F[PH * cells + i] - raw);
 }
 
 // ---- H10: shore plates (materials 1 slabs and 2 frost), after the coast field (coMoved 0, so every crossing the footprint touches seeds it) ----
@@ -2070,6 +2073,7 @@ fn coastPlates(@builtin(global_invocation_id) g: vec3u) {
     if (strip <= 0.05) { return; }
     let top = sea + u.plHeight * (0.6 + 0.4 * plHalf(index, pid, 0x7b3u));
     F[ph] = clamp(raw + (max(raw, top) - raw) * strip, u.minH, u.maxH);
+    clearReplacedSlab(i, cells, F[ph] - raw);
     F[pp] = max(F[pp], strip); F[pr] = max(F[pr], strip); F[pv] = min(F[pv], -strip);
     return;
   }
@@ -2086,11 +2090,13 @@ fn coastPlates(@builtin(global_invocation_id) g: vec3u) {
   if (holeShare > 0.0) { hole = sm(0.0, 0.1, vnoise(lx / gapSize, ly / gapSize, u.seed ^ 0x4e1u) * 0.5 + vnoise(lx / (gapSize * 0.41), ly / (gapSize * 0.41), u.seed ^ 0x5f3u) * 0.22 + 0.5 - (1.0 - holeShare)); }
   if (hole > 0.02) {
     F[ph] = clamp(raw + (min(raw, sea - u.frGapDepth) - raw) * hole, u.minH, u.maxH);
+    clearReplacedSlab(i, cells, F[ph] - raw);
     F[pp] = max(F[pp], hole); F[pr] = max(F[pr], hole); F[pv] = min(F[pv], -hole);
     return;
   }
   if (lift == 0.0) { return; }
   F[ph] = clamp(raw + lift, u.minH, u.maxH);
+  clearReplacedSlab(i, cells, F[ph] - raw);
   let keepM = max(strip, seam); F[pp] = max(F[pp], keepM); F[pr] = max(F[pr], keepM); F[pv] = min(F[pv], -keepM);
 }
 
@@ -2374,7 +2380,7 @@ fn lfCrystalRoom(@builtin(global_invocation_id) g: vec3u) {
 
 // Stepped columns: the envelope tiled with Voronoi columns (up to three widths); each top is the envelope at its seed, stepped up or down from its
 // neighbours, level (Level tops 100) or following the envelope's slope, tilted into one or two planes by Top tilt; the uncovered share stays the envelope.
-fn lfCrystalColumns(x: i32, y: i32, i: u32, cells: u32) {
+fn lfCrystalColumns(x: i32, y: i32, i: u32, cells: u32) -> f32 {
   let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
   let pc = lfCrystalCoord(vec2f(wx, wy)); let path = lfcPath(u32(pc.z)); let lx = pc.x; let ly = pc.y;
   let levels = i32(u.lfcLevels);
@@ -2399,12 +2405,12 @@ fn lfCrystalColumns(x: i32, y: i32, i: u32, cells: u32) {
       if (d < d1) { d2 = d1; d1 = d; bl = 0; bn = n; bi = ii; bj = j; } else if (d < d2) { d2 = d; }
     } }
   }
-  if (bn < 0) { return; }
+  if (bn < 0) { return -1.0; }
   let o = u32(bl) * 16u;
   let cp = lfcAt(bn, 0u, cells); let cw = cp.xy; let env = lfcAt(bn, 1u, cells);
-  if (env.y <= 1.0) { return; }
+  if (env.y <= 1.0) { return -1.0; }
   // The uncovered share (1 - Facets, the widest columns most) keeps the envelope's own smooth surface.
-  if (cgRnd(bi, bj, 12u + o) < u.cgSmooth * SZB[bl]) { return; }
+  if (cgRnd(bi, bj, 12u + o) < u.cgSmooth * SZB[bl]) { return -1.0; }
   var step = 0.0;
   if (!(cgRnd(bi, bj, 3u + o) < 0.4)) { step = (cgRnd(bi, bj, 4u + o) - 0.35) * 2.0 * u.cgStep * SZS[bl]; }
   let shade = 0.8 + 0.2 * cgRnd(bi, bj, 5u + o);
@@ -2420,11 +2426,9 @@ fn lfCrystalColumns(x: i32, y: i32, i: u32, cells: u32) {
   }
   let base = Sc[CB * cells + i];
   let value = lfCrystalCombine(base, top);
-  if (abs(value - base) <= 0.5) { F[PH * cells + i] = base; return; }
+  if (abs(value - base) <= 0.5) { F[PH * cells + i] = base; return -1.0; }
   F[PH * cells + i] = clamp(value, u.minH, u.maxH);
-  // Surface Crystal: each column is crystal, shaded by its own brightness, with a dark seam to its neighbours; Rock keeps the shape's own ground.
-  if (u.fcSurface == 0u) { return; }
-  F[PP * cells + i] = 1.0; F[PX * cells + i] = select(shade, 0.5, d2 - d1 < max(1.2, u.spacing * 0.6));
+  return select(shade, 0.5, d2 - d1 < max(1.2, u.spacing * 0.6));
 }
 
 // Prisms: scattered over the envelope (lfcPrismSeed), a Facets share of the seeds carries a polygonal prism (Polygon sides, turned square to the path by Align,
@@ -2432,7 +2436,7 @@ fn lfCrystalColumns(x: i32, y: i32, i: u32, cells: u32) {
 // level or, with Level tops below 100, tilted as the envelope's slope across the prism. Between prisms the ground is the prefix. Face roughness roughens the
 // faces; Surface Crystal marks each prism as clean crystal (the crystal field), Rock leaves it the shape's own ground, lit with the world's slope relief and
 // light (ice blocks).
-fn lfCrystalPrisms(x: i32, y: i32, i: u32, cells: u32) {
+fn lfCrystalPrisms(x: i32, y: i32, i: u32, cells: u32) -> f32 {
   let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing; let here = vec2f(wx, wy);
   let pc = lfCrystalCoord(here); let path = lfcPath(u32(pc.z));
   let rowH = 0.8660254 * u.lfcSpace; let cj = i32(round(pc.y / rowH));
@@ -2476,15 +2480,13 @@ fn lfCrystalPrisms(x: i32, y: i32, i: u32, cells: u32) {
       best = max(best, h);
     }
   }
-  if (best <= 0.0) { F[PH * cells + i] = base; return; }
+  if (best <= 0.0) { F[PH * cells + i] = base; return -1.0; }
   if (u.bgRough > 0.0) {
     let f = vnoise(wx / 40.0, wy / 40.0, u.seed ^ 0x2a1u) * 0.3 + vnoise(wx / 17.0, wy / 17.0, u.seed ^ 0x4c7u) * 0.3 + vnoise(wx / 8.0, wy / 8.0, u.seed ^ 0x6e3u) * 0.28 + vnoise(wx / 4.0, wy / 4.0, u.seed ^ 0x8f9u) * 0.18;
     best = best + u.bgRough * f * sm(0.0, 4.0, best);
   }
   F[PH * cells + i] = clamp(lfCrystalCombine(base, base + best), u.minH, u.maxH);
-  if (u.fcSurface == 0u) { return; }
-  F[PP * cells + i] = 1.0;
-  F[PX * cells + i] = max(F[PX * cells + i], sm(0.2, 1.5, best));
+  return sm(0.2, 1.5, best);
 }
 
 @compute @workgroup_size(8, 8)
@@ -2492,5 +2494,13 @@ fn lfCrystalApply(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
   if (x > u.rx1 || y > u.ry1) { return; }
   let cells = cCells(); let i = cIdx(x, y);
-  if (u.lfcForm == 1u) { lfCrystalColumns(x, y, i, cells); } else { lfCrystalPrisms(x, y, i, cells); }
+  let column = u.lfcForm == 1u;
+  var mark = 0.0;
+  if (column) { mark = lfCrystalColumns(x, y, i, cells); } else { mark = lfCrystalPrisms(x, y, i, cells); }
+  clearReplacedSlab(i, cells, F[PH * cells + i] - Sc[CB * cells + i]);
+  if (u.fcSurface != 0u && mark >= 0.0) {
+    F[PP * cells + i] = 1.0;
+    let px = PX * cells + i;
+    F[px] = select(max(F[px], mark), mark, column);
+  }
 }

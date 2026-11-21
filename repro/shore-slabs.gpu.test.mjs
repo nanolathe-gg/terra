@@ -90,3 +90,57 @@ test('at the same depth, the packed color pass shows the bed only at physical sl
     s.dispose();
   }
 });
+
+test('later shapes relinquish slab coverage only where they replace its surface', async t => {
+  const slab = shore({plateHeight: 70, plateSteps: 3});
+  const path = [[135, 151], [375, 151]];
+  const prisms = ['landform', path, {card: {
+    diameter: 120, heightReference: 1, combine: 0, elevation: 18, roughness: 0,
+    shorePlates: 0, iceFacets: 65, facetForm: 2, facetSurface: 1, iceFacetSize: 30,
+    wander: 0, widthVary: 0, heightVary: 0,
+  }}];
+  const frost = shore({plateMaterial: 2, plateHeight: 65, frostNeedles: 80, combine: 0});
+  const s = await open([slab]);
+  try {
+    const rect = {x0: 0, y0: 0, x1: s.worldGrid - 1, y1: s.worldGrid - 1};
+    const fields = async () => {
+      await s.fields.ready();
+      return s.fields.readCells(rect).fields;
+    };
+    const before = await fields();
+    s.play([slab, prisms], {ground: false});
+    const after = await fields();
+    let replaced = 0;
+    let gaps = 0;
+    for (let i = 0; i < before.h.length; i++) {
+      if (before.shoreSlab[i] !== 127) continue;
+      if (Math.abs(after.h[i] - before.h[i]) >= 1) {
+        assert.equal(after.shoreSlab[i], 0);
+        replaced++;
+      } else if (after.h[i] === before.h[i] && (i % s.worldGrid) * s.spacing > 135
+          && (i % s.worldGrid) * s.spacing < 375 && Math.abs(Math.floor(i / s.worldGrid) * s.spacing - 151) < 28) {
+        assert.equal(after.shoreSlab[i], 127);
+        assert.equal(after.x[i], before.x[i]);
+        gaps++;
+      }
+    }
+    assert.ok(replaced > 20 && gaps > 20, `${replaced} replaced cells and ${gaps} intact prism gaps`);
+
+    s.play([slab, shore({...frost[2].card, shorePlates: 0})], {ground: false});
+    const preFrost = await fields();
+    s.play([slab, frost], {ground: false});
+    const ice = await fields();
+    let wetReplacements = 0;
+    for (let i = 0; i < before.h.length; i++) {
+      if (preFrost.shoreSlab[i] !== 127 || ice.h[i] >= 65 || ice.h[i] - preFrost.h[i] < 1) continue;
+      assert.equal(ice.shoreSlab[i], 0);
+      assert.equal(ice.x[i], 0);
+      wetReplacements++;
+    }
+    assert.ok(wetReplacements > 20, `${wetReplacements} replaced slab cells remain underwater`);
+    t.diagnostic(`${replaced} prism replacements, ${gaps} intact gaps, ${wetReplacements} submerged Frost replacements`);
+    assert.deepEqual(s.errors, []);
+  } finally {
+    s.dispose();
+  }
+});
