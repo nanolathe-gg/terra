@@ -1013,7 +1013,7 @@ struct FineSite { on: bool, strength: f32, pits: f32, q: vec2f, g: vec2f, frameA
 const FINE_FRAMES = array<vec2f, 8>(vec2f(1.0, 0.0), vec2f(2.0, 1.0), vec2f(1.0, 1.0), vec2f(1.0, 2.0), vec2f(0.0, 1.0), vec2f(-1.0, 2.0), vec2f(-1.0, 1.0), vec2f(-2.0, 1.0));
 const FINE_ANGLES = array<f32, 9>(0.0, 0.4636476, 0.7853982, 1.1071487, 1.5707964, 2.0344439, 2.3561945, 2.6779451, 3.1415927);
 const FINE_STRETCH = 3.0;   // a fully grained octave's cells are 1 + FINE_STRETCH times longer along the grain
-const FINE_PIT_CELL = 6.0;  // px: at most one pit a cell
+const FINE_PIT_CELL = 7.0;  // px: at most one pit a cell
 const FINE_PIT_DEPTH = 3.0; // height units at full strength
 fn fineOn() -> bool { return u.fineRelief > 0.0 || u.fineLevel > 0.0 || u.finePits > 0.0; }
 fn fineSite(p: vec2f) -> FineSite {
@@ -1092,7 +1092,7 @@ fn fineOctaves(s: FineSite, q: vec2f, bake: bool) -> f32 {
     }
     return total * s.strength;
 }
-// Pits: at most one a 6 px cell (pool lattice), a dimple of radius 0.8-1.8 px and FINE_PIT_DEPTH deep, in a cell's share of finePits.
+// Pits: at most one a 7 px cell (pool lattice), a dimple of radius 1-2.1 px and FINE_PIT_DEPTH deep, in a cell's share of finePits.
 fn finePitsAt(s: FineSite, q: vec2f) -> f32 {
     let n = poolCells(FINE_PIT_CELL);
     let t = poolPos(q) * (n / u.pool);
@@ -1101,7 +1101,7 @@ fn finePitsAt(s: FineSite, q: vec2f) -> f32 {
     let hsh2 = cellHash(poolWrap(c, n) + vec2f(11.0, 91.0));
     if (hsh2.x >= s.pits) { return 0.0; }
     let cellPx = u.pool / n;
-    let radius = (0.8 + hsh2.y) / cellPx;   // in cells (the centre keeps 0.3 of a cell from its edges)
+    let radius = (1.0 + 1.1 * hsh2.y) / cellPx;   // in cells (the centre keeps 0.3 of a cell, 2.1 px, from its edges)
     let center = c + 0.3 + 0.4 * hsh;
     let d = length(t - center) / radius;
     let k = max(1.0 - d * d, 0.0);
