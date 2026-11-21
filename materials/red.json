@@ -982,7 +982,7 @@
     "knobDefaults": {
         "fineRelief": 2,
         "fineSize": 8,
-        "fineGrain": 0.25,
+        "fineGrain": 0,
         "shoreRock": 96,
         "shoreShelf": 96,
         "undulationScale": 80,
