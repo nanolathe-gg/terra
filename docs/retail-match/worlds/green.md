@@ -96,7 +96,7 @@ These notes are by eye, from the base crops in
 
 ## Start here (round 17)
 
-Round 16 (branch `match-green-17`, 90 of 300 trials; report in its final
+Round 16 (branch `match-green-17`, 95 of 300 trials; report in its final
 message, notes and evidence pictures in
 `$R/match/terraform-wt-match-green-17/green/NOTES.md` and `evidence/`).
 Measured, trial-090 against trial-000: mean shape .104 (unchanged), look
@@ -134,13 +134,18 @@ Leads:
    and the missing pure-black shadows (retail 8% at 0,0,0) point at the
    light, which is the owner's.
 2. **Palette:** retail's grass dithers 168 (36%) with 72 (21%); ours draws
-   169 (13%) that retail barely uses, because the output stage re-dithers the
-   lit color over the whole art palette (engine-output.wgsl), so a
-   material's palette list does not pick output indices (trial-037).
+   169 (13%) that retail barely uses. A material is reduced to its own list
+   before the light (engine-common.wgsl), but the lit color is dithered again
+   over the whole art palette (engine-output.wgsl), and 169 appears there:
+   dropping it from the grass lists left its share at 12.5% (trial-037),
+   while round 15's dropping 165 did move the brightest flat pixel.
 3. **Green-2's slope:** the soil terraces (faceLayers) make the 8 px lumps
    and also break the contour lines; without them the lines run 3x retail
    (trial-049), and banding low enough to lighten them removes them
-   (trial-084).
+   (trial-084). The world's line darkness .45 (`world.column.bands`) with
+   divide faceLayers 0 draws a closer hatch without lumps (trial-092,
+   slope:band8 cleared), but the darkness is the world's and costs green-5
+   .078 to .091 (trial-091): a rock type cannot set it.
 4. **Green-5 step lines** and **green-6's shadowed faces** still wait on the
    engine (round 15's notes; a convexity layer draws blobs, not lines:
    trial-032).
