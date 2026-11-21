@@ -64,6 +64,73 @@ export function gateValues(gates, view, slots = [0], groundSlots = [0]) {
 }
 export const gateKey = (values, order) => { let key = ''; for (const id of order) key += values[id] ? '1' : '0'; return key; };
 
+// WGSL with its comments blanked (newlines kept, so positions keep their line).
+const uncomment=source=>{
+  let out='',depth=0,line=false;
+  for(let i=0;i<source.length;i++){
+    const a=source[i],b=source[i+1];
+    if(line){if(a==='\n'){line=false;out+='\n';}continue;}
+    if(depth){if(a==='/'&&b==='*'){depth++;i++;}else if(a==='*'&&b==='/'){depth--;i++;}else if(a==='\n')out+='\n';continue;}
+    if(a==='/'&&b==='*'){depth=1;out+=' ';i++;}else if(a==='/'&&b==='/'){line=true;out+=' ';i++;}else out+=a;
+  }
+  if(depth)throw Error('Unclosed WGSL comment in stage scan');
+  return out;
+};
+
+// The overrides an entry point reaches. Safari 26 (WebKit) fails a pipeline whose `constants` name an override its entry point never
+// reaches ("Compute library failed creation"), though WebGPU accepts any override the module declares and Chrome and Firefox do; measured
+// 2026-11-21: voxelDispatch built with {} and failed with {rockMask: 0}. So every pipeline is given only what its entry point reaches
+// (entryConstants). Reached: the functions it calls, transitively, with their attributes (an override can size a workgroup), and the
+// module-scope var, const, override and alias declarations those name. A member (`u.lavaCrust`) is not the function lavaCrust, and a struct's
+// body names only fields and types. Too few would leave an override at its default where Chrome used the value given, unseen; too many
+// fails visibly in Safari. So the scan errs toward more: a name that matches any function or declaration counts.
+const overrideScans=new Map();
+function overrideScan(source){
+  let scan=overrideScans.get(source);
+  if(scan)return scan;
+  const text=uncomment(source),functions=new Map(),declarations=new Map(),pattern=/(?:@\w+\s*(?:\([^)]*\))?\s*)*\bfn\s+(\w+)\s*\(/g;
+  let outside='',last=0,match;
+  while((match=pattern.exec(text))){
+    const start=text.indexOf('{',pattern.lastIndex);
+    if(start<0)throw Error('Missing WGSL function body: '+match[1]);
+    let end=start+1,depth=1;
+    for(;end<text.length&&depth;end++){if(text[end]==='{')depth++;else if(text[end]==='}')depth--;}
+    functions.set(match[1],text.slice(match.index,end));
+    outside+=text.slice(last,match.index)+'\n';last=end;pattern.lastIndex=end;
+  }
+  outside+=text.slice(last);
+  for(const d of outside.matchAll(/\b(?:override|const|alias|var(?:\s*<[^>]*>)?)\s+(\w+)[^;]*;/g))declarations.set(d[1],d[0]);
+  const overrides=new Set([...outside.matchAll(/\boverride\s+(\w+)/g)].map(d=>d[1]));
+  scan={functions,declarations,overrides,entries:new Map()};
+  if(overrideScans.size>=16)overrideScans.delete(overrideScans.keys().next().value);
+  overrideScans.set(source,scan);
+  return scan;
+}
+export function entryOverrides(source,entryPoint){
+  const scan=overrideScan(source);
+  let used=scan.entries.get(entryPoint);
+  if(used)return used;
+  if(!scan.functions.has(entryPoint))throw Error('Missing WGSL entry point '+entryPoint);
+  used=new Set();
+  const seen=new Set(),todo=[entryPoint];
+  while(todo.length){
+    const name=todo.pop();
+    if(seen.has(name))continue;seen.add(name);
+    const text=scan.functions.get(name)??scan.declarations.get(name);
+    for(const [id] of text.matchAll(/(?<!\.\s*)\b[A-Za-z_]\w*\b/g)){
+      if(scan.overrides.has(id))used.add(id);
+      if(!seen.has(id)&&(scan.functions.has(id)||scan.declarations.has(id)))todo.push(id);
+    }
+  }
+  scan.entries.set(entryPoint,used);
+  return used;
+}
+// `constants` less the overrides `entryPoint` of `source` does not reach (entryOverrides).
+export function entryConstants(source,entryPoint,constants){
+  const used=entryOverrides(source,entryPoint);
+  return Object.fromEntries(Object.entries(constants).filter(([id])=>used.has(id)));
+}
+
 // The earliest shader stage that can read each uniform. Walk the actual
 // preprocessed WGSL call graph; a static read stays a dependency behind a gate.
 // Modules supply their entry stage, with explicit roots for fragment geometry.
@@ -73,17 +140,6 @@ export const gateKey = (values, order) => { let key = ''; for (const id of order
 const GATED_TABLE_READS={plantMask:'plantsOn'};
 export function uniformStages(modules) {
   const result=new Map(),order='ABCDEF';let coverRow=null;
-  const uncomment=source=>{
-    let out='',depth=0,line=false;
-    for(let i=0;i<source.length;i++){
-      const a=source[i],b=source[i+1];
-      if(line){if(a==='\n'){line=false;out+='\n';}continue;}
-      if(depth){if(a==='/'&&b==='*'){depth++;i++;}else if(a==='*'&&b==='/'){depth--;i++;}else if(a==='\n')out+='\n';continue;}
-      if(a==='/'&&b==='*'){depth=1;out+=' ';i++;}else if(a==='/'&&b==='/'){line=true;out+=' ';i++;}else out+=a;
-    }
-    if(depth)throw Error('Unclosed WGSL comment in stage scan');
-    return out;
-  };
   for(const {source,stage,roots} of modules){
     if(!order.includes(stage)||stage.length!==1)throw Error('Unknown shader stage '+stage);
     const text=uncomment(source),functions=new Map(),pattern=/\bfn\s+(\w+)\s*\(/g;
