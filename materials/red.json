@@ -980,6 +980,9 @@
     "surface": [{"name": "Highland ground", "builtin": "highland"}, {"name": "Slope cover", "builtin": "slopeCover"}, {"name": "Bare soil", "builtin": "soil", "material": "@soil"}, {"name": "Rock", "builtin": "rock"}, {"id": "drybank", "name": "Dry bank by the water", "material": "red-plain", "stage": "land", "where": [{"fact": "toWater", "to": 20, "fade": 10}, {"fact": "aboveSea", "from": 0, "fade": 1}], "amount": 0.8, "edge": {"width": 0.3, "noise": 0.6, "noiseSize": 6}}, {"name": "Beach", "builtin": "beach"}, {"name": "Crown rock", "builtin": "crown"}, {"name": "Base band", "builtin": "baseBand", "material": "@band"}, {"name": "Moss on regrown debris", "builtin": "regrownMoss", "material": "@moss"}, {"name": "Debris fines", "builtin": "fines"}, {"name": "Painted rock", "builtin": "paintedRock"}, {"name": "Painted snow", "builtin": "paintedSnow", "material": "@snow"}, {"name": "Painted moss", "builtin": "paintedMoss", "material": "@moss"}, {"name": "Sand dust", "builtin": "sandDust", "material": "@sand"}, {"name": "Sand", "builtin": "sand", "material": "@sand"}, {"name": "Chips", "builtin": "chips"}, {"name": "Snow on ice crests", "builtin": "iceCrest", "material": "@snow"}, {"name": "Snow on ice tops", "builtin": "iceCap", "material": "@snow"}],
     "materials": {"ground": "red-plain", "water": "red-water", "rock": "red-bank", "slope": "red-slope", "debris": "red-debris", "extra": ["red-rough", "red-crumple"], "soil": "red-soil", "snow": "red-snow", "moss": "red-moss", "sand": "red-sand", "band": "red-band", "crystal": "crystals"},
     "knobDefaults": {
+        "fineRelief": 2,
+        "fineSize": 8,
+        "fineGrain": 0.25,
         "shoreRock": 96,
         "shoreShelf": 96,
         "undulationScale": 80,
