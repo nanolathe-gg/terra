@@ -371,18 +371,15 @@
   "seed": 0,
   "nodes": [
    {"id":"step-1","type":"warp","kind":"turbulence","name":"Pattern distortion","params":{"amount":1,"size":4,"layers":0,"axis":0,"seed":0},"in":{"in":null},"x":0,"y":38},
-   {"id":"step-2-pattern","type":"noise","kind":"waves","name":"Mottling / streaks","params":{"size":1.9,"detail":0.35,"layers":0,"seed":0,"length":3.5,"direction":45,"crests":0.9},"in":{"in":"step-1"},"x":236,"y":38},
-   {"id":"step-2-broad","type":"noise","kind":"smooth","name":"Broad variation","params":{"size":16,"detail":0,"layers":0,"seed":12},"in":{"in":null},"x":236,"y":188},
-   {"id":"step-2","type":"combine","kind":"mix","name":"Mottling / streaks","params":{"amount":0,"offset":0},"in":{"a":"step-2-pattern","b":"step-2-broad","mask":null},"x":472,"y":113},
-   {"id":"step-3","type":"noise","kind":"smooth","name":"Fine grain","params":{"size":1.1,"detail":0,"layers":0,"seed":1},"in":{"in":null},"x":708,"y":-37},
-   {"id":"step-4","type":"levels","name":"Pattern levels","params":{"low":0.15,"high":0.95,"gamma":1.8,"invert":0},"in":{"in":"step-2"},"x":708,"y":113},
-   {"id":"step-5","type":"gradient","name":"Pattern colors","params":{"ease":1},"in":{"in":"step-4"},"stops":[[0,0.1,0.3,0.47],[0.6,0.12,0.33,0.5],[1,0.29,0.52,0.7]],"x":944,"y":113},
-   {"id":"step-6","type":"gradient","name":"Grain colors","params":{"ease":0},"in":{"in":"step-3"},"stops":[[0,0.8,0.85,0.9],[1,1.2,1.15,1.1]],"x":944,"y":-37},
-   {"id":"step-7","type":"combine","kind":"multiply","name":"Multiply grain","params":{"amount":1,"offset":0},"in":{"a":"step-5","b":"step-6","mask":null},"x":1180,"y":38},
-   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"step-7","height":null,"shine":null},"x":1416,"y":38}
+   {"id":"step-2-pattern","type":"noise","kind":"waves","name":"Mottling / streaks","params":{"size":1.9,"detail":0.39,"layers":0,"seed":0,"length":2.55,"direction":45,"crests":0.26},"in":{"in":"step-1"},"x":236,"y":38},
+   {"id":"ripples-patches","type":"noise","kind":"smooth","name":"Loose patches of flecks","params":{"size":24,"detail":0.14,"layers":1,"seed":173},"x":235,"y":186},
+   {"id":"ripples-density","type":"combine","kind":"add","name":"Gather the ripples into patches","params":{"amount":0.29,"offset":0.5},"in":{"a":"step-2-pattern","b":"ripples-patches"},"x":472,"y":38},
+   {"id":"step-4","type":"levels","name":"Pattern levels","params":{"low":0.12,"high":0.88,"gamma":1.62,"invert":0},"in":{"in":"ripples-density"},"x":708,"y":38},
+   {"id":"step-5","type":"gradient","name":"Pattern colors","params":{"ease":1},"in":{"in":"step-4"},"stops":[[0,0.10588,0.29412,0.46667],[0.52,0.10588,0.29412,0.46667],[0.7,0.18431,0.41961,0.59216],[0.86,0.18431,0.41961,0.59216],[1,0.24706,0.48235,0.63922]],"x":944,"y":38},
+   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"step-5","height":null,"shine":null},"x":1180,"y":38}
   ],
   "controls": [{"label":"Water colors","node":"step-5","param":"stops"}],
-  "palette": [137,138,135,136,134,133,139,140],
+  "palette": [137,135,134],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
  "moon-ground": {
