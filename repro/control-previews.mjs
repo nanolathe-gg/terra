@@ -37,8 +37,9 @@ const shineBase = {shineGround: 1, shineGroundRough: .7, shineSlope: 1, shineSlo
 
 // Each setting varies once while the fixture and the other settings stay fixed.
 // The prerequisites bring the relevant terrain and material into view.
-function worldExample(group, key) {
-  if (key === 'beachWidth' || key === 'apron') return {world: 'zhon', strokes: key === 'apron' ? [wall] : [coast], base: {rockFace: 0, shoreRock: 0, shoreShelf: 0}};
+const beachControls = new Set(['beachWidth', 'apron']);
+function worldExample(group, key, beachWorld) {
+  if (beachControls.has(key)) return {world: beachWorld, strokes: key === 'apron' ? [wall] : [coast], base: {rockFace: 0, shoreRock: 0, shoreShelf: 0}};
   if (key === 'bankRock') return {world: 'green', strokes: [coastHeight], base: {erosion: 0, faceRock: .9, rockFaceFrom: 2, shoreRock: 0, shoreShelf: 0, coastRamp: 1}};
   if (group === 'Water' || group === 'Water detail')
     return {world: key === 'waterSoft' ? 'archipelago' : 'green', strokes: [coast], base: {...waterBase, deepEdge: Number(group === 'Water detail' && key !== 'shoalShoreSoft')}};
@@ -111,10 +112,12 @@ const basicShapes = [
   ['roughness','roughness','Roughness',['erase'],0,100,1,100],
   ['softness','softness','Softness',['paint'],0,100,1,100],
 ];
-const worldExamples = KNOBS.flatMap(([group, rows]) => rows.map(([key, label, lo, hi, step]) => ({
-  id: 'knob-' + key, kind: 'world', key, ...worldExample(group, key),
-  frames: frames(key, label, lo, hi, step, WORLD_CHOICES[key]),
-})));
+const worldExamples = beachWorld => KNOBS.flatMap(([group, rows]) => rows
+  .filter(([key]) => beachWorld || !beachControls.has(key))
+  .map(([key, label, lo, hi, step]) => ({
+    id: 'knob-' + key, kind: 'world', key, ...worldExample(group, key, beachWorld),
+    frames: frames(key, label, lo, hi, step, WORLD_CHOICES[key]),
+  })));
 const shapeExamples = [...SHAPE_FIELDS, ...basicShapes]
   .filter(([, id]) => !Object.hasOwn(HELP_CONTROLS, id))
   .map(([key, id, label, [kind], lo, hi, step, scale, , choices]) => ({
@@ -144,7 +147,9 @@ function downsample(pixels) {
 
 export async function renderControlPreviews(write) {
   await openHost();
-  const examples = [...worldExamples, ...shapeExamples, ...surfaceExamples, ...colorExamples];
+  const {beachSources} = await (await fetch('config/green.json')).json();
+  const [beachWorld] = Object.keys(beachSources);
+  const examples = [...worldExamples(beachWorld), ...shapeExamples, ...surfaceExamples, ...colorExamples];
   const info = {};
   const worlds = Map.groupBy(examples, e => e.world);
   for (const [world, group] of worlds) {

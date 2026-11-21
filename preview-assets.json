@@ -1,10 +1,10 @@
 {
   "version": 1,
   "repository": "nanolathe-gg/terraform",
-  "tag": "previews-e1b34b0685514e99",
+  "tag": "previews-8d97611207ed19cc",
   "asset": "ui-previews.tar.gz",
-  "sha256": "e1b34b0685514e992c0a924cc3197b8be5ad1fba2867edfb0f1b9dc86ed8d8a5",
-  "inputsSHA256": "75d0ceef6377b977e638c181719f9a9d5acd78e0bb29c92985486c491605ac17",
+  "sha256": "8d97611207ed19cc91bf166f5f7be4f9b578433bddeb532869e0c439a9127369",
+  "inputsSHA256": "d047d171c73f6bf71c1ea444309b0ad31a5cc355fc25a67c3da4c25cc254a9c2",
   "files": {
     "amount.png": "6524b714c9d50250f1dae18ea2ecd34b084ad39bce20a9d77089629f20429dee",
     "berg-break.png": "36f7192ec28f1942a3693d8419778ba9b4b57a945bf8c6b26ec1e0437f4b9183",
@@ -47,7 +47,6 @@
     "ice-facets.png": "b4427623f33001eaf812aea15e0a6f1c4e6f2b5d0769db96cf04b85409e37d3b",
     "knob-absorbDepth.png": "42969eeb620fbc0be9e6b2da66915b244288becb6a55e9c4d30012e55137427a",
     "knob-ambient.png": "842c2f704dc4818138bca7ecacfb1ff3f020a1f9d3a812bdd1757d7e58cb4163",
-    "knob-apron.png": "54904d9781e728f771e6eedf1ed28fbbafa7423dc71ce631725ed0c86e3c1c9c",
     "knob-bandFill.png": "e51955d41c285c0d20a64a0e50047e17a65b1e181be13cce220292b72acf80a0",
     "knob-bandLevel.png": "060003afe0942980cf8d20ba0afdd4b00f569598b3c87cffba5fd358a289cadf",
     "knob-bandSoftness.png": "391be3d6e63d896dca3fb821816bec345a73b6bbcd16f0622efdc36bdd67ffd3",
@@ -58,7 +57,6 @@
     "knob-baseBandHigh.png": "9a0af64d76989dcd07b8c8dde85814902466afa083e6b56871b4cd16232adf9b",
     "knob-baseBandLow.png": "ab0d8b161f4424829c342b28766f1c6ac0afc8a3d6c891f45f1a5b55d8fd4dc6",
     "knob-baseBandWander.png": "0cb9290a3a51d631cf2c74c0b57098df8d7bbcfd7c9db67ca404a9351cd6aa9b",
-    "knob-beachWidth.png": "19b2cb335ebaef8b0d1bbca433ba8482312b7dc4e1cd0e2eb9d79b7b9ca8793b",
     "knob-bedBright.png": "cae488c41229b0b70bc74f9a77ed2ebb7c5484aa567d573693febbb205d3566b",
     "knob-bedContrast.png": "bc501aa22d2f24555c67d199784ff58a99fe98bd33607b2157217e35b5b48f1f",
     "knob-bedCrackSize.png": "0d1aa4f8b70ce3deda246dfcbd69a84d2d6507f2912993ad7c4c9269e44a6353",
@@ -308,7 +306,7 @@
     "lf-wall-vary.png": "4d12bd8700d1a5655a84ecec63cd0e61f5cb82cee9fb714d2e6d142e9ebc893d",
     "lf-wander.png": "590d7058f896bee72dee6a2c679267cc580bea0a83aa55adf3760d5f91466999",
     "lf-width-vary.png": "285b74c57791a205e039754fb3bffa3533c2cd653b4ef3b8dcda1242d4d80d5c",
-    "manifest.json": "7ad92fff479b32c98bf4fb82d0f4005a8126ada3ea36e84b532556698bc63cbe",
+    "manifest.json": "f9858a4f43d870d7805397c33e7b572bdb0f3928e15b52c188472f333ea7fea2",
     "material-weathering.png": "21773d3fd61dc3a22d925a74fd2465277d21bfc39714d42b55115444439c0341",
     "paint-channel.png": "576356330ea646a91234296236476af637547208703123aaa3de1aae034c925c",
     "plate-gap.png": "1617180bc7321fcc1683a0a4380eff688e7560969d9352e19e0c8bced8f2c679",
@@ -319,7 +317,7 @@
     "plate-vary.png": "0c94118a0a2c59630a827090fd48cd98dc5ef7e992a2aca71d3ada1a67245a8e",
     "plate-water-px.png": "bd734b617ab056dc70d49e104f38686adfa77644655407615348252305fd29f0",
     "relief.png": "b8953f9ac4360edd5ef64888837540f0a097741257e54d84af29c07281e9b434",
-    "rendered.json": "b3ff96f1625285b53109a1fe7a697cb7c17372841c27c3c101043892f5ce2687",
+    "rendered.json": "54e1b0617e7ad96a9467292f50710246a4347b809315ea01997680e3e1819db1",
     "rim-gap-depth.png": "db7039438edc6b79150c28be794a07d675d6d1c2963b25f0d4b288dfae510538",
     "rim-gap-width.png": "857630377f1c6421b7791b534f2a4a2dab2222a6c81dc1f5c55388339d0017e4",
     "rim-gaps.png": "4977f48b55adb7fcfee2c0fa4278532671d9777ceaa946203c6143507d844c47",
@@ -371,7 +369,6 @@
     "world-lava.png": "91af53b8012e8fd017a24628cf9b45e51dd1cd1dce4230a4066975ad5b00fceb",
     "world-lush.png": "fc981fcbc35a1e8da128e4570853723e7af8137d22742356aee0bea6d8befae0",
     "world-moon.png": "b7a538590d527b23e937e713e0532826efc9c660b747df5590644b4ddebf68bd",
-    "world-red.png": "3453e91a2a63b849a5a2bf243fd79ffaed04112054e9667473d0ef80bd58ac91",
-    "world-zhon.png": "986c596d3eb7c09591b182e02dc17ac87a93736355282edc3def460cd3f92e1b"
+    "world-red.png": "3453e91a2a63b849a5a2bf243fd79ffaed04112054e9667473d0ef80bd58ac91"
   }
 }

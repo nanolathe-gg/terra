@@ -85,6 +85,7 @@ def world_base(world):
 
 
 WORLD_BASE = {w: world_base(w) for w in WORLD_ORDER}
+WORLD_BASE['zhon'] = 8  # Dry base for existing results from the archived scenes.
 ZHON_SEA = 59.0  # the sea of the Zhon section crops (crop.json of zhon-1..3)
 SAMPLE = 1024
 SLOPE_BINS = [0.0, .03, .08, .15, .3, .5, 1.0, 2.0, np.inf]

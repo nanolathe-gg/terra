@@ -721,7 +721,7 @@ fn iceFrostLines(pixel: vec2f, keep: f32) -> f32 {
     return line * mix(0.45, 1.0, rs.w) * step(id.x, keep) * step(0.25, rs.z) * step(0.35, fract(run));
 }
 
-// The beach (Zhon, the one world with the beach layer): sand where the bake found water within reach (beachField), sand bars painted to their crown
+// The beach is sand where the bake found water within reach (beachField), with sand bars painted to their crown
 // (the baked alpha, negative) and the beach's own colour. Beach sand is a shore material, so every read of the baked beach comes through here.
 fn beachColour(pixel: vec2f) -> vec3f { return roleColor(u.beachGround, u.slopeGround, pixel); }
 fn beachMean() -> vec3f { return roleMean(u.beachGround, u.slopeGround); }
@@ -1630,7 +1630,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         slopeCover *= 1.0 - route * (1.0 - u.rampMaterial);
         // The sampled slope texture carries baked shading that reads as
         // smudges on gentle ground; the fall-line surface lights grass itself.
-        // A sandy slope's streaks are the world's look (Zhon dune slopes),
+        // A sandy slope's streaks are the world's look,
         // not baked shading, so they keep full strength.
         if (u.slopeSand == 0) { slopeCover *= u.slopeTexture; }
         if (u.slopeSand != 0) { slopeCover *= max(smoothstep(0.15, 0.6, beachField(p) + max(bakedFields(p).a, 0.0)), route); }
@@ -1719,8 +1719,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     surfMask = array<f32, 7>();
     let crowned = u.rock[rs & rockMask].rockCrown > 0.0;
     if (crowned) {
-        // Some worlds' raised ground is bare rock to its crown (Zhon's
-        // domes), not only where it is steep.
+        // Crown rock covers the raised ground up to its top, including gentle slopes.
         surfSrc[0] = rock; surfMask[0] = smoothstep(u.base + 5.0, u.base + 14.0, baseHeight(p) + (n.g - 0.5) * 6.0) * u.rock[rs & rockMask].rockCrown * (1.0 - route) * (1.0 - sandBar);
     }
     surfaceStage(3u, &material, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);   // stage 3: crown rock

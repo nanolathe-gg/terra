@@ -22,7 +22,7 @@ writeFileSync(refFile,reference.replace("'./sculpt-gpu-fields.js'",JSON.stringif
 const {GpuErosion:Reference}=await import(pathToFileURL(refFile));unlinkSync(refFile);
 const hash=buffer=>createHash('sha256').update(new Uint8Array(buffer)).digest('hex');
 const results=[];
-for(const name of ['green-modern-2','red-3','desert-2','lava-2','ice-2','crystal-2','moon-2','archipelago-2','zhon-2']){
+for(const name of ['green-modern-2','red-3','desert-2','lava-2','ice-2','crystal-2','moon-2','archipelago-2']){
  const scene=JSON.parse(readFileSync(join(REPO,'repro/scenes',name+'.json')));
  const s=await openScene(scene,`biome=${scene.biome}&mapX=4&mapY=4&gpuMB=512&heapMB=1536${scene.query?'&'+scene.query:''}`);
  try{

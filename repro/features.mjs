@@ -113,8 +113,8 @@ try {
   assert.equal(loaded.n, 4); assert.match(loaded.status, /1 saved feature does not fit this world or map and was left out/); report.unfit = loaded.status;
   report.select = 'select, drag, metal, re-roll, Shift-add, Delete, refused overlap';
   // Every world places every kind: a kind its table lacks is Green's (the Go config generator), lit by the world's own sun. Moon has rocks of its
-  // own and Green's trees, shrubs and scars; Zhon has no table and takes all four.
-  for (const world of ['moon', 'zhon']) {
+  // own and Green's trees, shrubs and scars. Archipelago also takes Green's rocks.
+  for (const world of ['moon', 'archipelago']) {
     await send('Page.navigate', {url: `${server}/?biome=${world}&mapX=4&mapY=4&scratch=features-test-${world}&gpuMB=512&heapMB=1536`}); await ready();
     await press('#feature-tool');
     assert.equal(await ev('document.getElementById("feature-kind-note").textContent'), '');
@@ -123,7 +123,7 @@ try {
     assert.equal(await ev('sculptCanvas.features.addFeature("rock",20,20)'), true); assert.equal(await ev('sculptCanvas.features.addFeature("tree",30,30)'), true);
     await settled(); await shot(`${world}-rock-tree.png`);
   }
-  report.everyWorld = 'Moon and Zhon place every kind (a kind a world lacks is Green\'s)';
+  report.everyWorld = 'Moon and Archipelago place every kind (a kind a world lacks is Green\'s)';
   // The shared catalog: import, duplicate, recolor, edit and place independently.
   await send('Page.navigate', {url: `${server}/?biome=green&mapX=4&mapY=4&gpuMB=512&heapMB=1536`}); await ready();
   await press('#feature-tool'); await set('#feature-kind','tree');

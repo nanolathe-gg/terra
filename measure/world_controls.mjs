@@ -43,7 +43,7 @@ if (CHROME && DIGEST) { console.error('world_controls.mjs: --digest runs under N
 const digestMisses = []; let current = '';
 const assets = opt('--assets', ''), port = Number(opt('--port', 9685)), out = resolve(opt('--out', 'world-controls')), auditPort = Number(opt('--audit-port', 0));
 if (CHROME && !opt('--server', '') && !auditPort) { console.error('world_controls.mjs: --chrome needs --audit-port <port> (your own: the tool starts the audit host there) or --server <an audit host already running>; there is no default.'); process.exit(2); }
-const WORLDS = opt('--worlds', 'green,archipelago,crystal,desert,ice,lava,moon,red,zhon').split(',');
+const WORLDS = opt('--worlds', 'green,archipelago,crystal,desert,ice,lava,moon,red').split(',');
 const VARIANT = '';
 const FIND = opt('--find', '') ? opt('--find', '').split(',') : null;
 const ONLY = opt('--only', '') ? opt('--only', '').split(',') : null;
@@ -95,7 +95,7 @@ if (JOBS > 1 && !CHILD && WORLDS.length > 1) {
   const pass = []; for (const f of ['--only', '--set', '--query']) if (opt(f, '')) pass.push(f, opt(f, ''));
   if (DIGEST) pass.push('--digest');
   if (COLUMN) pass.push('--column', resolve(opt('--column', '')));
-  const cost = {green: 3, zhon: 2, red: 2}, order = [...WORLDS].sort((a, b) => (cost[b] || 1) - (cost[a] || 1)), queue = [...order], codes = [], tries = {};
+  const cost = {green: 3, red: 2}, order = [...WORLDS].sort((a, b) => (cost[b] || 1) - (cost[a] || 1)), queue = [...order], codes = [], tries = {};
   const slots = Array.from({length: Math.min(JOBS, WORLDS.length)}, (_, k) => new Promise(async done => {
     for (let w; (w = queue.shift());) {
       await new Promise(next => {

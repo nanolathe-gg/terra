@@ -69,7 +69,7 @@ export const LANDFORM_SHAPES={
 };
 // The worlds' own numbers (their tables' world.shapes), by what they were fitted to:
 // - Red's and Crystal's craters carry no rim in their heights (retail Red and Crystal: rim/depth -.12..0): a .06 lip for the art and a wide bowl.
-// - Red's, Desert's, Moon's and Zhon's hills, mountains and water carry the retired outline options as wander and height variation; Desert's
+// - Red's, Desert's and Moon's hills, mountains and water carry the retired outline options as wander and height variation; Desert's
 //   plateau is the reviewed mesa (ragged feet, foot bumps on the ridges: the retired baseVary and baseBump), and the bare landform takes it too.
 // - Moon's hills are lobed (the retired moonLobes): wander in lobes about 60 px long, from foot to crest.
 // - Crystal's Faceted forms draw a column mound (its old brush: Height 140, 480 wide, Irregularity 40): stepped columns over the mound's

@@ -221,7 +221,7 @@ struct Uniforms {
     shadeDepth: f32,      // share of the directional shading kept (1: all)
     ambient: f32,       // unlit share of the light (0.42; Moon lower: no sky)
     slopeMarks: f32,    // Moon: density of crisp dark marks on slopes (0: none)
-    sandCrown: f32,     // painted sand stays sand to the crown, no rock (Zhon sand bars)
+    sandCrown: f32,     // painted sand stays sand to the crown, no rock (sand bars)
     flatBank: f32,        // low dry banks lit as level ground, no wet band (0: off)
     sandLight: f32,
     sandEdge: f32,
@@ -359,7 +359,7 @@ struct Uniforms {
     // G1 (shallow water round 3: Green, Red, Archipelago). Every default is the earlier look.
     shoalRag: f32,        // the shallow-to-deep step's outline: pixel notches of up to this many px, whatever the bed's slope (0: as before)
     shoalShoreSoft: f32,  // Archipelago: the waterline the world draws (a stroke's Hard and Faded stay) is a dithered blend this many px wide (0: a clean line)
-    // Low ground (Zhon's mud lowland): the ground from the sea up to lowReach above it, and the shallows, keep lowGrain of their grain.
+    // Low ground: the ground from the sea up to lowReach above it, and the shallows, keep lowGrain of their grain.
     lowReach: f32,        // height above the sea where low ground ends (its ragged edge fades over the upper half)
     lowGrain: f32,        // 0..1: the share of its grain the low ground's pattern and the water's art and mottle keep (1: as drawn)
     soilRim: f32,         // 0..1: bare soil where the plant cover thins against rock, and a ragged line (not a blend) for rock's edge off the faces (0: as before)

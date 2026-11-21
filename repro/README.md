@@ -76,8 +76,7 @@ the retail crops stay outside git.
    This uses the retail map exporter from the parent Nanolathe project's
    tools (not in this repository), writing to `$R/retail-<world>`.
 
-2. Cut a window, or take a section (Zhon has no retail maps; its four
-   1024-px "low savannah rivers" sections stand in):
+2. Cut a window, or take a section:
 
    ```
    python repro/retail_crop.py map <export>/<map-dir> <x> <y> <dir>
@@ -87,7 +86,7 @@ the retail crops stay outside git.
    `relief.png` shows the heights above sea in world coordinates (contours
    every 8 units, heavy every 32, white shoreline, grid labels every 128 px).
    Strokes are placed in the same coordinates; the editor's sea is 0 and its
-   dry base is the world's `baseHeight` (24, or 8 for Archipelago and Zhon).
+   dry base is the world's `baseHeight` (24 by default, 8 for Archipelago).
 
 3. Write `scenes/<world>.json`:
 

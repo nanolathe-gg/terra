@@ -107,18 +107,18 @@ test('a surface from a save or a world file is checked and copied; a save carrie
 });
 
 test('an engine-colored built-in may draw a library material, bound by that material, once in a list', () => {
-  const surface = defaults.surface.map(l => l.builtin === 'sand' ? {...l, material: 'zhon-beach'} : l);
-  const {rows, flags} = surfaceRows(surface, key => key === 'zhon-beach' ? 7 : -1);
+  const surface = defaults.surface.map(l => l.builtin === 'sand' ? {...l, material: 'desert-sand'} : l);
+  const {rows, flags} = surfaceRows(surface, key => key === 'desert-sand' ? 7 : -1);
   const at = rows.findIndex((r, i) => r[0] === SURFACE_BUILTINS.sand[1] && r[2] === 7);
   assert.ok(at >= 0, 'the sand row carries its material slot');
   assert.equal(flags[0], 1, 'a material needs the facts (wear and deposit for its pigment)');
-  const w = world('green'), list = withWorldMaterials(null, {materials: w.materials, surface}), m = list.find(o => o.worldLayer === 'zhon-beach');
-  assert.equal(m?.source, 'zhon-beach');
-  assert.equal(m.name, LIBRARY['zhon-beach'].name);
-  assert.deepEqual(copySurface(surface).find(l => l.builtin === 'sand'), {builtin: 'sand', name: 'Sand', material: 'zhon-beach'});
+  const w = world('green'), list = withWorldMaterials(null, {materials: w.materials, surface}), m = list.find(o => o.worldLayer === 'desert-sand');
+  assert.equal(m?.source, 'desert-sand');
+  assert.equal(m.name, LIBRARY['desert-sand'].name);
+  assert.deepEqual(copySurface(surface).find(l => l.builtin === 'sand'), {builtin: 'sand', name: 'Sand', material: 'desert-sand'});
   assert.throws(() => copySurface([...surface, {builtin: 'sand', material: 'desert-ground'}]), /once in a list/);
   for (const b of ['highland', 'rock', 'slopeCover', 'beach', 'fines', 'crown', 'paintedRock', 'chips'])
-    assert.throws(() => copySurface([{builtin: b, material: 'zhon-beach'}]), /Materials panel or Rock types/, b + ' takes its material from a role or its rock type');
+    assert.throws(() => copySurface([{builtin: b, material: 'desert-sand'}]), /Materials panel or Rock types/, b + ' takes its material from a role or its rock type');
   assert.deepEqual(copySurface([{builtin: 'highland', amount: .5, where: [{fact: 'slope'}], edge: {width: .2}}, {builtin: 'baseBand', amount: .3, edge: {width: .4}}]),
     [{builtin: 'highland'}, {builtin: 'baseBand', edge: {width: .4}}], 'Highland keeps no Amount, rule or edge; Base band no Amount');
   assert.throws(() => surfaceRows([{id: 'x'}]), /built-in, draws a material or grows plants/);
@@ -138,17 +138,17 @@ test('height contrast rides in the rule head; a layer without a rule gets an emp
 
 test('a map’s materials follow the surface: a copy no layer draws leaves unless a stroke uses it; layers that draw one material share its copy', () => {
   const w = world('green'), config = {materials: w.materials};
-  const sandy = defaults.surface.map(l => l.builtin === 'sand' ? {...l, material: 'zhon-beach'} : l);
+  const sandy = defaults.surface.map(l => l.builtin === 'sand' ? {...l, material: 'desert-sand'} : l);
   const start = surfaceMaterials(defaults.surface, null, {config}), withSand = surfaceMaterials(sandy, start, {config});
-  const copy = withSand.find(m => m.worldLayer === 'zhon-beach');
-  assert.equal(copy?.source, 'zhon-beach');
+  const copy = withSand.find(m => m.worldLayer === 'desert-sand');
+  assert.equal(copy?.source, 'desert-sand');
   assert.equal(surfaceMaterials(defaults.surface, withSand, {config}).length, start.length, 'cleared: its copy leaves');
   const stroke = {kind: 'landform', hidden: true, params: {groundPreset: copy.slot}};
   const kept = surfaceMaterials(defaults.surface, withSand, {config, nodes: [stroke]}).find(m => m.slot === copy.slot);
   assert.ok(kept && !kept.worldLayer, 'a hidden stroke keeps it, unbound');
   // Sand dust drawing the same material shares the sand's copy.
-  const dusty = sandy.map(l => l.builtin === 'sandDust' ? {...l, material: 'zhon-beach'} : l);
-  assert.deepEqual(surfaceMaterials(dusty, withSand, {config}).filter(m => m.worldLayer === 'zhon-beach').map(m => m.slot), [copy.slot]);
+  const dusty = sandy.map(l => l.builtin === 'sandDust' ? {...l, material: 'desert-sand'} : l);
+  assert.deepEqual(surfaceMaterials(dusty, withSand, {config}).filter(m => m.worldLayer === 'desert-sand').map(m => m.slot), [copy.slot]);
   assert.throws(() => deleteMaterial(withSand, [], copy.slot), /draws surface layers/);
   assert.equal(assignMaterial(withSand, copy.slot, 'worldGround').find(m => m.slot === copy.slot).worldLayer, undefined, 'made the ground, it draws no layer');
 });

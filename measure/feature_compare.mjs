@@ -5,7 +5,7 @@
 // Each PNG has RETAIL (orange band: the sprites most used on the world's retail maps) and OURS (blue band: the variants of the world's
 // own table, lit by the world's sun as the page does) on the world's ground colour, at 1x and then 2x. Numbers under the pictures:
 // size, drawn pixels, luma octile cut points, mean hue and saturation of the coloured pixels, outline share (boundary pixels per
-// pixel; AquaOre deposits, drawn blue for under water, are left out unless --aqua, which also paints our deposits as under water); retail rows are weighted by uses in the group mean. A world with no retail folder (Zhon) gets ours only.
+// pixel; AquaOre deposits, drawn blue for under water, are left out unless --aqua, which also paints our deposits as under water); retail rows are weighted by uses in the group mean. A world with no retail folder gets ours only.
 import {mkdirSync, writeFileSync, readFileSync, existsSync, mkdtempSync} from 'node:fs';
 import {join, basename} from 'node:path';
 import {runSite} from '../repro/site-cli.mjs';

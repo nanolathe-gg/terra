@@ -14,7 +14,7 @@ const input = (values,config=green) => Object.entries(values).reduce((set,[kind,
 test('every world has deposits and vents; trees, shrubs, rocks and scars come from the world table', () => {
   assert.deepEqual(worldKinds(green), ['deposit', 'vent', 'tree', 'shrub', 'rock', 'scar']);
   assert.deepEqual(worldKinds(bare), ['deposit', 'vent']);
-  const kinds = {red: ['tree', 'rock', 'scar'], moon: ['rock'], archipelago: ['tree', 'shrub', 'scar'], desert: ['rock'], lava: ['rock', 'scar'], ice: ['rock'], crystal: ['rock'], zhon: ['tree', 'shrub', 'rock', 'scar'], lush: ['tree', 'shrub', 'rock', 'scar']};
+  const kinds = {red: ['tree', 'rock', 'scar'], moon: ['rock'], archipelago: ['tree', 'shrub', 'scar'], desert: ['rock'], lava: ['rock', 'scar'], ice: ['rock'], crystal: ['rock'], lush: ['tree', 'shrub', 'rock', 'scar']};
   for (const [world, own] of Object.entries(kinds)) assert.deepEqual(worldKinds({features: table(world).features}), ['deposit', 'vent', ...own], world);
 });
 
@@ -92,7 +92,7 @@ test('the artist colors and rock angularity: bounds, the world default, and a re
 
 // Initial stock recipes and edited recipes use the same save representation as a loaded map.
 test('feature sets are fixed points before and after save/load', () => {
-  for (const world of ['green','red','moon','archipelago','desert','lava','ice','crystal','zhon','lush']) {
+  for (const world of ['green','red','moon','archipelago','desert','lava','ice','crystal','lush']) {
     const config={features:table(world).features};
     const stock=normalizeSet(undefined,config);
     assert.deepEqual(normalizeSet(JSON.parse(JSON.stringify(stock)),config),stock,world);
