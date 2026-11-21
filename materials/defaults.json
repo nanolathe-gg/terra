@@ -17,6 +17,7 @@
     "gentleRelief": 0.6,
     "plainRelief": 1.2,
     "flatShadow": 0,
+    "fillFollow": 0,
     "flatOcclusion": 0.4,
     "lightCap": 1.13,
     "shadeDepth": 1,

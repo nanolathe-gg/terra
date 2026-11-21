@@ -39,6 +39,7 @@ export const WORLD_HELP = {
   plantRelief: 'Raises the visible blades, moss cushions and shrubs that surface layers grow. Zero lays them flat.',
   hillLight: 'Lightens or darkens the cover material visible on slopes.',
   faceFill: 'Adds light specifically to slope faces in shade.',
+  fillFollow: 'Turns the fill light into light from the side away from the sun, as light thrown back from sunlit ground: faces in shade show their relief, and pits and crevices stay dark.',
   rockCrown: 'Carries exposed rock up onto the crown of a rise.',
   sandCrown: 'Carries painted sand up onto the crown instead of concentrating it lower on the slope.',
   slopeTexture: 'Sets how strongly the slope cover draws its sampled material on slopes.',

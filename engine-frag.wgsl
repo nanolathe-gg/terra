@@ -1500,7 +1500,13 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         // Optional authored sky/bounce fill keeps unlit steep faces from all
         // hitting one dark floor. Flat ground and sunlit surfaces retain their
         // accepted response; this does not move the sculpted surface.
-        let fill = u.faceFill * (1.0 - normal.z) * (1.0 - smoothstep(0.0, 0.50, direct));
+        // Fill from the side away from the sun (fillFollow): light thrown back from sunlit ground, low and opposite the sun. It reads the
+        // surface's facing past level ground's (level ground and faces toward the sun take none), and the hollows' shelter (cav).
+        var fill = u.faceFill * (1.0 - normal.z) * (1.0 - smoothstep(0.0, 0.50, direct));
+        if (u.fillFollow > 0.0) {
+            let away = normalize(vec3f(-u.light.xy, u.light.z));
+            fill = mix(fill, 2.0 * u.faceFill * max(0.0, dot(normal, away) - away.z) * (1.0 - cav), u.fillFollow);
+        }
         // Retail Green casts no shadows onto level ground: gate cast shadow
         // and occlusion by slope, with knobs for other looks.
         let onSlope = smoothstep(0.08, 0.35, slope);

@@ -192,6 +192,7 @@ struct Uniforms {
     diagnosticView: i32,   // GLSL uDiagnostic (diagnostic is a WGSL keyword)
     surfacePreview: i32,  // the row of the surface layer the Surface section previews (diagnostic view 13), -1 none
     faceFill: f32,
+    fillFollow: f32,      // 0: Fill light on shaded faces is even; 1: it comes from the side away from the sun, so the relief and its hollows read in shade
     slopeProfile: vec4f,
     elevatedCover: vec3f,
     slopeOnLowBanks: i32,

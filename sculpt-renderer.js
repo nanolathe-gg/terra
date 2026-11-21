@@ -920,6 +920,7 @@ export class TerrainRenderer {
     this.f('uSandLight', variant.has('sandLight') ? Number(variant.get('sandLight')) : 0.25);
     this.f('uBeachWidth', variant.has('beachWidth') ? Number(variant.get('beachWidth')) : 1.0);
     this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : 0);
+    this.f('uFillFollow', variant.has('fillFollow') ? Number(variant.get('fillFollow')) : 0);
     this.f('uRockCrown', variant.has('rockCrown') ? Number(variant.get('rockCrown')) : 0);
     for (const [u, k, d] of [['uHighland', 'highland', 0], ['uHighFrom', 'highFrom', 8], ['uHighReach', 'highReach', 10]]) this.f(u, variant.has(k) ? Number(variant.get(k)) : d);
     this.f('uStrata', variant.has('strata') ? Number(variant.get('strata')) : 0);
