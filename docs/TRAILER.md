@@ -1,10 +1,13 @@
 # Trailer: storyboard and prototype
 
-A 60 to 75 second announcement video. It explains what the editor is and how
-it works, shows the real editor on a few worlds, then the game. This page is
-the plan; `trailer/` holds the prototype that renders a rough cut. Nothing
-here ships with the editor, and the branch (`prototype/trailer`) does not
-land.
+The announcement video. The current version is the combined cut (below):
+sections vs Terra, a real-time take on Green Planet, the same map playing in
+Nanolathe, and the TERRA end card. `trailer/` holds the tools that render it,
+so it can be regenerated for a release (owner, 2026-11-21). Nothing here
+ships with the editor: no file is in `site.json`, the pages are production
+tools, and their outputs (frames, videos, the retail section images) stay
+outside Git. The earlier sections record the first rough cut and the three
+concepts that led to it.
 
 ## The idea
 
