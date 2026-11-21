@@ -40,10 +40,10 @@ A rock type changes only the windows whose strokes use its slot (PLAYBOOK.md,
 | --- | --- | --- |
 | green-1 | 2 | `evad` |
 | green-3 | 8 (five land strokes), 2 (three water strokes) | `reefstone` (round 6), `evad` |
-| green-4 | 7 | `passrock` (round 6; material `green-passrock`; faceBed 8, blocks 6, no gloss since round 11), with ground `green-clump` (slot 15) |
-| green-5 | 5 | `ridgestone` (Terraced greenstone, round 2; stepCrease 1 and deeper cracks, 2026-11-19) |
+| green-4 | 7 | `passrock` (round 6; material `green-passrock`; faceBed 8, blocks 6, no gloss since round 11), with ground `green-clump` (slot 15; groundEdge 30 since round 16) |
+| green-5 | 5 | `ridgestone` (Terraced greenstone, round 2; stepCrease 1 and deeper cracks, 2026-11-19; round 16: material `green-passrock` (shared with passrock), faceGrass .15, moonFolds 0) |
 | green-6 | 6 | `ridgeblock` (Blocky ridge, round 3; material `green-darkrock`) |
-| green-2 | 9 (ridge stroke) | `divide` (round 12: bandLevel 2, bandFill 1) |
+| green-2 | 9 (ridge stroke) | `divide` (round 12: bandLevel 2, bandFill 1; round 16: faceMass 0) |
 | green-7 | none set (0) | the world's own rock (the rock keys in `knobDefaults`) |
 
 Re-check with `grep -o '"rockPreset": [-0-9]*' repro/scenes/green-<n>.json`
@@ -94,59 +94,56 @@ These notes are by eye, from the base crops in
 - No rock coasts on Green. Shores are a natural sand-grass edge.
 - Hills must stay grassy. Rock on a hill is cracks and patches, not a cap.
 
-## Start here (round 16)
+## Start here (round 17)
 
-Round 15 (branch `match-green-16`, 78 of 300 trials; report in its final
-message and `$R/match/terraform-wt-match-green-16/green/NOTES.md`) was
-reviewed and ported on 2026-11-20 without the ridgeblock shine (below). Measured, trial-078 against trial-000: mean shape .130 to .104,
-look .115 to .111; held-out green-7 unchanged (.19/.102, holdout-003).
+Round 16 (branch `match-green-17`, 90 of 300 trials; report in its final
+message, notes and evidence pictures in
+`$R/match/terraform-wt-match-green-17/green/NOTES.md` and `evidence/`).
+Measured, trial-090 against trial-000: mean shape .104 (unchanged), look
+.111 to .090; held-out green-7 unchanged at .19/.102 (holdout-004), but none
+of the keeps reaches it (its hills use rock slot 0 and no keep touched the
+world's own rock or its list), so "unchanged" means not reached.
 
-- **Green-6 (three commits):** the ridges follow retail's heights (diameter
-  85, low top arms, tall south ends; a fixture that alone cost look .083 to
-  .114, trial-026), then Gullies 100 at size 60 cut buttresses that read
-  by eye (shape .069, look .085, trial-027; steep:band8 and steep:edges
-  cleared). The round also kept the Blocky ridge rock shining (shineRock
-  .75: steep:light cleared, trial-032); the review dropped it: by eye the
-  whole rock turns pale gray (trial-078 against trial-027 green-6 pairs),
-  where retail's is dark. Gullies at
-  50-80 on the old wide ridge only scalloped the outline.
-- **Green-2 (three commits):** the ridge runs past the east edge at half
-  height and the south erase sits 100 px lower (fixtures, shape .128 to
-  .083), and a Banding more stroke covers the new east grades. Look .139 to
-  .124. In the final state (trial-057/078) gentle:lines shrank 3.0 to 1.0
-  (0.61x) but did not clear; slope lines (2x) and steep lines (0.49x) are
-  back at their base size; flat:edges (retail lines on flat ground) and
-  steep:band32 are new.
-- **Green-5:** Banding more along the escarpment (look .206 to .198,
-  slope:lines 1.9 to 1.2; a weak keep: the new lines are a fine regular
-  hatch, not retail's long step lines, and in-band 16 to 13). Why bands miss
-  the terraces (engine-bake.wgsl contourBands): the slope gate rises from
-  .07 to .18 and fades out from .35 to bandFade (.75), so the flat shelves
-  and steep risers both fall outside it; bandFade 1.5 (trial-079) still
-  draws no lines on the risers, where bands 1.3 units apart run closer
-  than a pixel.
-- **Measured, not kept:** faceFill .24 (mean look .115 to .112, green-4 .149
-  to .136; green-2, 3 and 6 slightly worse, so the owner's light stays:
-  trial-048); creaseShade .2 (mean worse, green-4 +.024: trial-064);
-  reliefAmount .18 (score only, crops identical: trial-053). The gentle
-  32 px excess on green-1, 3 and 7 is hill-foot shading leaking into a
-  thin class (16-48 px from slopes), not ground texture.
+- **Green-5 (.198 to .078, four commits on ridgestone):** moonFolds 0 (the
+  world's folds at spacing .5 run closer than a pixel on its flanks and only
+  smudge them darker; trial-006), faceGrass .15 (the ridge is bare gray
+  rock; trial-013), the pale massif rock `green-passrock` (trial-014;
+  without it the final state scores .150, trial-073), faceLayers back at 1.5
+  after a dip to .2 (trials 015/016). Net ridgestone change: material,
+  faceGrass .45 to .15, moonFolds 0. Cleared steep:color, steep:light,
+  slope:edges, slope:lines; gentle:light and slope:light (lit grass at 164,
+  128 luma) are new.
+- **Green-2 (.124 to .117):** divide faceMass 0 (trial-024): finer, darker
+  crevices on the painted face; steep:lines cleared.
+- **Green-4 (.149 to .148):** its strokes' groundEdge 30 (trial-085) ends
+  the clump ground before the plain, so the speck apron at the massif's foot
+  is gone (flat edges equal retail's).
+- **Measured, not kept:** world moonFolds 0 (green-5 -.05, green-2 +.08:
+  trial-005); worms .3 (green-2 .117 to .0995, every other window worse:
+  trial-040); gentlelumps amount 0/.5 (green-7's gentle edges clear, but its
+  look rises on edge-orientation shares: trials 028/069, holdout-002/003);
+  divide faceLayers 1.6 (green-2 .0996 but the score is non-monotonic in
+  faceLayers, .117/.0996/.137 at 1/1.6/2, and slope lines shrink only 2.05x
+  to 1.70x: trials 051/052).
 
 Leads:
 
-1. **Green-4 (look .149, now the second worst):** steep luma 50 against 55
-   and brightest 123 against 114 (ours has more shadow and brighter lit
-   ledges). Its valley lumps come from heightVary 30 on the long lean back
-   (heightVary 0 removes them, shape +.03: trial-036, pictures in its
-   re-render trial-080; varyFoot 0 is far worse: trial-058).
-2. **Green-5 step lines** still wait on the engine (see above; terraceCalm
-   is 0 and only removes lines).
-3. **Green-6's 32 px contrast** (ours 4.3, retail 6.5): neither faceShade 1
-   nor creaseShade moved it; retail's east faces are near black with cast
-   shadow.
-4. **Green-2's slope lines** run 2x retail while its gentle lines are
-   short: bandLevel is times banding, so a rock type cannot raise one
-   without the other (divide banding .3/.5: trials 044/045).
+1. **Green-4 (.148, worst):** every passrock knob tried sits at a local
+   optimum (faceStrata, faceRock/faceGrass, faceLedge, faceWet, a darker
+   material: trials 017-019, 036, 059-062). Its window luma 56 against 62
+   and the missing pure-black shadows (retail 8% at 0,0,0) point at the
+   light, which is the owner's.
+2. **Palette:** retail's grass dithers 168 (36%) with 72 (21%); ours draws
+   169 (13%) that retail barely uses, because the output stage re-dithers the
+   lit color over the whole art palette (engine-output.wgsl), so a
+   material's palette list does not pick output indices (trial-037).
+3. **Green-2's slope:** the soil terraces (faceLayers) make the 8 px lumps
+   and also break the contour lines; without them the lines run 3x retail
+   (trial-049), and banding low enough to lighten them removes them
+   (trial-084).
+4. **Green-5 step lines** and **green-6's shadowed faces** still wait on the
+   engine (round 15's notes; a convexity layer draws blobs, not lines:
+   trial-032).
 
 ## Pilot notes (2026-11-18)
 
