@@ -47,7 +47,7 @@ try {
   };
   const send = (method, params = {}) => new Promise(r => { const k = ++id; wait.set(k, r); ws.send(JSON.stringify({id: k, method, params})); });
   const ev = async expr => { const r = await send('Runtime.evaluate', {expression: expr, returnByValue: true, awaitPromise: true}); if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.exception?.description || r.result.exceptionDetails.text); return r.result?.result?.value; };
-  const ready = async () => { for (let i = 0; i < 480; i++) { await sleep(250); if (await ev(`!!window.sculptCanvas && (!document.getElementById('map-export')?.disabled || (${scene.biome === 'zhon'} && !document.getElementById('editor')?.disabled && sculptCanvas.idle().then(() => true)))`)) { if (scene.biome === 'zhon') await sleep(2500); return true; } } return false; };
+  const ready = async () => { for (let i = 0; i < 480; i++) { await sleep(250); if (await ev('!!window.sculptCanvas && !!window.sculptRegion && sculptRegion.canExport()')) { await ev('sculptCanvas.idle()'); return true; } } return false; };
   await send('Runtime.enable'); await send('Page.enable');
   await send('Page.navigate', {url});
   if (!await ready()) throw new Error('editor never became ready: ' + await ev(`document.getElementById('error').textContent`));

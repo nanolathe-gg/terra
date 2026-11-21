@@ -1,7 +1,7 @@
 {
   "version": 1,
   "patterns": [
-    "engine-*.wgsl", "sculpt-*.wgsl", "materials/*.json",
+    "engine-*.wgsl", "sculpt-*.wgsl", "materials/*.json", "site.json",
     "sculpt.js", "sculpt-save.js", "sculpt-world-kit.js", "sculpt-renderer.js", "sculpt-webgpu.js",
     "sculpt-gpu-fields.js", "sculpt-erosion.js", "sculpt-rock-weather.js",
     "sculpt-volume.js", "sculpt-material-model.js", "sculpt-column.js",

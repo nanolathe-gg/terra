@@ -432,36 +432,6 @@
   "palette": [87,88,89,90,91,92,93,55],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
- "zhon-ground": {
-  "name": "Zhon soil",
-  "seed": 0,
-  "nodes": [
-   {"id":"mottle","type":"noise","kind":"smooth","name":"Mottles a few pixels across","params":{"size":3.2,"detail":0.4,"layers":0,"seed":0},"in":{"in":null},"x":0,"y":0},
-   {"id":"mlev","type":"levels","name":"Spread the mottles","params":{"low":0.1,"high":0.9,"gamma":1,"invert":0},"in":{"in":"mottle"},"x":236,"y":0},
-   {"id":"soil","type":"gradient","name":"Olive to warm brown soil","params":{"ease":0},"in":{"in":"mlev"},"stops":[[0,0.16,0.16,0.07],[0.4,0.26,0.235,0.1],[0.7,0.3,0.23,0.12],[1,0.38,0.22,0.17]],"x":472,"y":0},
-   {"id":"grain","type":"noise","kind":"smooth","name":"Fine grain","params":{"size":1.2,"detail":0,"layers":0,"seed":1},"in":{"in":null},"x":236,"y":150},
-   {"id":"graincol","type":"gradient","name":"Grain light and dark","params":{"ease":0},"in":{"in":"grain"},"stops":[[0,0.7,0.72,0.8],[1,1.3,1.28,1.2]],"x":472,"y":150},
-   {"id":"soilgrain","type":"combine","kind":"multiply","name":"Grain into soil","params":{"amount":1,"offset":0},"in":{"a":"soil","b":"graincol","mask":null},"x":708,"y":75},
-   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"soilgrain","height":null,"shine":null},"x":944,"y":75}
-  ],
-  "controls": [{"label":"Mottling size","node":"mottle","param":"size","min":1,"max":13},{"label":"Soil colors","node":"soil","param":"stops"}],
-  "palette": [72,57,73,58,184,186,59,183,185,74,187,26,56,71,25,182,24,188,189,60],
-  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
- },
- "zhon-water": {
-  "name": "Dark swamp water",
-  "seed": 0,
-  "nodes": [
-   {"id":"swell","type":"noise","kind":"smooth","name":"Faint broad swell","params":{"size":40,"detail":0,"layers":0,"seed":0},"in":{"in":null},"x":0,"y":0},
-   {"id":"grain","type":"noise","kind":"smooth","name":"Fine grain","params":{"size":1.2,"detail":0,"layers":0,"seed":1},"in":{"in":null},"x":0,"y":150},
-   {"id":"mixed","type":"combine","kind":"add","name":"Grain over swell","params":{"amount":0.9,"offset":0.5},"in":{"a":"swell","b":"grain","mask":null},"x":236,"y":75},
-   {"id":"water","type":"gradient","name":"Dark blue green","params":{"ease":0},"in":{"in":"mixed"},"stops":[[0.2,0,0.12,0.11],[0.5,0.02,0.15,0.15],[0.8,0.07,0.18,0.2]],"x":472,"y":75},
-   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"water","height":null,"shine":null},"x":708,"y":75}
-  ],
-  "controls": [{"label":"Swell size","node":"swell","param":"size","min":10,"max":160},{"label":"Water colors","node":"water","param":"stops"}],
-  "palette": [44,45,125,124,123,141,43,142],
-  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
- },
  "lava-ground": {
   "name": "Lava crust",
   "seed": 0,
@@ -913,35 +883,6 @@
   ],
   "controls": [{"label":"Colors","node":"colors","param":"stops"}],
   "palette": [62,94,92,91,90,89,88,87,85],
-  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
- },
- "zhon-rock": {
-  "name": "Zhon rock grain",
-  "color": "#42567b",
-  "seed": 0,
-  "nodes": [
-   {"id":"mid","type":"constant","name":"Middle","params":{"value":0.5},"x":0,"y":0},
-   {"id":"band1","type":"noise","kind":"smooth","name":"Grain 2 px","params":{"size":2,"detail":0,"layers":0,"seed":111},"x":0,"y":80},
-   {"id":"add1","type":"combine","kind":"add","name":"Add 2 px","params":{"amount":0.8957,"offset":0.5},"in":{"a":"mid","b":"band1","mask":null},"x":240,"y":80},
-   {"id":"band2","type":"noise","kind":"smooth","name":"Grain 4 px","params":{"size":4,"detail":0,"layers":0,"seed":112},"x":0,"y":160},
-   {"id":"add2","type":"combine","kind":"add","name":"Add 4 px","params":{"amount":0.5272,"offset":0.5},"in":{"a":"add1","b":"band2","mask":null},"x":240,"y":160},
-   {"id":"band3","type":"noise","kind":"smooth","name":"Grain 8 px","params":{"size":8,"detail":0,"layers":0,"seed":113},"x":0,"y":240},
-   {"id":"add3","type":"combine","kind":"add","name":"Add 8 px","params":{"amount":0.2754,"offset":0.5},"in":{"a":"add2","b":"band3","mask":null},"x":240,"y":240},
-   {"id":"band4","type":"noise","kind":"smooth","name":"Grain 16 px","params":{"size":16,"detail":0,"layers":0,"seed":114},"x":0,"y":320},
-   {"id":"add4","type":"combine","kind":"add","name":"Add 16 px","params":{"amount":0.1663,"offset":0.5},"in":{"a":"add3","b":"band4","mask":null},"x":240,"y":320},
-   {"id":"band5","type":"noise","kind":"smooth","name":"Grain 32 px","params":{"size":32,"detail":0,"layers":0,"seed":115},"x":0,"y":400},
-   {"id":"add5","type":"combine","kind":"add","name":"Add 32 px","params":{"amount":0.1476,"offset":0.5},"in":{"a":"add4","b":"band5","mask":null},"x":240,"y":400},
-   {"id":"band6","type":"noise","kind":"smooth","name":"Grain 64 px","params":{"size":64,"detail":0,"layers":0,"seed":116},"x":0,"y":480},
-   {"id":"add6","type":"combine","kind":"add","name":"Add 64 px","params":{"amount":0.0352,"offset":0.5},"in":{"a":"add5","b":"band6","mask":null},"x":240,"y":480},
-   {"id":"band0","type":"noise","kind":"pixel","name":"Pixel grain","params":{"seed":110},"x":0,"y":560},
-   {"id":"add0","type":"combine","kind":"add","name":"Add 1 px","params":{"amount":0.9539,"offset":0.5},"in":{"a":"add6","b":"band0","mask":null},"x":240,"y":560},
-   {"id":"levels","type":"levels","name":"Spread","params":{"low":-0.3261,"high":1.3261,"gamma":1,"invert":0},"in":{"in":"add0"},"x":480,"y":80},
-   {"id":"colors","type":"gradient","name":"Colors","stops":[[0,0.1318,0.1502,0.22],[0.1391,0.2324,0.237,0.2427],[0.3416,0.2941,0.2941,0.2941],[0.4994,0.3208,0.3396,0.3531],[0.6576,0.3581,0.3582,0.3577],[0.8601,0.4196,0.4196,0.4196],[0.9733,0.4612,0.4696,0.4754],[1,0.5204,0.5235,0.5271]],"params":{"ease":0},"in":{"in":"levels"},"x":720,"y":80},
-   {"id":"relief","type":"levels","name":"Grit height","params":{"low":-0.3261,"high":1.3261,"gamma":1,"invert":0},"in":{"in":"add6"},"x":480,"y":200},
-   {"id":"material","type":"output","name":"Material","params":{"relief":1},"in":{"color":"colors","height":"relief","shine":null},"x":960,"y":80}
-  ],
-  "controls": [{"label":"Colors","node":"colors","param":"stops"}],
-  "palette": [123,122,92,91,90,89,88,87],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
  "green-slope": {
@@ -1422,81 +1363,6 @@
   "palette": [62,94,92,91,90,89,88,87,85],
   "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
  },
- "zhon-slope": {
-  "name": "Zhon slope cover",
-  "seed": 0,
-  "nodes": [
-   {"id":"mid","type":"constant","name":"Middle","params":{"value":0.5},"x":0,"y":0},
-   {"id":"band1","type":"noise","kind":"smooth","name":"Grain 2 px","params":{"size":2,"detail":0,"layers":0,"seed":101},"x":0,"y":80},
-   {"id":"add1","type":"combine","kind":"add","name":"Add 2 px","params":{"amount":0.2093,"offset":0.5},"in":{"a":"mid","b":"band1","mask":null},"x":240,"y":80},
-   {"id":"band2","type":"noise","kind":"smooth","name":"Grain 4 px","params":{"size":4,"detail":0,"layers":0,"seed":102},"x":0,"y":160},
-   {"id":"add2","type":"combine","kind":"add","name":"Add 4 px","params":{"amount":0.0714,"offset":0.5},"in":{"a":"add1","b":"band2","mask":null},"x":240,"y":160},
-   {"id":"band3","type":"noise","kind":"smooth","name":"Grain 8 px","params":{"size":8,"detail":0,"layers":0,"seed":103},"x":0,"y":240},
-   {"id":"add3","type":"combine","kind":"add","name":"Add 8 px","params":{"amount":0.1897,"offset":0.5},"in":{"a":"add2","b":"band3","mask":null},"x":240,"y":240},
-   {"id":"band4","type":"noise","kind":"smooth","name":"Grain 16 px","params":{"size":16,"detail":0,"layers":0,"seed":104},"x":0,"y":320},
-   {"id":"add4","type":"combine","kind":"add","name":"Add 16 px","params":{"amount":0.435,"offset":0.5},"in":{"a":"add3","b":"band4","mask":null},"x":240,"y":320},
-   {"id":"band5","type":"noise","kind":"smooth","name":"Grain 32 px","params":{"size":32,"detail":0,"layers":0,"seed":105},"x":0,"y":400},
-   {"id":"add5","type":"combine","kind":"add","name":"Add 32 px","params":{"amount":0.4702,"offset":0.5},"in":{"a":"add4","b":"band5","mask":null},"x":240,"y":400},
-   {"id":"band6","type":"noise","kind":"smooth","name":"Grain 64 px","params":{"size":64,"detail":0,"layers":0,"seed":106},"x":0,"y":480},
-   {"id":"add6","type":"combine","kind":"add","name":"Add 64 px","params":{"amount":0.1246,"offset":0.5},"in":{"a":"add5","b":"band6","mask":null},"x":240,"y":480},
-   {"id":"band0","type":"noise","kind":"pixel","name":"Pixel grain","params":{"seed":100},"x":0,"y":560},
-   {"id":"add0","type":"combine","kind":"add","name":"Add 1 px","params":{"amount":1.3145,"offset":0.5},"in":{"a":"add6","b":"band0","mask":null},"x":240,"y":560},
-   {"id":"levels","type":"levels","name":"Spread","params":{"low":-0.3261,"high":1.3261,"gamma":1,"invert":0},"in":{"in":"add0"},"x":480,"y":80},
-   {"id":"colors","type":"gradient","name":"Colors","stops":[[0,0.6678,0.442,0.4757],[0.1069,0.7647,0.5294,0.5922],[0.3012,0.7183,0.5993,0.5533],[0.4999,0.7065,0.6751,0.4598],[0.6993,0.7961,0.6863,0.3255],[0.8929,0.858,0.7664,0.4809],[0.9895,0.8903,0.7805,0.451],[1,0.8906,0.7808,0.4514]],"params":{"ease":0},"in":{"in":"levels"},"x":720,"y":80},
-   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"colors","height":null,"shine":null},"x":960,"y":80}
-  ],
-  "controls": [{"label":"Colors","node":"colors","param":"stops"}],
-  "palette": [20,68,19,67,178,177],
-  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
- },
- "zhon-debris": {
-  "name": "Zhon debris",
-  "seed": 0,
-  "nodes": [
-   {"id":"mid","type":"constant","name":"Middle","params":{"value":0.5},"x":0,"y":0},
-   {"id":"band1","type":"noise","kind":"smooth","name":"Grain 2 px","params":{"size":2,"detail":0,"layers":0,"seed":121},"x":0,"y":80},
-   {"id":"add1","type":"combine","kind":"add","name":"Add 2 px","params":{"amount":0.8957,"offset":0.5},"in":{"a":"mid","b":"band1","mask":null},"x":240,"y":80},
-   {"id":"band2","type":"noise","kind":"smooth","name":"Grain 4 px","params":{"size":4,"detail":0,"layers":0,"seed":122},"x":0,"y":160},
-   {"id":"add2","type":"combine","kind":"add","name":"Add 4 px","params":{"amount":0.5272,"offset":0.5},"in":{"a":"add1","b":"band2","mask":null},"x":240,"y":160},
-   {"id":"band3","type":"noise","kind":"smooth","name":"Grain 8 px","params":{"size":8,"detail":0,"layers":0,"seed":123},"x":0,"y":240},
-   {"id":"add3","type":"combine","kind":"add","name":"Add 8 px","params":{"amount":0.2754,"offset":0.5},"in":{"a":"add2","b":"band3","mask":null},"x":240,"y":240},
-   {"id":"band4","type":"noise","kind":"smooth","name":"Grain 16 px","params":{"size":16,"detail":0,"layers":0,"seed":124},"x":0,"y":320},
-   {"id":"add4","type":"combine","kind":"add","name":"Add 16 px","params":{"amount":0.1663,"offset":0.5},"in":{"a":"add3","b":"band4","mask":null},"x":240,"y":320},
-   {"id":"band5","type":"noise","kind":"smooth","name":"Grain 32 px","params":{"size":32,"detail":0,"layers":0,"seed":125},"x":0,"y":400},
-   {"id":"add5","type":"combine","kind":"add","name":"Add 32 px","params":{"amount":0.1476,"offset":0.5},"in":{"a":"add4","b":"band5","mask":null},"x":240,"y":400},
-   {"id":"band6","type":"noise","kind":"smooth","name":"Grain 64 px","params":{"size":64,"detail":0,"layers":0,"seed":126},"x":0,"y":480},
-   {"id":"add6","type":"combine","kind":"add","name":"Add 64 px","params":{"amount":0.0352,"offset":0.5},"in":{"a":"add5","b":"band6","mask":null},"x":240,"y":480},
-   {"id":"band0","type":"noise","kind":"pixel","name":"Pixel grain","params":{"seed":120},"x":0,"y":560},
-   {"id":"add0","type":"combine","kind":"add","name":"Add 1 px","params":{"amount":0.9539,"offset":0.5},"in":{"a":"add6","b":"band0","mask":null},"x":240,"y":560},
-   {"id":"levels","type":"levels","name":"Spread","params":{"low":-0.3261,"high":1.3261,"gamma":1,"invert":0},"in":{"in":"add0"},"x":480,"y":80},
-   {"id":"colors","type":"gradient","name":"Colors","stops":[[0,0.1318,0.1502,0.22],[0.1391,0.2324,0.237,0.2427],[0.3416,0.2941,0.2941,0.2941],[0.4994,0.3208,0.3396,0.3531],[0.6576,0.3581,0.3582,0.3577],[0.8601,0.4196,0.4196,0.4196],[0.9733,0.4612,0.4696,0.4754],[1,0.5204,0.5235,0.5271]],"params":{"ease":0},"in":{"in":"levels"},"x":720,"y":80},
-   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"colors","height":null,"shine":null},"x":960,"y":80}
-  ],
-  "controls": [{"label":"Colors","node":"colors","param":"stops"}],
-  "palette": [123,122,92,91,90,89,88,87],
-  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
- },
- "zhon-beach": {
-  "name": "Zhon beach",
-  "seed": 0,
-  "nodes": [
-   {"id":"mid","type":"constant","name":"Middle","params":{"value":0.5},"x":0,"y":0},
-   {"id":"band1","type":"noise","kind":"smooth","name":"Grain 2 px","params":{"size":2,"detail":0,"layers":0,"seed":131},"x":0,"y":80},
-   {"id":"add1","type":"combine","kind":"add","name":"Add 2 px","params":{"amount":1.9,"offset":0.5},"in":{"a":"mid","b":"band1","mask":null},"x":240,"y":80},
-   {"id":"band2","type":"noise","kind":"smooth","name":"Grain 4 px","params":{"size":4,"detail":0,"layers":0,"seed":132},"x":0,"y":160},
-   {"id":"add2","type":"combine","kind":"add","name":"Add 4 px","params":{"amount":0.0553,"offset":0.5},"in":{"a":"add1","b":"band2","mask":null},"x":240,"y":160},
-   {"id":"band3","type":"noise","kind":"smooth","name":"Grain 8 px","params":{"size":8,"detail":0,"layers":0,"seed":133},"x":0,"y":240},
-   {"id":"add3","type":"combine","kind":"add","name":"Add 8 px","params":{"amount":0.1586,"offset":0.5},"in":{"a":"add2","b":"band3","mask":null},"x":240,"y":240},
-   {"id":"band4","type":"noise","kind":"smooth","name":"Grain 16 px","params":{"size":16,"detail":0,"layers":0,"seed":134},"x":0,"y":320},
-   {"id":"add4","type":"combine","kind":"add","name":"Add 16 px","params":{"amount":0.2071,"offset":0.5},"in":{"a":"add3","b":"band4","mask":null},"x":240,"y":320},
-   {"id":"levels","type":"levels","name":"Spread","params":{"low":-0.2709,"high":1.2709,"gamma":1,"invert":0},"in":{"in":"add4"},"x":480,"y":80},
-   {"id":"colors","type":"gradient","name":"Colors","stops":[[0,0.7141,0.5769,0.4133],[0.0853,0.7503,0.6263,0.4456],[0.2808,0.7574,0.6356,0.458],[0.5009,0.7698,0.65,0.4708],[0.7187,0.7839,0.667,0.4806],[0.9147,0.8084,0.6933,0.4988],[1,0.8251,0.7155,0.5076],[1,0.8349,0.7322,0.52]],"params":{"ease":0},"in":{"in":"levels"},"x":720,"y":80},
-   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"colors","height":null,"shine":null},"x":960,"y":80}
-  ],
-  "controls": [{"label":"Colors","node":"colors","param":"stops"}],
-  "palette": [68,67,177,178,19,66,20,179,18,21,180,176,65],
-  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
- },
  "rock-granite": {
   "name": "Granite crystals",
   "seed": 0,
@@ -1595,7 +1461,28 @@
  "green-soil": {"name": "Green soil", "like": "red-ground", "color": "#4e4439"},
  "green-snow": {"name": "Green snow", "like": "ice-ground", "color": "#daeaff"},
  "green-moss": {"name": "Green moss", "like": "green-slope", "color": "#2e4f19"},
- "green-sand": {"name": "Green sand", "like": "zhon-beach", "color": "#c7a979"},
+ "green-sand": {
+  "name": "Green sand",
+  "color": "#c7a979",
+  "seed": 0,
+  "nodes": [
+   {"id":"mid","type":"constant","name":"Middle","params":{"value":0.5},"x":0,"y":0},
+   {"id":"band1","type":"noise","kind":"smooth","name":"Grain 2 px","params":{"size":2,"detail":0,"layers":0,"seed":131},"x":0,"y":80},
+   {"id":"add1","type":"combine","kind":"add","name":"Add 2 px","params":{"amount":1.9,"offset":0.5},"in":{"a":"mid","b":"band1","mask":null},"x":240,"y":80},
+   {"id":"band2","type":"noise","kind":"smooth","name":"Grain 4 px","params":{"size":4,"detail":0,"layers":0,"seed":132},"x":0,"y":160},
+   {"id":"add2","type":"combine","kind":"add","name":"Add 4 px","params":{"amount":0.0553,"offset":0.5},"in":{"a":"add1","b":"band2","mask":null},"x":240,"y":160},
+   {"id":"band3","type":"noise","kind":"smooth","name":"Grain 8 px","params":{"size":8,"detail":0,"layers":0,"seed":133},"x":0,"y":240},
+   {"id":"add3","type":"combine","kind":"add","name":"Add 8 px","params":{"amount":0.1586,"offset":0.5},"in":{"a":"add2","b":"band3","mask":null},"x":240,"y":240},
+   {"id":"band4","type":"noise","kind":"smooth","name":"Grain 16 px","params":{"size":16,"detail":0,"layers":0,"seed":134},"x":0,"y":320},
+   {"id":"add4","type":"combine","kind":"add","name":"Add 16 px","params":{"amount":0.2071,"offset":0.5},"in":{"a":"add3","b":"band4","mask":null},"x":240,"y":320},
+   {"id":"levels","type":"levels","name":"Spread","params":{"low":-0.2709,"high":1.2709,"gamma":1,"invert":0},"in":{"in":"add4"},"x":480,"y":80},
+   {"id":"colors","type":"gradient","name":"Colors","stops":[[0,0.7141,0.5769,0.4133],[0.0853,0.7503,0.6263,0.4456],[0.2808,0.7574,0.6356,0.458],[0.5009,0.7698,0.65,0.4708],[0.7187,0.7839,0.667,0.4806],[0.9147,0.8084,0.6933,0.4988],[1,0.8251,0.7155,0.5076],[1,0.8349,0.7322,0.52]],"params":{"ease":0},"in":{"in":"levels"},"x":720,"y":80},
+   {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"colors","height":null,"shine":null},"x":960,"y":80}
+  ],
+  "controls": [{"label":"Colors","node":"colors","param":"stops"}],
+  "palette": [68,67,177,178,19,66,20,179,18,21,180,176,65],
+  "dither": {"amount":1,"spread":0,"tone":1,"red":1,"green":1,"blue":1}
+ },
  "green-band": {"name": "Green base band", "like": "desert-ground", "color": "#6e6e6e"},
  "ice-soil": {"name": "Ice soil", "like": "red-ground", "color": "#564e47"},
  "ice-snow": {"name": "Ice snow", "like": "ice-ground", "color": "#edf5ff"},
@@ -1622,11 +1509,6 @@
  "red-moss": {"name": "Red moss", "like": "red-slope", "color": "#45271e"},
  "red-sand": {"name": "Red sand", "like": "red-debris", "color": "#64473e"},
  "red-band": {"name": "Red base band", "like": "desert-ground", "color": "#4c2c21"},
- "zhon-soil": {"name": "Zhon soil", "like": "red-ground", "color": "#353435"},
- "zhon-snow": {"name": "Zhon snow", "like": "ice-ground", "color": "#e5d7c2"},
- "zhon-moss": {"name": "Zhon moss", "like": "zhon-slope", "color": "#a88d6a"},
- "zhon-sand": {"name": "Zhon sand", "like": "zhon-debris", "color": "#64676d"},
- "zhon-band": {"name": "Zhon base band", "like": "desert-ground", "color": "#3a4d6e"},
  "rock-sandstone-ochre": {"name": "Layered sandstone", "like": "rock-sandstone", "color": "#836f23"},
  "rock-conglomerate": {"name": "Rounded conglomerate", "like": "rock-sandstone", "color": "#777757"},
  "rock-siltstone": {"name": "Jointed siltstone", "like": "rock-shale", "color": "#632b33"},

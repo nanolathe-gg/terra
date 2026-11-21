@@ -21,11 +21,6 @@
       "description": "Pale gray dust, darker rock, no water"
     },
     {
-      "id": "zhon",
-      "name": "Zhon",
-      "description": "Olive soil, blue rock, dark teal water"
-    },
-    {
       "id": "lush",
       "name": "Lush",
       "description": "Deep green jungle, brown cliffs, blue water"
@@ -55,7 +50,6 @@
     "green",
     "moon",
     "desert",
-    "zhon",
     "lava",
     "ice",
     "red",

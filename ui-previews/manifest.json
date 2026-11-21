@@ -4832,34 +4832,6 @@
     "label": "100%"
    }
   ],
-  "knob-beachWidth": [
-   {
-    "value": 0,
-    "label": "0"
-   },
-   {
-    "value": 1,
-    "label": "1"
-   },
-   {
-    "value": 2,
-    "label": "2"
-   }
-  ],
-  "knob-apron": [
-   {
-    "value": 0,
-    "label": "0 px"
-   },
-   {
-    "value": 60,
-    "label": "60 px"
-   },
-   {
-    "value": 120,
-    "label": "120 px"
-   }
-  ],
   "knob-waterSoft": [
    {
     "value": 0,
@@ -5316,12 +5288,11 @@
    "red": "world-red.png",
    "archipelago": "world-archipelago.png",
    "moon": "world-moon.png",
-   "zhon": "world-zhon.png",
-   "desert": "world-desert.png",
+   "lush": "world-lush.png",
    "lava": "world-lava.png",
+   "desert": "world-desert.png",
    "crystal": "world-crystal.png",
-   "ice": "world-ice.png",
-   "lush": "world-lush.png"
+   "ice": "world-ice.png"
   }
  }
 }

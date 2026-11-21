@@ -177,8 +177,7 @@ async function main() {
     const ready = async label => {
       for (let i = 0; i < 480; i++) {
         checkErrors();
-        // A Zhon map cannot export (by design): its editor being enabled stands in for the export button.
-        const state = await evaluate(`(() => { const button=document.getElementById('map-export'), ready=Boolean(window.sculptCanvas&&window.sculptDebug&&((button&&!button.disabled)||(${scene.biome==='zhon'}&&!document.getElementById('editor')?.disabled))); return {ready,running:false,error:document.getElementById('error')?.textContent?.trim()||''}; })()`);
+        const state = await evaluate(`(() => { const ready=Boolean(window.sculptCanvas&&window.sculptDebug&&window.sculptRegion?.canExport()); return {ready,running:false,error:document.getElementById('error')?.textContent?.trim()||''}; })()`);
         if (state.error) throw new Error(`Editor error: ${state.error}`);
         if (state.ready && !state.running) { checkErrors(); return; }
         await sleep(250);

@@ -162,7 +162,7 @@ export function worldControlRequirement(key,v){
  if(['stepSoftPx','shelfWander','shoalRag'].includes(key))return needs('deepEdge',HARD_STEP);
  // The waterline's stairs and blur are drawn only by a crisp waterline, and a blur replaces the stairs (engine-frag.wgsl, the shore's crisp cut).
  if(key==='shoalShoreSoft')return needs('crispShore','Crisp waterline');
- if(key==='beachWidth'&&n('beachLayer')<=0)return 'This world has no beach of its own. Choose another world\'s Beach, above, to use this setting.';
+ if(['beachWidth','apron'].includes(key)&&n('beachLayer')<=0)return 'This setting needs a world with a beach.';
  if(key==='bedCrackSize')return needs('bedCracks','Cracked bed');
  return '';
 }

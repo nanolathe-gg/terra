@@ -8,7 +8,7 @@ import {landformTool} from '../sculpt-shape-presets.js';
 
 const root = new URL('..', import.meta.url).pathname;
 // Every world's numbers over the shape library, as the Go site tool serves them (config.worldShapes, from each table's world.shapes).
-const worldShapes = Object.fromEntries(['green', 'red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice'].map(w => [w, JSON.parse(readFileSync(`${root}materials/${w}.json`, 'utf8')).world.shapes]));
+const worldShapes = Object.fromEntries(['green', 'red', 'archipelago', 'moon', 'lava', 'desert', 'crystal', 'ice'].map(w => [w, JSON.parse(readFileSync(`${root}materials/${w}.json`, 'utf8')).world.shapes]));
 const config = {biomeId: 'green', baseHeight: 99, seaLevel: 75, size: 2336, worldSize: 2336, map: {width: 2080, height: 2176}, worldShapes,
   defaults: {undulation: 10, undulationScale: 200, undulationCover: .45, lean: 0}, material: {surfaceRelief: 1.12, materialWeathering: 0}};
 
@@ -95,27 +95,23 @@ test('the surface sliders open where the browser puts them, and their ranges are
   assert.equal(drawOptions(s).detail, 1.1);
 });
 
-const {LIBRARY} = await import('../sculpt-materials.js');
 test('a world without a beach borrows another world\'s: its layer, its numbers, and the facts and rows that read them', async () => {
   const {worldPanelValues, colorRows} = await import('../sculpt-knobs.js');
-  const lender = {name: 'Zhon', table: 'materials/zhon.json', material: {beachWidth: 178, beachHeight: 6, beachRGB: [200, 180, 140]}, beachMaterial: 'zhon-beach'};
-  const world = () => ({layers: ['slopeGrass', 'rock'], material: {wetBand: 9}, water: {}, beachSources: {zhon: lender}});
+  const lender = {name: 'Beach fixture', table: 'fixture.json', material: {beachWidth: 178, beachHeight: 6, beachRGB: [200, 180, 140]}, beachMaterial: 'desert-sand'};
+  const world = () => ({layers: ['slopeGrass', 'rock'], material: {wetBand: 9}, water: {}, beachSources: {fixture: lender}});
   const facts = c => worldPanelValues({config: c, renderer: {variant: new Map(), groundTiled: false}, nodes: [], colors: {}, weathering: false, materialWeathering: 0});
   const none = borrowBeach(world(), new URLSearchParams(''));
   assert.deepEqual(none.layers, ['slopeGrass', 'rock']); assert.equal(none.beachTable, undefined); assert.equal(facts(none).beachLayer, 0);
   assert.equal(borrowBeach(world(), new URLSearchParams('beachFrom=nowhere')).beachTable, undefined, 'an unknown lender lends nothing');
-  const borrowed = borrowBeach(world(), new URLSearchParams('beachFrom=zhon'));
+  const borrowed = borrowBeach(world(), new URLSearchParams('beachFrom=fixture'));
   assert.deepEqual(borrowed.layers, ['slopeGrass', 'rock', 'beach'], 'the beach is generated after the world\'s own layers');
-  assert.equal(borrowed.beachTable, 'materials/zhon.json');
-  assert.equal(borrowed.materials.beach, 'zhon-beach', 'its sand is the lender\'s beach material');
+  assert.equal(borrowed.beachTable, 'fixture.json');
+  assert.equal(borrowed.materials.beach, 'desert-sand', 'its sand is the lender\'s beach material');
   assert.deepEqual(borrowed.material, {wetBand: 9, beachWidth: 178, beachHeight: 6, beachRGB: [200, 180, 140]});
   assert.equal(facts(borrowed).beachLayer, 1);
   assert.ok(!colorRows(borrowed, new URLSearchParams()).some(([k]) => k === 'beach'), 'its color is its material’s (no Beach color row)');
   const own = {...world(), layers: ['slopeGrass', 'beach'], material: {beachWidth: 120}};
-  assert.equal(borrowBeach(own, new URLSearchParams('beachFrom=zhon')).material.beachWidth, 120, 'a world\'s own beach stays its own');
-  // Every world that lacks a beach is offered the ones whose tables make one.
-  const tables = ['green', 'moon', 'desert', 'zhon', 'lava', 'ice', 'red', 'crystal', 'archipelago'].map(w => JSON.parse(readFileSync(`${root}materials/${w}.json`, 'utf8')));
-  assert.ok(tables.some(t => LIBRARY[t.world?.materials?.beach]), 'a world lends its beach material');
+  assert.equal(borrowBeach(own, new URLSearchParams('beachFrom=fixture')).material.beachWidth, 120, 'a world\'s own beach stays its own');
 });
 
 test('the address may try the light\'s and the low ground\'s colors without changing the world', async () => {

@@ -44,7 +44,7 @@ choose a material.
   ground, slope cover, beach and debris fines draw their role materials; rock,
   crown rock, painted rock and chips draw each rock type's rock. A built-in in
   `SURFACE_DRAWABLE` may name another library material
-  (`{"builtin": "sand", "material": "zhon-beach"}`), laid by the built-in's
+  (`{"builtin": "sand", "material": "desert-sand"}`), laid by the built-in's
   own share.
 - **Material layers** draw a library material by Coverage times their rule.
   Presets include snow above a height, moss in damp shade, scree on steep

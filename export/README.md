@@ -14,8 +14,8 @@ triples), and `installedNames` (map file basenames). The map names in
 world's planet. All mounted OTA/TNT pairs with that planet contribute to its
 climate medians and `defaultSeaLevel` (the median TNT header sea level).
 For an even source count, both defaults use the upper middle value. `sources`
-lists their logical OTA paths. Missing scene maps, conflicting planets, and
-Zhon can produce `disabledReason` instead of an exportable climate and sea
+lists their logical OTA paths. Missing scene maps and conflicting planets
+can produce `disabledReason` instead of an exportable climate and sea
 default. Disabled worlds omit `defaultSeaLevel`; a median of zero remains
 present. The palette is read in memory, including the ordinary PCX recovery
 fallback.

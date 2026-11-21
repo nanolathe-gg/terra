@@ -2,7 +2,7 @@
 // ui-previews/, which is published as a pinned release bundle and served with the editor. Authored fixtures only: no retail
 // scene, crop or map is loaded. Run it again when a preset, the renderer or an example changes:
 // node repro/ui-previews.mjs --server http://127.0.0.1:<port> --port <cdp> [--out DIR]
-// Add --worlds-only to regenerate just the nine New-map thumbnails, preserving all hover examples.
+// Add --worlds-only to regenerate just the New map thumbnails, preserving all hover examples.
 // It replaces the folder's images and manifest and removes images the examples no longer name.
 import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import {spawn,execFileSync} from 'node:child_process';
@@ -61,7 +61,7 @@ try{
   }
   }
   // The same authored landform, camera and seed in every world's default material. No scene/map source is loaded.
-  const worlds=['green','red','archipelago','moon','zhon','desert','lava','crystal','ice','lush'];
+  const {worlds}=await (await fetch(`${server}/services.json`)).json();
   manifest.worlds={frame:HELP_FRAME,fixture:{kind:'hill',path:HELP_PATH,card:HELP_CARD,seed:2701,crop:{x:180,y:140,width:850,height:620}},images:{}};
   for(const world of worlds){
     await send('Page.navigate',{url:`${server}/?biome=${world}&mapX=4&mapY=4&scratch=world-previews&gpuMB=512&heapMB=1536`});await ready();

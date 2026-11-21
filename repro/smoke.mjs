@@ -5,7 +5,7 @@
 // --jobs runs that many browsers at once (default 3), on CDP ports --port, --port+1, ...: each world is its own browser either way.
 // Prints one JSON line per world: the brushes that added a node and came back on undo, the export result and the console. The export runs in
 // the page (export/ built for WebAssembly, in a worker), so this works on the Go server and on a static build alike; it must pass its self-check.
-// Exit code 1 if any brush failed to add or undo a node, the console is not clean, or an export other than Zhon's (which cannot export, by design) fails.
+// Exit code 1 if any brush failed to add or undo a node, the console is not clean, or an export fails.
 import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
@@ -15,7 +15,7 @@ const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
 const flag = name => { const i = args.indexOf(name); if (i >= 0) args.splice(i, 1); return i >= 0; };
 const server = opt('--server', 'http://127.0.0.1:8801'), port = Number(opt('--port', 9450)), out = opt('--out', 'smoke-out');
-const worlds = opt('--worlds', 'green,red,archipelago,moon,zhon,lava,desert,crystal,ice').split(','), worlds8 = opt('--worlds8', 'green').split(','), page8 = flag('--page8'), noExport = flag('--no-export'), shore = flag('--shore');
+const worlds = opt('--worlds', 'green,red,archipelago,moon,lava,desert,crystal,ice').split(','), worlds8 = opt('--worlds8', 'green').split(','), page8 = flag('--page8'), noExport = flag('--no-export'), shore = flag('--shore');
 const jobs = Math.max(1, Number(opt('--jobs', 3)));
 mkdirSync(out, {recursive: true});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -45,9 +45,9 @@ async function session(url, port, fn) {
   } finally { chrome.kill(); await sleep(600); }
 }
 
-const ready = async (ev, exportable) => {
+const ready = async ev => {
   for (let i = 0; i < 600; i++) {
-    if (await ev(`!!window.sculptCanvas && !document.getElementById('editor').disabled && ${exportable ? `!document.getElementById('map-export').disabled` : 'true'}`)) { await ev('sculptCanvas.idle()'); await sleep(1500); return; }
+    if (await ev(`!!window.sculptCanvas && !document.getElementById('editor').disabled && sculptRegion.canExport()`)) { await ev('sculptCanvas.idle()'); await sleep(1500); return; }
     const e = await ev(`document.getElementById('error')?.textContent`); if (e) throw new Error(e);
     await sleep(300);
   }
@@ -72,7 +72,7 @@ async function smokeWorld(world, port) {
   const result = await session(url, port, async ({send, ev, logs}) => {
     const r = {world, brushes: {}, export: null};
     try {
-      await ready(ev, world !== 'zhon');
+      await ready(ev);
       r.path = await ev('location.pathname');
       if (r.path !== new URL(url).pathname) throw new Error('Editor redirected away from its index URL: ' + r.path);
       await ev('sculptCanvas.zoom(1); true'); await sleep(500);
@@ -87,21 +87,18 @@ async function smokeWorld(world, port) {
         if (r.brushes[tool] !== 'ok') bad++;
       }
       if (!noExport) {
-        if (world === 'zhon') r.export = await ev(`document.getElementById('map-export').disabled ? 'disabled, by design' : 'enabled'`);
-        else {
-          // Export an actual landform with the route and taper fields, after the brush/undo loop left the map empty.
-          await strokeAt(send, ev, 'plateau');
-          r.landformParams = await ev(`sculptDebug.nodes().at(-1).params`);
-          if (r.landformParams.routeSmooth !== .8 || r.landformParams.crestTaper !== .65) bad++;
-          if (shore && (r.landformParams.combine !== 1 || r.landformParams.fingers !== 1 || r.landformParams.terraces !== 5 || r.landformParams.stepReference !== 1 || r.landformParams.heightReference !== 1)) bad++;
-          r.landformParams = {routeSmooth:r.landformParams.routeSmooth,crestTaper:r.landformParams.crestTaper,...(shore?{combine:r.landformParams.combine,elevation:r.landformParams.elevation,fingers:r.landformParams.fingers,terraces:r.landformParams.terraces,stepReference:r.landformParams.stepReference,heightReference:r.landformParams.heightReference}:{})};
-          for (let i = 0; i < 400 && await ev(`document.getElementById('map-export').disabled`); i++) await sleep(250);   // the Time pass after the last undo
-          const name = `Smoke${world}${Date.now() % 100000}`;
-          await ev(`window.smokeExport={done:false};sculptMap.export(${JSON.stringify(name)}).then(x=>window.smokeExport={done:true,x},e=>window.smokeExport={done:true,error:e.message});true`);
-          for (let i = 0; i < 1200; i++) { const q = await ev('window.smokeExport'); if (q?.done) { const check = q.x?.selfCheck; r.export = q.error ? 'FAILED: ' + q.error : check?.tnt && check.ota && check.archive && q.x.archiveBytes > 0 ? 'ok' : 'FAILED: self-check ' + JSON.stringify(check); r.exportResult = JSON.stringify(q.x ?? null).slice(0, 200); break; } await sleep(250); }
-          r.export ??= 'FAILED: timed out';
-          if (r.export !== 'ok') bad++;
-        }
+        // Export an actual landform with the route and taper fields, after the brush/undo loop left the map empty.
+        await strokeAt(send, ev, 'plateau');
+        r.landformParams = await ev(`sculptDebug.nodes().at(-1).params`);
+        if (r.landformParams.routeSmooth !== .8 || r.landformParams.crestTaper !== .65) bad++;
+        if (shore && (r.landformParams.combine !== 1 || r.landformParams.fingers !== 1 || r.landformParams.terraces !== 5 || r.landformParams.stepReference !== 1 || r.landformParams.heightReference !== 1)) bad++;
+        r.landformParams = {routeSmooth:r.landformParams.routeSmooth,crestTaper:r.landformParams.crestTaper,...(shore?{combine:r.landformParams.combine,elevation:r.landformParams.elevation,fingers:r.landformParams.fingers,terraces:r.landformParams.terraces,stepReference:r.landformParams.stepReference,heightReference:r.landformParams.heightReference}:{})};
+        for (let i = 0; i < 400 && await ev(`document.getElementById('map-export').disabled`); i++) await sleep(250);   // the Time pass after the last undo
+        const name = `Smoke${world}${Date.now() % 100000}`;
+        await ev(`window.smokeExport={done:false};sculptMap.export(${JSON.stringify(name)}).then(x=>window.smokeExport={done:true,x},e=>window.smokeExport={done:true,error:e.message});true`);
+        for (let i = 0; i < 1200; i++) { const q = await ev('window.smokeExport'); if (q?.done) { const check = q.x?.selfCheck; r.export = q.error ? 'FAILED: ' + q.error : check?.tnt && check.ota && check.archive && q.x.archiveBytes > 0 ? 'ok' : 'FAILED: self-check ' + JSON.stringify(check); r.exportResult = JSON.stringify(q.x ?? null).slice(0, 200); break; } await sleep(250); }
+        r.export ??= 'FAILED: timed out';
+        if (r.export !== 'ok') bad++;
       }
     } catch (err) { r.error = err.message; bad++; }
     r.console = logs.filter(l => !/favicon/.test(l)); if (r.console.length) bad++;
@@ -114,7 +111,7 @@ async function smokePage8(world, port) {
   const r = await session(url, port, async ({send, ev, logs}) => {
     const r = {page8: true, world};
     try {
-      await ready(ev, world !== 'zhon'); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
+      await ready(ev); await ev('sculptCanvas.zoom(1); true'); await sleep(500);
       r.paged = await ev('sculptDebug.pageInfo()?.np ?? null');
       for (const tool of ['hill', 'deep']) {   // a ridge, and water with its coast pass, on pages
         const before = await ev('sculptDebug.nodes().length'); await strokeAt(send, ev, tool);

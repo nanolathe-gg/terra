@@ -753,7 +753,7 @@ fn cells(q: vec2f, metric: vec2f, salt: f32, jit: vec2f, count: f32, fall: vec2f
 }
 
 // Beach: dry ground within reach of the water, as the world's coast
-// sections show (Zhon: sand runs ~180 px inland). The reach varies along the
+// sections show. The reach varies along the
 // coast and its inland edge is ragged. Distance to water is found by
 // marching outward in 16 directions.
 fn beachCover(p: vec2f, h: f32, slope: f32) -> f32 {
@@ -772,7 +772,7 @@ fn beachCover(p: vec2f, h: f32, slope: f32) -> f32 {
             if (d >= min(nearWater, nearRise)) { break; }
             let there = baseHeight(p + dir * d);
             let water = there < u.sea && d <= reach * 1.15;
-            // A sand apron gathers round raised rock (Zhon's domes).
+            // A sand apron gathers round raised rock.
             let rise = there > h + 6.0 && d <= apron * 1.15;
             if (!water && !rise) { continue; }
             // Refine the crossing between this step and the last, so the
@@ -868,7 +868,7 @@ fn contourBands(p: vec2f, h: f32, slope: f32, fall: vec2f, banding: f32, level: 
     return vec3f(offset * strength, line, facing);
 }
 
-// Sand streaks, as on Zhon's sandy slopes and ramps: fine continuous lines
+// Sand streaks on sandy slopes and ramps: fine continuous lines
 // along the contours, a few px apart, curving with the ground (retail ramp
 // sections). Tonal only: a dark line, deeper where the slope faces away
 // from the sun. Returns (line strength, facing).

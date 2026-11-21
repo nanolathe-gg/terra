@@ -13,12 +13,13 @@ import json
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-WORLDS = ['green', 'red', 'archipelago', 'moon', 'zhon', 'lava', 'desert', 'crystal', 'ice']
+WORLDS = ['green', 'red', 'archipelago', 'moon', 'lava', 'desert', 'crystal', 'ice']
 
 
 def windows(world, root):
     out = []
-    for scene in sorted(HERE.glob(f'scenes/{world}-*.json')):
+    scenes = [*HERE.glob(f'scenes/{world}-*.json'), *HERE.glob(f'archive/{world}/{world}-*.json')]
+    for scene in sorted(scenes):
         s = json.loads(scene.read_text())
         crop = s.get('crop') or scene.stem
         c = root / 'repro-r7' / crop / 'crop.json'

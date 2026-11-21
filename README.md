@@ -21,7 +21,7 @@ playable `.ufo` map.
   layers (soil, grass, moss, sand, snow) follow the terrain you drew.
 - **Real rock.** A rock column of hard and soft beds, with dip and folds,
   rendered as a voxel solid so cliffs break into ledges and blocks.
-- **Ten starting worlds:** Green Planet, Red Planet, Archipelago, Moon, Zhon,
+- **Nine starting worlds:** Green Planet, Red Planet, Archipelago, Moon,
   Lush, Lava, Painted Desert, Crystal and Ice. Every setting is yours to
   change, and each map keeps its own copy of its world.
 - **A material editor.** Ground, water and rock textures are node graphs you

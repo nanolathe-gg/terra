@@ -164,7 +164,6 @@ func readCatalog(fs vfs.FSOps) (catalog, error) {
 		}
 		result.Worlds[example.ID] = world
 	}
-	result.Worlds["zhon"] = worldInfo{Sources: []string{}, DisabledReason: "no game map uses Zhon yet, so it has no planet or climate for the game to use. Its maps still save and open in the editor."}
 	return result, nil
 }
 

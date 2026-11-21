@@ -19,8 +19,8 @@ before the color.
 ## What a card has
 
 - **Its windows.** `repro/scenes/<world>-1..3.json`, each a stroke list
-  that rebuilds a 1024-px window of a retail map (Zhon: a map editor
-  section). The retail crop, its heights and a height relief are in
+  that rebuilds a 1024-px window of a retail map. The retail crop, its
+  heights and a height relief are in
   `$R/repro-r7/<world>-N/` (`retail.png`, `heights.npy`, `relief.png`).
   `R=/private/tmp/nanolathe-map-editor`.
 - **The world's retail maps.** `$R/retail-<world>/`, one export per map
@@ -184,8 +184,9 @@ Notes for the briefs:
   this machine; their cards work from maps only. ta-archive.com lists
   more packs (`TASect_*.hpi`). Fetching one, as `catalogs/dl-ice` was
   fetched with its provenance, is the owner's call.
-- Zhon has no retail maps. Its family and its windows are sections
-  (`low savannah rivers`).
+- Zhon's three research windows use the third-party `low savannah rivers`
+  sections. Their stroke lists and the wall fixture are in
+  `repro/archive/zhon/`.
 - The modern Green variant (`green-modern`) has its own card and realism
   report (AGENTS.md "Checks", modern Green).
 - A section pack's heights carry no sea level, so `stats.py` measures a

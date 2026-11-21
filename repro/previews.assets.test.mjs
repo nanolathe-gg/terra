@@ -10,10 +10,13 @@ test('published hover previews match the examples',()=>{
   const manifest=JSON.parse(readFileSync(new URL('manifest.json',previews),'utf8'));
   assert.deepEqual(manifest.frame,HELP_FRAME);
   assert.deepEqual(manifest.tools,HELP_TOOLS);
+  const site=JSON.parse(readFileSync(new URL('../site.json',import.meta.url),'utf8'));
+  const hasBeach=site.worlds.some(({id}) => JSON.parse(readFileSync(new URL(`../materials/${id}.json`,import.meta.url),'utf8')).world.materials.beach);
+  const beachControls=new Set(['beachWidth', 'apron']);
   const expected = new Set([
     ...Object.keys(HELP_CONTROLS),
     ...SHAPE_FIELDS.map(([, id]) => id),
-    ...KNOBS.flatMap(([, rows]) => rows.map(([key]) => `knob-${key}`)),
+    ...KNOBS.flatMap(([, rows]) => rows.filter(([key]) => hasBeach || !beachControls.has(key)).map(([key]) => `knob-${key}`)),
     ...SURFACE_SLIDER_IDS, 'cracks', 'amount', 'roughness', 'softness',
     'knob-shallowTone', 'knob-sun', 'knob-sky',
   ]);
