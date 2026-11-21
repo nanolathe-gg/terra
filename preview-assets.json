@@ -4,7 +4,7 @@
   "tag": "previews-27dbbd726b0c57ff",
   "asset": "ui-previews.tar.gz",
   "sha256": "27dbbd726b0c57ff1875eb0b3b76798f139a2b7a69506e887d9768b13862f0aa",
-  "inputsSHA256": "8277c55b977a7a2458ffde8b6e8bb798115fb5fdb61c4d6933029bb020fd2845",
+  "inputsSHA256": "6836f808a3d4fae64e1c006327bb8239a482c5431c854c43b31f4376e0d89030",
   "files": {
     "amount.png": "b224f8ff9f8fa452e43b2b360acb856c7d1633e2dc5ffabb777d9758381651e3",
     "berg-break.png": "a35e223c97948202d9cbea1146a1f693dd3a53441e1dbecd3e60154d8e68a5b6",
@@ -372,5 +372,7 @@
     "world-lush.png": "8cd303bf9e2ce26c3e53799cf88e9f70e768ae8f0737210f3e41503ed0743354",
     "world-moon.png": "be7952ca1ab7cd155ce8499eb31777dcf08383296fa57c8916ce04c57bc701b6",
     "world-red.png": "edf92ea7832de518615e9710878f713098288a6d61ac1e78677f542b2e0325bc"
-  }
+  },
+  "renderedInputsSHA256": "8277c55b977a7a2458ffde8b6e8bb798115fb5fdb61c4d6933029bb020fd2845",
+  "acceptedChange": "none"
 }
