@@ -796,6 +796,10 @@
  "world": {
     "materials": {"ground": "ice-ground", "water": "ice-water", "rock": "ice-rock", "slope": "ice-slope", "debris": "ice-debris", "extra": ["ice-bergs-ground"], "soil": "ice-soil", "snow": "ice-snow", "moss": "ice-moss", "sand": "ice-sand", "band": "ice-band", "crystal": "ice-crystals"},
     "knobDefaults": {
+        "fineRelief": 1.2,
+        "fineLevel": 0.4,
+        "fineSize": 8,
+        "fineGrain": -0.5,
         "plainRelief": 0.6,
         "crackSeverity": 0,
         "crackMajor": 0.4,
