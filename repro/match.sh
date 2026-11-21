@@ -6,6 +6,7 @@
 #   repro/match.sh <world> --holdout --note TEXT                                         the held-out window (only at a checkpoint)
 #   repro/match.sh <world> --log                                                         the trial log so far
 #   repro/match.sh <world> --keep-trial trial-NNN                                       keep a trial's pictures (one you cite or keep)
+#   repro/match.sh <world> --aim green-2:slope:lines[,...] --note TEXT                  name the gaps a trial aims at (window:class:metric), for stalls
 #   options: --out DIR (default $R/match/<this worktree>/<world>), --keep (keep this trial's pictures past pruning)
 # A trial: validate the world files (repro/match_validate.mjs), refresh REFERENCE.md, render the world's windows under Node on Dawn and
 # score them (repro/retail.sh: shape and look per window against the first trial), split each window by terrain class with 1x crops
@@ -22,12 +23,13 @@ KEEP_LAST=8
 R=${R:-/tmp/nanolathe-map-editor}
 py=${PYTHON:-/Users/daniel/src/terraform/.venv/bin/python}
 world=$1; [ $# -gt 0 ] && shift
-[ -n "$world" ] && [ "${world#-}" = "$world" ] || { sed -n '2,8p' "$0" >&2; exit 2; }
-note=; query=; probe=; holdout=0; showlog=0; keep=0; keeptrial=; out=; only=
+[ -n "$world" ] && [ "${world#-}" = "$world" ] || { sed -n '2,9p' "$0" >&2; exit 2; }
+note=; aim=; query=; probe=; holdout=0; showlog=0; keep=0; keeptrial=; out=; only=
 while [ $# -gt 0 ]; do
   case $1 in
     --note) note=$2; shift 2 ;;
     --query) query=$2; shift 2 ;;
+    --aim) aim=$2; shift 2 ;;
     --probe) probe=$2; shift 2 ;;
     --holdout) holdout=1; shift ;;
     --window) only=$2; shift 2 ;;
@@ -39,6 +41,9 @@ while [ $# -gt 0 ]; do
   esac
 done
 out=${out:-$R/match/$(basename "$repo")/$world}
+for k in $(printf '%s' "$aim" | tr ',' ' '); do   # window:class:metric, as the printout's findings name them
+  printf '%s' "$k" | grep -qE "^$world-[0-9]+:(deep|shelf|shore|flat|gentle|slope|steep):[a-z0-9_]+$" || { echo "match.sh: --aim $k is not <window>:<class>:<metric> (green-2:slope:lines)" >&2; exit 2; }
+done
 case $(cd "$(dirname "$out")" 2>/dev/null && pwd)/ in "$repo"/*) echo "match.sh: --out must be outside the checkout (retail pixels)" >&2; exit 2 ;; esac
 mkdir -p "$out"
 ledger=$out/ledger.jsonl
@@ -95,7 +100,7 @@ trial() {   # trial <dir> <scenes> <base dir> <query> <kind> <note>
   baseopt=; [ -d "$3/stats" ] && [ "$t" != "$3" ] && baseopt="--base $3"
   RETAIL_SCENES="$2" sh "$here/retail.sh" "$world" --out "$t" ${4:+--query "$4"} $baseopt > "$t/retail.log" 2>&1 || { cat "$t/retail.log" >&2; echo "match.sh: the render or scoring failed: $t/retail.log" >&2; return 1; }
   "$py" "$here/match_classes.py" "$t/scenes" --out "$t/classes" --worlds "$world" > "$t/classes.log" 2>&1 || { cat "$t/classes.log" >&2; return 1; }
-  "$py" "$here/match_log.py" record "$t" --ledger "$ledger" --kind "$5" --note "$6" --query "$4" --commit "$(git -C "$repo" rev-parse --short HEAD)" --diff "$t/candidate.diff" --base "$3" --repo "$repo" --world "$world"
+  "$py" "$here/match_log.py" record "$t" --ledger "$ledger" --kind "$5" --note "$6" --query "$4" --commit "$(git -C "$repo" rev-parse --short HEAD)" --diff "$t/candidate.diff" --base "$3" --repo "$repo" --world "$world" --aim "$aim"
 }
 
 # The bases: the first run renders trial-000 (the tuning windows) and holdout-000 (the held-out window) from unchanged files.
