@@ -103,14 +103,16 @@ async function sectionsCut() {
   const flatImg = await image('retail/GreenFlat01.png');
   const keys = await Promise.all([0, 1, 2].map(k => json(`sections/ridge-${k}-green/info.json`)));
   const ridge = await Promise.all([0, 1, 2].map(k => image(`sections/ridge-${k}-green/final.png`)));
-  const worlds = [await image('sections/ridge-2-desert/final.png'), await image('sections/ridge-2-ice/final.png')];
+  // The same hill on every world, Green and Red (the classic defaults) first and held a little longer.
+  const ALL = [['green', 'Green Planet', .8], ['red', 'Red Planet', .8], ['archipelago', 'Archipelago', .42], ['moon', 'Moon', .42], ['lush', 'Lush', .42], ['lava', 'Lava', .42], ['desert', 'Painted Desert', .42], ['crystal', 'Crystal', .42], ['ice', 'Ice', .42]];
+  const worlds = await Promise.all(ALL.map(([w]) => image(`sections/ridge-2-${w}/final.png`)));
   const want = keys[0].strokes[0].points, at = x => { for (let i = 1; i < want.length; i++) if (x <= want[i][0]) { const [x0, y0] = want[i - 1], [x1, y1] = want[i]; return y0 + (y1 - y0) * (x - x0) / (x1 - x0); } return want.at(-1)[1]; };
   // Where a map maker would put them: the closest diagonal ridges, centered on the path every ~240 px, snapped to the 32 px grid.
   const snap = v => Math.round(v / 32) * 32;
   const placed = [['Green27', 250], ['Green17', 470], ['Green18', 700], ['Green28', 930], ['Green17', 1120]].map(([n, cx]) => ({n, x: snap(cx - 128), y: snap(at(cx) - 128)}));
   const ground = () => { for (let y = 0; y < H; y += 1024) for (let x = 0; x < W; x += 1024) ctx.drawImage(flatImg, x, y); };
   const dashed = (pts, a) => { if (a <= 0) return; ctx.save(); ctx.globalAlpha = a; ctx.setLineDash([10, 8]); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.beginPath(); smooth(pts).forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); ctx.restore(); };
-  const T = {title: [0, 3.2], paste: [3.2, 11], limits: [11, 14.5], draw: [14.5, 17], edit: [17, 21.5], worlds: [21.5, 25], end: [25.5, 30]}, DURATION = 30;
+  const T = {title: [0, 3.2], paste: [3.2, 11], limits: [11, 14.5], draw: [14.5, 17], edit: [17, 21.5], worlds: [21.5, 21.5 + ALL.reduce((a, w) => a + w[2], 0)], end: [21.5 + ALL.reduce((a, w) => a + w[2], 0) + .3, 21.5 + ALL.reduce((a, w) => a + w[2], 0) + 4.8]}; const DURATION = T.end[1];
   const lerpPts = (A, B, f) => A.map((p, i) => p.map((v, k) => v + (B[i][k] - v) * f));
   return {DURATION, frame(t) {
     if (t < T.title[1]) { text('Most TA maps are built from ready-made sections', fadeIO(t, .3, T.title[1] - .1, .5), {x: W / 2, y: H / 2 + 12, size: 38, align: 'center'}); return; }
@@ -147,17 +149,18 @@ async function sectionsCut() {
       return;
     }
     if (t < T.end[0]) {   // the same shape on other worlds
-      const u = t - T.worlds[0], k = Math.min(2, Math.floor(u / 1.2));
-      draw(k === 0 ? ridge[2] : worlds[k - 1]); if (k < 2) draw(worlds[k], ease(span(u % 1.2, .9, 1.2)));
-      caption(t, T.worlds[0] + .1, T.end[0], 'Any world', 'Green, Painted Desert, Ice: the same hill, each world\'s own look');
+      let u = t - T.worlds[0], k = 0; while (k < ALL.length - 1 && u >= ALL[k][2]) { u -= ALL[k][2]; k++; }
+      draw(worlds[k]);   // hard cuts, one world after another
+      text('Any world', fadeIO(t, T.worlds[0] + .05, T.end[0], .25), {y: 628, size: 34}); text(ALL[k][1], .9, {y: 664, size: 22, weight: 400});
       return;
     }
     endCard(t, T.end[0], DURATION);
   }};
 }
 
-logo = await image('logo/final.png');
-const cut = CUT === 'sections' ? await sectionsCut() : await worldsCut();
+logo = await image('logo-green/final.png');
+const endOnly = {DURATION: 5, frame: t => endCard(t, 0, 5)};
+const cut = CUT === 'sections' ? await sectionsCut() : CUT === 'end' ? endOnly : await worldsCut();
 window.frame = n => { ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); cut.frame(n / FPS); };
 window.frames = Math.round(cut.DURATION * FPS); window.ready = true;
 </script>

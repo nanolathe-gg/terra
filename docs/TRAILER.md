@@ -68,6 +68,38 @@ Changes to the owner's first outline (2026-11-19). Strike any of them.
 | 10 logo | An engine render of a letter scene. |
 
 
+
+## Combined cut (2026-11-21)
+
+The owner picked B + C and added Nanolathe gameplay. Owner's notes: TERRA
+written on Green Planet; Green and Red as the classic defaults people
+know; "any world" as a quick cut of every world; the real-time take drags
+its tools and shows craters and water; a second or two of metal and trees;
+gameplay to prove the map works.
+
+| Part | Source | Length |
+| --- | --- | --- |
+| Title | `slate.html` | 3 s |
+| Sections vs Terra | `cuts.html?cut=sections`, its title and end card cut off; the world cut runs Green, Red (0.8 s each), then the other seven (0.42 s each) | 23 s |
+| Slate | "One take, in real time" | 2.2 s |
+| Real-time take | `capture-realtime.mjs` on Green: Mountain, Crater and Deep water dragged, Hill, three metal deposits, seven trees, then Build game map | 26.8 s |
+| Gameplay | Nanolathe `tools/film` with `trailer/nanolathe-film.json` on the take's own `.ufo`: the commander's arrival, its extractor on a placed deposit beside the placed trees, a staged skirmish by the crater | 17 s |
+| End card | `cuts.html?cut=end`, the Green TERRA logo (`logo-green.json`) | 5 s |
+
+Assembled by `trailer/assemble-combined.sh` to 77 s.
+
+**Measured.** The take runs 26.78 s against 26.76 s of wall clock (38
+delivered frames a second). Its build passed the exporter's self-check:
+1,057 unique tiles in 4,420 slots, 10 features, 2 starts. Nanolathe
+loaded `Terra Valley.ufo` from a second `--root` (the TA install is
+never written) and placed the commander's extractor at (760, 744), one of
+the take's deposits. It staged 79 units for the battle and skipped 13 it
+could not place.
+
+**Open.** The gameplay is Nanolathe, the open-source TA engine, not the
+original game; the card's "plays in the game" claim is untested in TA
+itself. No audio.
+
 ## Three concepts (2026-11-21)
 
 The owner asked for alternatives aimed at four points: it is for Total

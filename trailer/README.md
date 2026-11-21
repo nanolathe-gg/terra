@@ -37,3 +37,13 @@ With `A=~/terraform-assets/agent-trailer/v2`:
 `stills.mjs` turns a world's own tools (Canyon, Cone, Atoll...) into the
 library shape and card its toolbar button starts from, because scenes name
 only library shapes.
+
+## The combined cut (2026-11-21)
+
+With `A=~/terraform-assets/agent-trailer/v2` (cuts) and `B=~/terraform-assets/agent-trailer/v3` (take):
+
+1. `node trailer/capture-realtime.mjs --server http://127.0.0.1:<yours> --port <cdp> --out $B/realtime-raw.mp4 --ufo $B/ufo`
+2. Point `trailer/nanolathe-film.json` at the map name (`Terra Valley`), then from `~/src/nanolathe`:
+   `tools/film <path>/nanolathe-film.json $B/film/terra-gameplay.mp4 --root ~/TotalAnnihilation --root $B/ufo`
+3. Render `cuts.html?cut=sections`, `cuts.html?cut=end` and the two slates with `render-explainer.mjs` into `$A/out`.
+4. `trailer/assemble-combined.sh $A $B`
