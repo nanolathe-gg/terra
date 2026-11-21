@@ -825,7 +825,10 @@
         "shoalShoreSoft": 4,
         "faceFill": 0.25,
         "shallowDepth": 4,
-        "deepDepth": 52
+        "deepDepth": 52,
+        "plainRelief": 0,
+        "flatOcclusion": 0,
+        "undulation": 0
       },
       "engineDefaults": {
         "erosion": 1,
