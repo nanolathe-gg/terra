@@ -152,6 +152,11 @@ for (const f of scenes) {
     if (r && Number.isFinite(x) && (x < r[0] || x > r[1])) errors.push(`${at} query ${k}=${v} is outside its range ${r[0]} to ${r[1]}.`);
   }
   if (sc.surface !== undefined) { try { (await import('../sculpt-material-model.js')).copySurface(sc.surface); } catch (err) { errors.push(`${at} surface: ${err.message}`); } }
+  // A role name (@rock) is resolved only in world.surface (internal/site/config.go); a map's own list holds material keys, so an @ name there draws nothing.
+  (Array.isArray(sc.surface) ? sc.surface : []).forEach((l, i) => {
+    const m = l?.material;
+    if (typeof m === 'string' && m.startsWith('@')) errors.push(`${at} surface[${i}] (${l.name ?? l.id ?? l.builtin}): material ${m} is a role name, which only world.surface resolves; a map's own list names the material itself${(w.materials ?? {})[m.slice(1)] ? ` (${w.materials[m.slice(1)]})` : ''}.`);
+  });
   (sc.strokes ?? []).forEach(([kind, , opt], i) => {
     const c = opt?.card ?? {}, where = `${at} stroke ${i} (${kind})`;
     for (const k of Object.keys(c)) if (!cardKeys.has(k)) warnings.push(`${where}: card key ${k} is not a stroke field (typo?). See section 5 of the reference.`);
