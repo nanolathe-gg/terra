@@ -74,7 +74,7 @@ pairs.
 
 ## Start here (round 4)
 
-Round 3 (branch `match-red-3`, 54 of 300 trials; report in the round's final
+Round 3 (branch `match-red-3`, 66 of 300 trials; report in the round's final
 message, notes in `$R/match/terraform-wt-match-red-3/red/NOTES.md`) first
 added red-4, a sea coast from red triangle, as the held-out window, so red-3
 now tunes (owner, 2026-11-20). The base mean (trial-000, red-1..3) was shape
@@ -93,19 +93,24 @@ Leads:
    floor (shape .14 to .18, trial-023); a refit with red-4's coast fitter
    swung the shelf/deep split (NOTES.md). Rebuild red-3's sea with a sloped
    floor: retail drops to -55 within 100 px in the north, and keeps a wide
-   0 to -20 shelf in the SE (x 560-860, y 640-760). The shelf colour levers
+   0 to -20 shelf in the SE (x 560-860, y 640-760). The shelf color levers
    (bedBright, deepDepth below 18) only gray the band or break it into
    islands (trial-022, trial-006).
 2. **Red-3's (and red-4's) coast bank** is retail's rough ground with fine
    vertical streaks and a dark polygon crack network; ours is painted world
    rock in dark blotches (red-3 slope.png). Chunks rock with cracks on its
-   strokes, less Rock paint, and red-rough paint did not draw it
-   (trial-048..050): a bank material with streaks and cracks, placed by a soft
-   rule near the water, is the next try.
+   strokes, less Rock paint, red-rough paint (trial-048..050) and a world
+   surface layer of red-crumple on sloped ground near water (trial-066: red-2's
+   smooth bank took it, .09 to .13) did not draw it. Next: a bank material with
+   down-slope streaks and cracks, as a layer that red-2's river bank escapes
+   (a rule on the sea's depth, or each map's own amount).
 3. **Edge orientation** is most of red-3's look (.50): retail's land edges
    run vertical (lit from due west: 3248 vertical against 263 horizontal on
-   red-3's inland), ours mixed (1880 against 1191). Banding, faceTone, shineRock
-   do not move it (trial-009..012, 040).
+   red-3's inland), ours mixed (1880 against 1191). Banding, faceTone, shineRock,
+   the rock's bedding (faceLamina, faceLedge, faceBed) and reliefAmount .5-.65
+   do not move it (trial-009..012, 040, 056..060). Water Waves direction 0
+   gains .02 on red-3 but draws vertical streaks where retail's run diagonal
+   (trial-061). Find which pass draws the horizontal edges on level land.
 4. **Red-2's upland** reads as broken lit lumps now, but darker and busier
    than retail's lighter plates with thin dark cracks (crops/r2-up2-036.png).
    Stepped versions drew dark risers (trial-029..031). Shore plates draw gray
@@ -115,11 +120,15 @@ Leads:
    cracks 0 do not help (trial-046, 053, 054; stroke cracks are gated by
    world crackSeverity 0).
 6. **Deep water's 32 px patches** are too few (red-4 .48 against 1.14,
-   red-3 .53 against .87); red-water's broad noise and waterSoft move nothing
-   (trial-051, 052).
+   red-3 .53 against .87); red-water's broad noise, its Patch size at 40 and
+   waterSoft move nothing (trial-051, 052, 064). deepDepth 18 created this
+   finding (red-3 deep 32 px 1.42 to .56): trace how deep water samples its
+   material before tuning it.
 7. **The knob** (darkknob) is even now but lacks retail's lit crest and dark
    east lee (red-2 steep.png); the Knob tool draws it and was not viewed.
-8. Relief .8 was not revisited this round.
+8. Relief .8 holds: .5 takes red-1 from .07 to .20 (trial-059), .65 to .11
+   (trial-060).
+9. Not tried: routeSmooth and coastRamp for red-2's smooth river edge.
 
 ## Start here (round 3, done)
 
