@@ -197,7 +197,7 @@ def stalls(es, ledger_dir):
     if len(att) < 2:
         return []
     base = sizes_of(att[0][0], ledger_dir)
-    keys = {f'{w}:{k}' for w, ks in base.items() for k, v in ks.items() if v >= 1}
+    keys = {f'{w}:{k}' for w, ks in base.items() for k, v in ks.items() if v >= 1 and not k.endswith(':dither')}   # the dither is report-only
     keys |= {k for a in att for e in a for k in e.get('aim', [])}
     out = []
     for key in sorted(keys):

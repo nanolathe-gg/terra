@@ -260,12 +260,14 @@ there (its trust is under .5). Read an untrusted stage by eye only.
 | light | the step within each palette ramp | Clay | relief: rock type faces and cracks, a material's relief (Light nodes), World relief controls. The lighting itself is the owner's |
 | placement | which palette ramp (the paint) each pixel uses | the unlit material | where things show: surface layers and their rules, which material a rock type or layer draws |
 | predither | the picture blurred 1 px | `palette=off` | texture in the material itself: grain, patches, cracks (the material graph, rock type cracks) |
-| dither | what the 1 px blur removed | our final picture | the output stage. The owner keeps it unchanged (decision 25): report it, do not chase it |
+| dither | what the 1 px blur removed | our final picture | the output stage. The owner keeps it unchanged (decision 25): report it, do not chase it (the class `dither` finding is report-only and never stalls) |
 
-Finer height detail than the 16 px heights cannot be recovered from a
-picture. Shape from shading on our own render matched our own detail heights
-at a correlation of only .06, because most fine shading comes from the
-material's relief. Compare fine relief in the light stage instead.
+Finer height detail than the 16 px heights is not recovered from the
+picture. Measured on red-3: shape from shading on our own render matched our
+own detail heights at a correlation of only .06. Our Clay render follows our
+height gradient at .66 at 64 px but only .12 at 4 px, so fine shading most
+likely comes from the material's relief rather than the heights. Compare fine
+relief in the light stage instead.
 
 **The retail read.** Before anyone looks at ours, a fresh agent reads each
 window's `sheets/<window>/retail.png` (retail's five stages alone). For each

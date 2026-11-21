@@ -294,7 +294,7 @@ def findings(name, r, o):
     if pd and pd[0] >= THRESHOLDS['palette']:
         out.append((pd[0] / THRESHOLDS['palette'], f'{name}:palette', f"{name}: palette indices {pd[0]:.0%} apart - " + ', '.join(f'index {k} retail {x:.1%}, ours {y:.1%}' for k, x, y in pd[1])))
     words = {'spread': 'tone spread (luma s.d.)', 'band2': 'fine grain (2 px)', 'band8': 'mid texture (8 px)', 'band32': 'broad patches (32 px)',
-             'edges': 'edge density', 'lines': 'thin dark lines (cracks, creases)', 'dither': 'pixel dither (luma a 1 px blur removes)'}
+             'edges': 'edge density', 'lines': 'thin dark lines (cracks, creases)', 'dither': 'pixel dither (luma a 1 px blur removes; the output stage, report only)'}
     for key, label in words.items():
         if key not in r or key not in o:
             continue

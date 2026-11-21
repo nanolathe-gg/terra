@@ -149,7 +149,7 @@ trial() {   # trial <dir> <scenes> <base dir> <query> <kind> <note>
 
 # The bases: the first run renders trial-000 (the tuning windows) and holdout-000 (the held-out window) from unchanged files.
 if [ ! -d "$out/trial-000/stats" ]; then
-  [ -z "$query$probe$only" ] || { echo "match.sh: run the base first (no --query or --probe), so later trials have something to compare with" >&2; exit 2; }
+  [ -z "$query$probe$only$patch" ] && [ $stages = 0 ] || { echo "match.sh: run the base first (no --query, --probe, --window, --patch or --stages), so later trials have something to compare with" >&2; exit 2; }
   if ! git -C "$repo" diff --quiet HEAD -- materials repro/scenes || [ -n "$(git -C "$repo" ls-files --others --exclude-standard -- materials repro/scenes)" ]; then
     echo "match.sh: the base must render the world files as committed; materials/ or repro/scenes/ has changes (git status). Commit or restore them first." >&2; exit 2
   fi

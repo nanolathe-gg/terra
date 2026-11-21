@@ -14,9 +14,11 @@ Retail is one finished picture, so its stages are estimates. Each estimator runs
 that stage's retail estimate untrusted for the class. The stages:
 
  1. height   the 16 px heights, retail's own (heights.npy) and our cells, drawn to the screen as the picture is: relief at 32 and 64 px.
-             Real heights on both sides, so no estimate. Finer height detail is not recovered from the picture: tried, linear shape from
-             shading on our own render found our own detail heights at a correlation of .06 (red-3), because most fine shading comes
-             from the material's relief, not the heights. Compare fine relief in the light stage instead.
+             Real heights on both sides, so no estimate. Finer height detail is not recovered from the picture. Measured on red-3: linear
+             shape from shading on our own render found our own detail heights at a correlation of only .06, while our Clay render
+             follows our screen-drawn height gradient at .66 at 64 px, .45 at 16 px and .12 at 4 px (so the drawing to the screen is
+             right). The likely cause: fine shading comes mostly from the material's relief, not the heights. Compare fine relief in
+             the light stage instead.
  2. light    the step within a palette ramp. The game's palette is twelve 16-step ramps and four 8-step ones, each one hue from light
              to dark; terrain art is painted along them, so a pixel's ramp says which paint (material) it is and its step how lit
              (light times the paint's own tone). Steps are blurred by DEDITHER_SIGMA and each ramp's own mean is taken out.
