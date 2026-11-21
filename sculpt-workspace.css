@@ -240,8 +240,8 @@
 .surface-settings{top:48px;right:10px;width:330px}
 /* The Map menu: the map's file actions and Share link above its own settings. */
 .map-file-actions{display:flex;gap:5px;margin-top:6px}.map-file-actions button{flex:1}
-#pane-map .share-menu>summary{text-align:center;padding:7px 9px;background:#3f6b4c;border-color:#78ae8d;color:#f1ffe9;font-weight:600}#pane-map .share-menu>summary:hover{background:#4a7d59}
-#pane-map .share-menu .popover{position:static;width:auto;margin-top:6px;padding:10px;box-shadow:none}
+#pane-map .link-menu>summary{text-align:center;padding:7px 9px;background:#3f6b4c;border-color:#78ae8d;color:#f1ffe9;font-weight:600}#pane-map .link-menu>summary:hover{background:#4a7d59}
+#pane-map .link-menu .popover{position:static;width:auto;margin-top:6px;padding:10px;box-shadow:none}
 #map-settings-host{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
 /* The View menu: how the map shows, the panels, then the editor's settings. */
 .surface-settings .view-switch{display:flex;gap:0}.surface-settings .view-switch button{flex:1;border-radius:0;padding:5px 8px;font-size:11px}

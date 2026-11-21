@@ -62,9 +62,10 @@ export function mountEditorUI(){
  // close when another opens or the pointer goes down elsewhere; the Shapes list stays while you work on the map. A menu closes with
  // the Share link folded inside it, so the next opening makes a new link.
  const surfaces=[['tab-map','pane-map',true],['open-graphics','pane-graphics',true],['open-export','pane-export',true],['tab-objects','pane-objects',false]];
- function setSurface(button,pane,open){$(pane).hidden=!open;$(button).setAttribute('aria-expanded',String(open));if(!open)for(const d of $(pane).querySelectorAll('details.share-menu[open]'))d.open=false;}
+ function setSurface(button,pane,open){$(pane).hidden=!open;$(button).setAttribute('aria-expanded',String(open));if(!open)for(const d of $(pane).querySelectorAll('details.link-menu[open]'))d.open=false;}
  function closeSurfaces(menusOnly=false){let any=false;for(const [button,pane,menu] of surfaces)if(!$(pane).hidden&&(menu||!menusOnly)){setSurface(button,pane,false);any=true;}return any;}
- for(const [button,pane,menu] of surfaces)$(button).onclick=()=>{const open=$(pane).hidden;if(menu)closeSurfaces(true);closeFlyouts();setSurface(button,pane,open);};
+ // A menu opens at its top: a pane keeps its scroll while hidden, and with overlay scrollbars a scrolled Map menu hid Save as link.
+ for(const [button,pane,menu] of surfaces)$(button).onclick=()=>{const open=$(pane).hidden;if(menu)closeSurfaces(true);closeFlyouts();setSurface(button,pane,open);if(menu&&open)$(pane).scrollTop=0;};
  // The Map menu's file actions close it: New opens its dialog, Open a file picker, Save a download.
  $('pane-map').addEventListener('click',e=>{if(e.target.closest('#new-map,#load,#save'))setSurface('tab-map','pane-map',false);});
  // The View button names the view in use (Art, Clay or Passability), whichever script presses it.
@@ -99,7 +100,7 @@ export function mountEditorUI(){
  // text field, menu, library drawer or Full size. Then closeDocked closes the material editor itself, and Pick's card comes next (sculpt.js).
  const find=mountFind();
  const closeGallery=()=>{const b=$('surface-add');if(b?.getAttribute('aria-expanded')!=='true'||!b.getClientRects().length)return false;b.click();return true;};   // left open behind another tab, it waits
- const closeTop=()=>find.close()||closeGallery()||closeFlyouts()||[...document.querySelectorAll('details.top-menu[open],details.share-menu[open],details.status-details[open]')].some(d=>(d.open=false,true))||closeSurfaces(true)||setLarge(false)||Boolean(docked?.inner());
+ const closeTop=()=>find.close()||closeGallery()||closeFlyouts()||[...document.querySelectorAll('details.top-menu[open],details.link-menu[open],details.status-details[open]')].some(d=>(d.open=false,true))||closeSurfaces(true)||setLarge(false)||Boolean(docked?.inner());
  const closeDocked=()=>{if(!docked)return false;docked.close();return true;};
  for(const [id,on] of [['view-rendered',false],['view-clay',true]])$(id).onclick=()=>{$('clay').checked=on;$('clay').dispatchEvent(new Event('change'));};
  updateLayout();

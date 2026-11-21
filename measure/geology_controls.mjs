@@ -22,7 +22,8 @@ if (chrome && !server) { console.error('geology_controls.mjs: --chrome needs --s
 // How render.mjs runs: in the page on the server, or under Node from the server's files or (no --server) this checkout's, its configs dumped once.
 const hostArgs = chrome ? ['--chrome', '--server', server, '--port', port] : server ? ['--server', server] : ['--configs', opt('--configs', '') || (await import('../repro/headless.mjs')).dumpConfigs()];
 const only = opt('--only', '').split(',').filter(Boolean), knobsOnly = opt('--knobs', '').split(',').filter(Boolean);
-const py = process.env.PYTHON || '/Users/daniel/src/terraform/.venv/bin/python';
+// The main checkout's venv (worktrees share it).
+const py = process.env.PYTHON || `${execFileSync('git', ['-C', new URL('.', import.meta.url).pathname, 'rev-parse', '--path-format=absolute', '--git-common-dir'], {encoding: 'utf8'}).trim().replace(/\/\.git$/, '')}/.venv/bin/python`;
 const here = new URL('..', import.meta.url).pathname;
 const sceneRoot = opt('--scenes', `${here}repro/scenes`);
 const scenePath = (world, n) => existsSync(`${sceneRoot}/${world}-${n}.json`) ? `${sceneRoot}/${world}-${n}.json` : `${here}repro/scenes/${world}-${n}.json`;

@@ -111,7 +111,8 @@ export function mountHelp(){
   const queue=(t,kind)=>{hide();trigger=kind;hoverTimer=setTimeout(()=>show(t),500);};
   document.addEventListener('pointerover',e=>{const t=target(e);if(t&&!e.buttons&&!t.contains(e.relatedTarget))queue(t,'pointer');});
   document.addEventListener('pointerout',e=>{const t=target(e);if(trigger==='pointer'&&t&&!t.contains(e.relatedTarget))hide();});
-  document.addEventListener('focusin',e=>{const t=target(e);if(t)queue(t,'focus');});
+  // Keyboard focus only: a click also focuses its button, and the card it opened stayed over the menu that click opened.
+  document.addEventListener('focusin',e=>{const t=target(e);if(t&&e.target.matches(':focus-visible'))queue(t,'focus');});
   document.addEventListener('focusout',e=>{if(trigger==='focus'&&target(e))hide();});
   document.addEventListener('pointerdown',hide);
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!tip.hidden){e.preventDefault();e.stopPropagation();hide();}},true);
