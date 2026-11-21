@@ -1,4 +1,5 @@
 import {terrainAllocation} from './sculpt-memory.js';
+import {entryConstants} from './sculpt-gates.js';
 // A bounded, transient voxel solid for the editor's existing chunk stream.
 // Only allocation counts return to JS; shape, rock, wear, and rendering stay on GPU.
 const STORAGE=()=>GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST;
@@ -22,7 +23,7 @@ export class VoxelSurface {
     if(errors.length)throw Error(errors.map(m=>`${m.lineNum}: ${m.message}`).join('\n'));
     const input=b=>b===0?{binding:b,visibility:GPUShaderStage.COMPUTE|GPUShaderStage.FRAGMENT,buffer:{type:'uniform'}}:[3,4,6].includes(b)?{binding:b,visibility:GPUShaderStage.COMPUTE|GPUShaderStage.FRAGMENT,texture:{sampleType:'unfilterable-float'}}:{binding:b,visibility:GPUShaderStage.COMPUTE|GPUShaderStage.FRAGMENT,buffer:{type:'read-only-storage'}};
     const output=b=>b<2||b===6?{binding:b,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:'write-only',format:'rgba32float'}}:{binding:b,visibility:GPUShaderStage.COMPUTE,buffer:{type:'storage'}};
-    const empty=d.createBindGroupLayout({entries:[]});self.module=module;self.layouts={};self.built=new Map();
+    const empty=d.createBindGroupLayout({entries:[]});self.module=module;self.source=code;self.layouts={};self.built=new Map();
     for(const [entryPoint,[reads,writes]]of Object.entries(ENTRIES)){
       const a=d.createBindGroupLayout({entries:reads.map(input)}),b=d.createBindGroupLayout({entries:writes.map(output)});
       self.layouts[entryPoint]={layout:d.createPipelineLayout({bindGroupLayouts:[renderer.commonLayout,empty,a,b]}),reads,writes,a,b};
@@ -38,7 +39,7 @@ export class VoxelSurface {
     this.previewCounts=new Map();this.finalCounts=new Map();this.predictionStats={predicted:0,seeds:0,overflows:0,budgetFallbacks:0,preDrawWaitMs:0,postDrawWaitMs:0};this.finalStats={predicted:0,seeds:0,overflows:0};this.stats={pieces:0,bricks:0,candidateBricks:0,peakBytes:0,allocationMs:0};}
   // Both allowed rock masks are ready at startup: fixed slot 0, and the recipe table.
   build(mask){
-    if(!this.built.has(mask))this.built.set(mask,Promise.all(Object.entries(this.layouts).map(async([entryPoint,l])=>[entryPoint,{...l,pipeline:await this.device.createComputePipelineAsync({label:entryPoint,layout:l.layout,compute:{module:this.module,entryPoint,constants:{rockMask:mask}}})}]))
+    if(!this.built.has(mask))this.built.set(mask,Promise.all(Object.entries(this.layouts).map(async([entryPoint,l])=>[entryPoint,{...l,pipeline:await this.device.createComputePipelineAsync({label:entryPoint,layout:l.layout,compute:{module:this.module,entryPoint,constants:entryConstants(this.source,entryPoint,{rockMask:mask})}})}]))
       .then(list=>{this.passesBy??={};this.passesBy[mask]=Object.fromEntries(list);}));
     return this.built.get(mask);
   }

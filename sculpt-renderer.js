@@ -13,7 +13,7 @@ import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
 import {RockWeather} from './sculpt-rock-weather.js';
 import {VoxelSurface} from './sculpt-volume.js';
 import {terrainAllocation} from './sculpt-memory.js';
-import {extractGates, gateValues, gateKey, uniformStages, worldUniformDelta, PER_CHUNK_UNIFORMS} from './sculpt-gates.js';
+import {extractGates, gateValues, gateKey, uniformStages, worldUniformDelta, entryConstants, PER_CHUNK_UNIFORMS} from './sculpt-gates.js';
 import {digestGuardRequested, installDigestGuard} from './sculpt-digest-guard.js';
 // The textures a chunk's feed fills, which the input checksum hashes texel by texel (inputDigest).
 export const SURFACE_RECORD_BYTES = 32; // PackedSurfaceRecord in engine-frag.wgsl
@@ -232,7 +232,7 @@ export class TerrainRenderer {
       compile('engine-bake.wgsl', bakeGates.source)]);
     // One uniform-gated fragment pipeline per rock mask. Color/light changes
     // no longer compile a new ray marcher; only relief gates specialize.
-    this.specParts = {vertModule,bakeModule,bake:bakeGates.gates,keyOrder:[...bakeGates.gates.keys()]};
+    this.specParts = {vertModule,bakeModule,bakeSource:bakeGates.source,bake:bakeGates.gates,keyOrder:[...bakeGates.gates.keys()]};
     this.specCache = new Map();
     this.specBuilding = new Map();
     this.specUsed = [];
@@ -413,12 +413,12 @@ export class TerrainRenderer {
     const start=performance.now(),device=this.device;
     const [fragmentModule,bakeModule,geometryModule]=await Promise.all([compile('generic terrain',fragSource),compile('generic relief',bakeSource),compile('terrain geometry',geometrySource)]);
     this.genericPipelines=Object.fromEntries(await Promise.all([0,15].map(async rockMask=>{
-      const constants={rockMask},compute=entryPoint=>({module:bakeModule,entryPoint,constants});
+      const constants={rockMask},compute=entryPoint=>({module:bakeModule,entryPoint,constants:entryConstants(bakeSource,entryPoint,constants)});
       const [draw,bake,loose,geometry]=await Promise.all([
-        device.createRenderPipelineAsync({label:'generic terrain',layout:this.drawPipelineLayout,vertex:{module:this.specParts.vertModule,entryPoint:'vertexMain'},fragment:{module:fragmentModule,entryPoint:'fragmentMain',targets:[{format:this.format}],constants},primitive:{topology:'triangle-list',cullMode:'none'}}),
+        device.createRenderPipelineAsync({label:'generic terrain',layout:this.drawPipelineLayout,vertex:{module:this.specParts.vertModule,entryPoint:'vertexMain'},fragment:{module:fragmentModule,entryPoint:'fragmentMain',targets:[{format:this.format}],constants:entryConstants(fragSource,'fragmentMain',constants)},primitive:{topology:'triangle-list',cullMode:'none'}}),
         device.createComputePipelineAsync({label:'generic relief bake',layout:this.bakePipelineLayout,compute:compute('bakeMain')}),
         device.createComputePipelineAsync({label:'generic loose mask',layout:this.bakePipelineLayout,compute:compute('looseMain')}),
-        device.createRenderPipelineAsync({label:'terrain geometry',layout:this.geometryPipelineLayout,vertex:{module:this.specParts.vertModule,entryPoint:'vertexMain'},fragment:{module:geometryModule,entryPoint:'geometryMain',targets:[{format:this.format}],constants},primitive:{topology:'triangle-list',cullMode:'none'}})]);
+        device.createRenderPipelineAsync({label:'terrain geometry',layout:this.geometryPipelineLayout,vertex:{module:this.specParts.vertModule,entryPoint:'vertexMain'},fragment:{module:geometryModule,entryPoint:'geometryMain',targets:[{format:this.format}],constants:entryConstants(geometrySource,'geometryMain',constants)},primitive:{topology:'triangle-list',cullMode:'none'}})]);
       return [rockMask,{draw,bake,loose,geometry}];
     })));
     this.specStats.genericBuilt=2;this.specStats.genericMs=performance.now()-start;this.specStats.genericUses=0;this.specStats.deferred=0;
@@ -456,9 +456,9 @@ export class TerrainRenderer {
     this.specStats.rockMs = (this.specStats.rockMs ?? 0) + performance.now() - rock;
     if (this.specCache.has(key)) return;
     if (!this.specBuilding.has(key)) {
-      const {bakeModule,bake} = this.specParts, device = this.device, start = performance.now();
+      const {bakeModule,bakeSource,bake} = this.specParts, device = this.device, start = performance.now();
       const pick = gates => Object.fromEntries([...gates.keys()].map(id => [id, values[id]]));
-      const compute = entryPoint => ({module: bakeModule, entryPoint, constants: pick(bake)});
+      const compute = entryPoint => ({module: bakeModule, entryPoint, constants: entryConstants(bakeSource, entryPoint, pick(bake))});
       this.specBuilding.set(key, Promise.all([
         device.createComputePipelineAsync({label: 'relief bake', layout: this.bakePipelineLayout, compute: compute('bakeMain')}),
         device.createComputePipelineAsync({label: 'loose mask', layout: this.bakePipelineLayout, compute: compute('looseMain')})]).then(([bake, loose]) => {
