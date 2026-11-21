@@ -8,7 +8,8 @@
 | --- | --- | --- | --- |
 | red-1 | red planet (2560,896) | a rolling plain with a big shallow basin, a crescent and a mesa, ponds and craterlets | shape .21, look .38 |
 | red-2 | red river (2560,2880) | a lake with a finely terraced bank, rough cracked upland in the NW corner, one knob | shape .32, look .27 |
-| red-3 | gods of war (256,576) | a coast: rough rock bank, lavender shelf, deep water: **held out** | shape .14, look 1.49 |
+| red-3 | gods of war (256,576) | a coast: rough rock bank, lavender shelf, deep water (held out in rounds 1-2; tunes from round 3) | shape .14, look 1.49 |
+| red-4 | red triangle (6656,2048) | a sea coast: the NW corner of the triangle's eastern island; low banks (a 0-8 terrace in the N and NW, a gentle ramp in the S), a lavender shelf about 100-250 px wide, deep water in the N corners, plain at 30 behind: **held out** (added round 3) | see round 3's holdout-000 |
 
 Means of the tuning windows at the base (main 50328b75): shape .27, look .33.
 
@@ -19,6 +20,7 @@ Means of the tuning windows at the base (main 50328b75): shape .27, look .33.
 | red-1 | 4 on every stroke (round 2) | `softface` (faceRock 0, rockFaceFrom .5): no rock shown, face construction only from slope .5 |
 | red-2 | 2 on the knob stroke (round 1); the rest unset | `darkknob` (crust -.3, rockFace 2, the world's rock material) |
 | red-3 | none set | the world's own rock |
+| red-4 | none set | the world's own rock |
 
 `rubble` (slot 3) reaches no window. red-2 paints Rock (channel 1, amount
 80) over its knob; red-3 paints Rock in five strokes. Re-check with

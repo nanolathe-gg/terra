@@ -72,7 +72,7 @@ Your base trial prints each window's starting scores. "Map exports here" counts 
 | World | Windows (held out) | Map exports here | Sections | Notes |
 | --- | --- | --- | --- | --- |
 | green | 1-6 (7) | 13 | none | dossier: [worlds/green.md](worlds/green.md) |
-| red | 1-2 (3) | 9 | none | |
+| red | 1-3 (4) | 9 | none | dossier: [worlds/red.md](worlds/red.md); red-4 is a sea coast (red triangle) |
 | archipelago | 1-2 (3) | 10 | none | known tells: even fringe rings, rippled sand, banded shallows |
 | moon | 1-2 (3) | 13 | moon | |
 | zhon | 1-2 (3) | none | sections-zhon | the windows are map editor sections |
