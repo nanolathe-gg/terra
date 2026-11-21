@@ -27,7 +27,7 @@
 here=$(cd "$(dirname "$0")" && pwd); repo=$(cd "$here/.." && pwd)
 KEEP_LAST=8
 R=${R:-/tmp/nanolathe-map-editor}
-py=${PYTHON:-/Users/daniel/src/terraform/.venv/bin/python}
+py=${PYTHON:-$(dirname "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)")/.venv/bin/python}  # the main checkout's venv
 world=$1; [ $# -gt 0 ] && shift
 [ -n "$world" ] && [ "${world#-}" = "$world" ] || { sed -n '2,12p' "$0" >&2; exit 2; }
 note=; aim=; verdict=; why=; by=agent; patch=; stages=0; query=; probe=; holdout=0; showlog=0; keep=0; keeptrial=; out=; only=
