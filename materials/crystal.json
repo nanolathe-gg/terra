@@ -1093,7 +1093,7 @@
  "world": {
     "materials": {"ground": "crystal-ground", "water": "crystal-water", "rock": "crystal-rock", "slope": "crystal-slope", "debris": "crystal-debris", "soil": "crystal-soil", "snow": "crystal-snow", "moss": "crystal-moss", "sand": "crystal-sand", "band": "crystal-band", "crystal": "crystal-crystals"},
     "knobDefaults": {
-        "gougeWeb": 1,
+        "gougeWeb": 0.75,
         "plainRelief": 0.6,
         "crackSeverity": 0.7,
         "crackNetwork": 1,
@@ -1115,7 +1115,7 @@
         "plateWaterPx": 90,
         "plateLandPx": 48,
         "plateSize": 28,
-        "shineCrystal": 0.3,
+        "shineCrystal": 0.55,
         "shineCrystalSharp": 70,
         "shineCrystalRough": 1,
         "shineRock": 0.22,
