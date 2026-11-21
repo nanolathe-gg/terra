@@ -1012,7 +1012,11 @@ fn surfaceGradient(p: vec2f) -> vec2f {
 // fall line: its lattice is turned to one of eight directions whose integer steps repeat with the pool (so level ground still repeats with
 // the pool, card tilepool) and stretched along the contours (Grain above 0) or down the fall line (below 0); a pixel blends the two
 // directions either side of its own. At Grain 0 neither axis stretches and the two sides of 0 meet.
-struct FineSite { on: bool, strength: f32, pits: f32, q: vec2f, g: vec2f, frameA: u32, frameB: u32, mixB: f32 }
+struct FineSite { on: bool, strength: f32, pits: f32, q: vec2f, g: vec2f, frameA: u32, frameB: u32, mixB: f32, field: f32 }
+// The octaves of FINE_FIELD_FROM px and up, at the world rock's slope strength (field), are also written into the height the Time pass erodes
+// (engine-feed.wgsl feedFine): on a chunk fed the Time pass's height (u.weatherMaps) the bake leaves out what the field already holds of them.
+const FINE_FIELD_FROM = 12.0;
+const FINE_FIELD_FULL = 20.0;
 const FINE_FRAMES = array<vec2f, 8>(vec2f(1.0, 0.0), vec2f(2.0, 1.0), vec2f(1.0, 1.0), vec2f(1.0, 2.0), vec2f(0.0, 1.0), vec2f(-1.0, 2.0), vec2f(-1.0, 1.0), vec2f(-2.0, 1.0));
 const FINE_ANGLES = array<f32, 9>(0.0, 0.4636476, 0.7853982, 1.1071487, 1.5707964, 2.0344439, 2.3561945, 2.6779451, 3.1415927);
 const FINE_STRETCH = 3.0;   // a fully grained octave's cells are 1 + FINE_STRETCH times longer along the grain
@@ -1020,7 +1024,7 @@ const FINE_PIT_CELL = 7.0;  // px: at most one pit a cell
 const FINE_PIT_DEPTH = 3.0; // height units at full strength
 fn fineOn() -> bool { return u.fineAny > 0.0 || u.fineLevel > 0.0; }
 fn fineSite(p: vec2f) -> FineSite {
-    var s = FineSite(false, 0.0, 0.0, vec2f(0.0), vec2f(0.0), 0u, 1u, 0.0);
+    var s = FineSite(false, 0.0, 0.0, vec2f(0.0), vec2f(0.0), 0u, 1u, 0.0, 0.0);
     if (!fineOn()) { return s; }
     let h = baseHeight(p);
     if (h <= u.sea + 0.5) { return s; }
@@ -1031,6 +1035,7 @@ fn fineSite(p: vec2f) -> FineSite {
     // Level ground takes the world's Fine relief on level ground; slopes the pixel's rock's (rs: the caller's useRock).
     s.strength = mix(u.fineLevel, u.rock[rs & rockMask].fineRelief, steep) * rough;
     s.pits = u.rock[rs & rockMask].finePits * steep * rough;
+    s.field = u.rock[0].fineRelief * steep * rough;   // the Time pass reads the world's rock alone; level ground's part stays art (flat ground stays flat)
     if (s.strength <= 0.0 && s.pits <= 0.0) { return s; }
     s.on = true;
     s.q = vec2f(p.x, p.y - 0.5 * (h - u.base));
@@ -1080,6 +1085,7 @@ fn fineFrame(q: vec2f, k: u32, cell: f32, salt: f32) -> f32 {
 // point q. Every octave has slope s.strength: an amplitude of a quarter of its cell.
 fn fineOctaves(s: FineSite, q: vec2f, bake: bool) -> f32 {
     var total = 0.0;
+    var fieldOctaves = 0.0;
     var lambda = max(u.rock[rs & rockMask].fineSize, 1.0);
     for (var k = 0; k < 6; k++) {
         if (lambda < 1.5) { break; }
@@ -1090,11 +1096,16 @@ fn fineOctaves(s: FineSite, q: vec2f, bake: bool) -> f32 {
             let a = fineFrame(q, s.frameA, cell, f32(k) * 7.31);
             let b = fineFrame(q, s.frameB, cell, f32(k) * 7.31);
             let m = s.mixB;
-            total += (a * (1.0 - m) + b * m) / sqrt((1.0 - m) * (1.0 - m) + m * m) * 0.25 * cell * w;
+            let o = (a * (1.0 - m) + b * m) / sqrt((1.0 - m) * (1.0 - m) + m * m) * 0.25 * cell * w;
+            let f = select(0.0, smoothstep(FINE_FIELD_FROM, FINE_FIELD_FULL, lambda), bake);
+            total += o * (1.0 - f);
+            fieldOctaves += o * f;
         }
         lambda *= 0.5;
     }
-    return total * s.strength;
+    // Where the chunk's height is the Time pass's, the field holds the world rock's slope share of the field octaves.
+    let fieldStrength = select(s.strength, max(s.strength - s.field, 0.0), u.weatherMaps != 0);
+    return total * s.strength + fieldOctaves * fieldStrength;
 }
 // Pits: at most one a 7 px cell (pool lattice), a dimple of radius 1-2.1 px and FINE_PIT_DEPTH deep, in a cell's share of finePits.
 fn finePitsAt(s: FineSite, q: vec2f) -> f32 {

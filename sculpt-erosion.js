@@ -118,7 +118,9 @@ export class GpuErosion {
       tileArgs = make('erosion tile args', 12, S | GPUBufferUsage.INDIRECT);
       weather = make('time pass height', n * 8), maps = [0, 1, 2].map(k => make('time pass map ' + k, n * 4));
       });current();
-      const uniform = feedUniform(device, {grid, cells: n, rateMask: request.rateMask, maskStride: request.maskStride, shownHeights: request.shownHeights, sea: seaLevel, spacing, envelope: request.envelope ?? 1, tilesWide: tw});
+      // The fine relief's field octaves (engine-feed.wgsl feedFine) at each cell's world point: the window's first cell and the world rock's values.
+      const fine = [request.fineRelief ?? 0, request.fineSize ?? 8, request.fineGrain ?? 0, this.renderer.uniformValue('uPool')];
+      const uniform = feedUniform(device, {grid, cells: n, rateMask: request.rateMask, maskStride: request.maskStride, shownHeights: request.shownHeights, sea: seaLevel, spacing, envelope: request.envelope ?? 1, tilesWide: tw, ox: request.ox ?? 0, oy: request.oy ?? 0, fine, fineBase: this.renderer.config.baseHeight});
       owned.push(uniform);
       device.queue.writeBuffer(paramBuffer, 0, params);
       this.renderer.setColumn();

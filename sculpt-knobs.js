@@ -123,7 +123,7 @@ export function applyKnob({key,value,settings,renderer,nodes,seed,sync=true}) {
     return result({});
   }
   if (SHAPE_KNOBS.has(key)) return result({evaluate:0,weather:true});
-  if (key==='sand' || key==='erosionRain') return result({weather:true});
+  if (key==='sand' || key==='erosionRain' || key==='fineRelief' || key==='fineSize' || key==='fineGrain') return result({weather:true});   // the fine relief's field octaves are eroded (sculpt-scene.js timeKnobs)
   return result({});
 }
 
