@@ -547,6 +547,7 @@
  "world": {
     "materials": {"ground": "moon-ground", "water": "moon-water", "rock": "moon-ground", "slope": "moon-ground", "debris": "moon-ground", "extra": ["moon-mare"], "soil": "moon-ground", "snow": "moon-snow", "moss": "moon-moss", "sand": "moon-ground", "band": "moon-band", "crystal": "crystals"},
     "knobDefaults": {
+        "fineLevelGrain": 0.6,
         "fillFollow": 1,
         "fineRelief": 1.5,
         "fineLevel": 0.3,
