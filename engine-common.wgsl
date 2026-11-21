@@ -948,11 +948,19 @@ fn surfaceHeight(p: vec2f) -> f32 {
     if (rough < 0.001) { return h; }
     let debris = materialChipHeight(p) * rough;
     if (abs(h - u.sea) < 6.0) {
-        // Break only the waterline into small shared geometric irregularities.
-        // The designed shallow-route bed (-7) and broad flats stay untouched.
-        let shoreNoise = terrainNoise(p);
-        let collar = 1.0 - smoothstep(2.0, 6.0, abs(h - u.sea));
-        h += ((shoreNoise.g - 0.5) * 4.0 + (shoreNoise.a - 0.5) * 1.7) * collar * rough;
+        // A low plain can be at the same elevation as a bank. On the dry side,
+        // require nearby water, with a gradual fade as the lowest tap rises past sea level.
+        var shore = 1.0;
+        if (h > u.sea) {
+            let x = min(baseHeight(p - vec2f(6.0, 0.0)), baseHeight(p + vec2f(6.0, 0.0)));
+            let y = min(baseHeight(p - vec2f(0.0, 6.0)), baseHeight(p + vec2f(0.0, 6.0)));
+            shore = 1.0 - smoothstep(u.sea, u.sea + 0.75, min(x, y));
+        }
+        if (shore > 0.0) {
+            let shoreNoise = terrainNoise(p);
+            let collar = 1.0 - smoothstep(2.0, 6.0, abs(h - u.sea));
+            h += ((shoreNoise.g - 0.5) * 4.0 + (shoreNoise.a - 0.5) * 1.7) * collar * rough * shore;
+        }
     }
 #ifdef BAKE
     if (h < -12.0) { return h; }
