@@ -578,7 +578,7 @@
         "reliefLumps": 0.9,
         "wrinkles": 0.6,
         "layerVary": 0.8,
-        "layerCrease": 1,
+        "layerCrease": 0.7,
         "fingerSize": 0.65,
         "lavaSpread": 0.7,
         "lavaCircleVary": 1,
