@@ -2268,7 +2268,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
                 // A Shallow until depth past the third colour's depth runs this ramp down: the third colour at the waterline,
                 // the lit bed between the two depths (a submerged shelf), deep beyond. smoothstep leaves reversed edges undefined.
                 let toMid = waterRamp(u.shallowDepth, u.waterMid.a, colorDepth);
-                let toDeep = waterRamp(u.waterMid.a, u.deepDepth, colorDepth);
+                let toDeep = waterRamp(min(u.waterMid.a, u.deepDepth), u.deepDepth, colorDepth);
                 var mid = waterMean() + u.waterMid.rgb + (deepWater - waterMean()) * 0.9;
                 water = mix(mix(shallow, mid, toMid), deepWater, toDeep);
             }
