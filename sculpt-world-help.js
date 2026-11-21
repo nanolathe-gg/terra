@@ -151,7 +151,6 @@ export const WORLD_HELP = {
   faceWear: 'Rounds exposed edges and opens the joints as though the face has weathered.',
   faceClast: 'Raises embedded fragments above the surrounding rock so they catch light.',
   faceClastSize: 'Changes the typical width of the fragments embedded in the face.',
-  faceDetailPatch: 'Clusters scratches and pits in rough patches with calmer rock between.',
   runoff: 'Strengthens the pattern left by water running down exposed rock.',
   runoffScale: 'Sets the size of the areas that gather runoff into shared channels.',
   runoffConcentration: 'Focuses runoff into narrower channels instead of spreading it evenly across the wall.',

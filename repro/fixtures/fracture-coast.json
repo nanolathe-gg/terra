@@ -15,7 +15,6 @@
     "faceSecondary": 0.25,
     "faceContinuity": 0.7,
     "faceJointTilt": 8,
-    "faceDetailPatch": 0.8,
     "faceRound": 0.5,
     "faceWear": 0.55,
     "faceBed": 10,

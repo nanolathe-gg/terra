@@ -181,7 +181,7 @@ export const WORLD_HOMES={
  'Rock types/Exposure & relief':'rockFace faceRock rockFaceFrom faceExtrude faceMass rockCrown',
  'Rock types/Blocks & joints':'faceWholeLarge faceRegular faceBlock faceStretch faceBlockHeight faceSlopeAlign faceJointTilt faceScaleVary faceBreak faceRound faceJoint faceJointWidth faceSecondary faceContinuity faceLean',
  'Rock types/Layers':'strata strataContrast strataGrain bedDip bedDipDir bedCycleVary faceBedVary faceLedge faceRun faceFold faceSpall faceLamina faceLaminaSize faceLayers faceGrass',
- 'Rock types/Weathering':'fineSize fineGrain finePits faceClast faceClastSize faceDetailPatch runoffScale runoffConcentration runoffCut runoffStain',
+ 'Rock types/Weathering':'fineSize fineGrain finePits faceClast faceClastSize runoffScale runoffConcentration runoffCut runoffStain',
  'Rock types/Surface & crust':'shineRock shineRockSharp shineRockRough shineRockScale faceShade faceTone faceFresh faceRind faceRindDepth faceRindTone faceRindWarmth faceRindRough faceMineral faceStrata faceWet',
  'Rock types/Stones & debris':'looseSize stoneSort stoneRound stoneSlab debrisAmount debrisReach debrisDepth',
  'Rock types/Cracks & bands':'crackSpacing crackFrom crackMajor crackMinor crackHairline crackBlocks crackWidth crackNetwork crackDark banding bandLevel bandFill stepCrease',

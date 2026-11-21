@@ -322,7 +322,6 @@
     "faceJointWidth": 1,
     "faceSecondary": 0.35,
     "faceContinuity": 1,
-    "faceDetailPatch": 0,
     "faceWhole": 0,
     "faceWholeLarge": 0,
     "faceRegular": 0,

@@ -85,7 +85,6 @@ export function worldControlRequirement(key,v){
   return n('rockFace')>0&&blocks>0||n('debrisAmount')>0&&n('faceBreak')>0?'':'Raise Rock relief: Depth and enable blocks or joints to follow the slope.';
  }
  if(key==='faceRegular')return worldControlRequirement('faceBlockSize',v);   // it moves every block and joint, as Block size does
- if(key==='faceDetailPatch')return needs('rockFace','Rock relief: Depth');
  const fractures=Math.max(n('faceBreak'),n('faceSpall'),n('faceJoint'));
  if(key==='faceRind')return needs('rockFace','Rock relief: Depth');
  if(key==='faceFresh')return needs('rockFace','Rock relief: Depth')||(fractures>0?'':'Raise Block release, Broken layer edges, or Joint depth to expose fresh rock.');
@@ -173,7 +172,7 @@ export function worldControlRequirement(key,v){
 // Primary controls describe a visible feature. Fine tuning remains available
 // explicitly (and through search), without filling the default inspector.
 export const WORLD_PRIMARY_CONTROLS=new Set([
- 'faceWhole','faceWholeLarge','faceRegular','sandLee','faceJointWidth','faceSecondary','faceContinuity','faceDetailPatch','faceFresh','faceRind','faceRindDepth','faceRindTone','faceRindWarmth','faceRindRough','faceBreak','faceBedVary','bedCycleVary','faceJointTilt','faceSlopeAlign','faceScaleVary','faceFold','faceSpall','faceClast','faceClastSize','faceMineral',
+ 'faceWhole','faceWholeLarge','faceRegular','sandLee','faceJointWidth','faceSecondary','faceContinuity','faceFresh','faceRind','faceRindDepth','faceRindTone','faceRindWarmth','faceRindRough','faceBreak','faceBedVary','bedCycleVary','faceJointTilt','faceSlopeAlign','faceScaleVary','faceFold','faceSpall','faceClast','faceClastSize','faceMineral',
  'runoff','runoffScale','runoffConcentration','runoffCut','runoffStain','debrisAmount','debrisReach','debrisDepth','stoneSort','stoneRound','stoneSlab',
  'plantRelief',
  'bedDip','bedDipDir','faceStretch','faceBlockHeight','faceRound','faceJoint','faceExtrude','faceLamina','faceLaminaSize',

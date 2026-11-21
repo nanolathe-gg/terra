@@ -76,7 +76,6 @@ struct Rock {
     faceJointWidth: f32,
     faceSecondary: f32,
     faceContinuity: f32,
-    faceDetailPatch: f32,
     faceWhole: f32, // Whole blocks
     faceWholeLarge: f32, // Whole large blocks
     faceRegular: f32, // Block regularity
@@ -1427,13 +1426,6 @@ fn voxelJointW(r:vec3f,c:VoxelRock,broad:VoxelRock,width:f32,secondary:f32)->f32
     }
     return (1.0-smoothstep(width*.25,width,c.edge))*secondary*fine
         +(1.0-smoothstep(width*.15,width*.85,broad.edge))*1.15*primary;
-}
-fn voxelDetail(r:vec3f)->f32 {
-    if(u.rock[rs & rockMask].faceDetailPatch<=0.0){return 1.0;}
-    // Leave intact faces between damaged patches; the existing pitting,
-    // grooves and grit retain their own amplitudes and physical scales.
-    let cluster=smoothstep(.28,.65,voxelNoise(r/max(12.0,u.rock[rs & rockMask].faceBlockSize*1.3)+vec3f(67,11,43)));
-    return mix(1.0,cluster*1.6,u.rock[rs & rockMask].faceDetailPatch);
 }
 fn voxelSpall(r:vec3f,c:VoxelRock,hard:f32)->f32 {
     let chip=voxelNoise(r/vec3f(max(5.0,u.rock[rs & rockMask].faceBlockSize*.65),max(5.0,u.rock[rs & rockMask].faceBlockSize*.65),max(3.0,u.rock[rs & rockMask].faceBed*.8))+vec3f(19,53,7));

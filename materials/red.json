@@ -1027,7 +1027,6 @@
         "faceRegular": 0.3,
         "faceJointWidth": 1.5,
         "faceContinuity": 1,
-        "faceDetailPatch": 0.6,
         "faceRind": 0.65,
         "faceRindDepth": 9,
         "faceRindRough": 0.7,
@@ -1122,9 +1121,7 @@
 
       "rockFace": 2,
 
-      "faceTone": 0.05,
-
-      "faceDetailPatch": 0
+      "faceTone": 0.05
 
 
 

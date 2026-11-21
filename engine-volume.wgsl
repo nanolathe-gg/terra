@@ -332,7 +332,6 @@ fn voxelDensity(p:vec3f)->f32 {
     let joint=voxelJointW(fracture,c,broad,js,voxelJointFine(wear))*jw/js;   // the share this solid holds (rockDetail draws the rest)
     let layers=voxelFine(p,column,gathered);let lamina=layers.x+layers.y;
     let bed=(.55-hard)*u.rock[rs & rockMask].faceLedge*2.4;
-    let detail=voxelDetail(r);
     // Soil-covered beds have their own rounded terraces, including on
     // slopes that also expose rock; an activation mask alone hid this control.
     // Chips remove corners and patches along weaker partings. This exposes

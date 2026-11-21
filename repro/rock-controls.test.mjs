@@ -64,13 +64,11 @@ test('fracture and crust controls use cut sources and visible finish parents',as
 
 test('fracture hierarchy and clustering have effective parents and saved ranges',async()=>{
  const {worldControlRequirement:reason}=await import('../sculpt-control-schema.js');
- for(const key of ['faceJointWidth','faceSecondary','faceContinuity','faceDetailPatch'])assert.ok(ROCK_KEYS.includes(key));
+ for(const key of ['faceJointWidth','faceSecondary','faceContinuity'])assert.ok(ROCK_KEYS.includes(key));
  for(const key of ['faceJointWidth','faceSecondary','faceContinuity']){
   assert.ok(reason(key,{rockFace:2,faceJoint:0}));
   assert.equal(reason(key,{rockFace:2,faceJoint:1}),'');
  }
- assert.ok(reason('faceDetailPatch',{rockFace:0}));
- assert.equal(reason('faceDetailPatch',{rockFace:2}),'');
  assert.deepEqual(copyRockSettings({faceContinuity:2,faceJointWidth:4}),{faceContinuity:1,faceJointWidth:3});
 });
 
@@ -93,7 +91,7 @@ test('a map saved before Fine layer spacing began at 6 opens, its spacing at 6',
  const column={sections:[{start:0,beds:[[2,.85,0],[1,.2,1],[3,.7,2],[1,.3,1]]}],bands:[3.7,.84],wander:{value:5}};
  assert.ok(copyColumn(column));
  // Grit moved to the rock material (its height): a save's Grit relief and size are dropped. Pitting and Scratches folded into fine relief
- // (owner, 2026-11-21): a save's pits and grooves are dropped too.
- const {faceGrit,faceGritSize,faceCrease,faceCreaseSize,faceScratch,faceScratchSize,faceScratchLength,faceScratchAngle,...kept}=rock;
+ // (owner, 2026-11-21): a save's pits and grooves are dropped too, and Fine detail clustering, which clustered them.
+ const {faceGrit,faceGritSize,faceDetailPatch,faceCrease,faceCreaseSize,faceScratch,faceScratchSize,faceScratchLength,faceScratchAngle,...kept}=rock;
  assert.deepEqual(copyRockSettings(rock),{...kept,faceLaminaSize:6});
 });
