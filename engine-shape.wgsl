@@ -1698,10 +1698,11 @@ const THUMB_CELL = 44.0;
 const THUMB_SPREAD = 0.5;   // how much a cluster's noise raises a site's chance of a finger
 const THUMB_AMOUNT = 1.4;   // H24: the share of lattice sites that grow one, the same on every world
 fn uhash(i: i32, j: i32, salt: u32, k: u32) -> f32 { return hashi(i, j, salt ^ k) * 0.5 + 0.5; }
-fn thumbAt(lx: f32, ly: f32, nx: f32, ny: f32, amount: f32) -> f32 {
+// Return signed reach and the strength of the lobe's raised spine at this distance out to sea.
+fn thumbAt(lx: f32, ly: f32, nx: f32, ny: f32, amount: f32, outward: f32) -> vec2f {
   let tx = -ny; let ty = nx; let salt = u.seed;
   let ci = i32(floor(lx / THUMB_CELL)); let cj = i32(floor(ly / THUMB_CELL));
-  var best = 0.0; var inlet = 0.0;
+  var best = 0.0; var inlet = 0.0; var spine = 0.0;
   let size = u.cfSize;
   for (var j = cj - 1; j <= cj + 1; j++) { for (var i = ci - 1; i <= ci + 1; i++) {
     let ax = (f32(i) + 0.5 + 0.45 * hashi(i, j, salt ^ 0x5a7u)) * THUMB_CELL;
@@ -1714,23 +1715,36 @@ fn thumbAt(lx: f32, ly: f32, nx: f32, ny: f32, amount: f32) -> f32 {
     if (abs((lx - ax) * nx + (ly - ay) * ny) >= THUMB_CELL * 0.5) { continue; }
     let grow = mix(1.0, 0.35 + 2.6 * pow(uhash(i, j, salt, 0x9d1u), 3.0), u.cfVary);
     let L = amount * 52.0 * (0.3 + 2.0 * pow(uhash(i, j, salt, 0x4e5u), 2.4)) * size * grow;
-    let fork = L > 40.0 * amount * size && L < 95.0 * amount * size && uhash(i, j, salt, 0x2c9u) > 0.8;
-    var h0 = clamp(5.0 + 0.15 * L / max(amount, 0.2) + (uhash(i, j, salt, 0x6b1u) - 0.5) * 6.0, 7.0, 24.0) * min(1.0, 0.4 + amount * 0.6) * mix(1.0, 0.7 + 0.5 * min(grow, 1.6), u.cfVary);
-    if (fork) { h0 = clamp(h0 * 1.3, 16.0, 26.0); }
-    let tau = abs((lx - ax) * tx + (ly - ay) * ty);
-    if (tau >= h0) { continue; }
-    let ht = max(4.5, 0.8 * h0); let Ls = max(L - ht, 0.0);
-    let sh = (tau - ht) / (h0 - ht);
-    var r = Ls + sqrt(max(ht * ht - tau * tau, 0.0));
-    if (tau > ht) { r = Ls * (1.0 - sh * sh); }
-    if (fork && r > 0.5 * L) { let wn = 0.42 * h0; if (tau < wn) { r = min(r, 0.5 * L + (r - 0.5 * L) * tau / wn); } }
-    // Inlet share (cfInlet): that share of sites cut a tapering inlet into the land instead of growing a finger out of it.
-    if (uhash(i, j, salt, 0x7e1u) < u.cfInlet) { inlet = max(inlet, r); } else { best = max(best, r); }
+    let fork = smoothstep(35.0, 65.0, L) * u.cfVary * smoothstep(0.55, 0.96, uhash(i, j, salt, 0x2c9u));
+    let width = clamp(6.0 + 0.18 * L / max(amount, 0.2) + (uhash(i, j, salt, 0x6b1u) - 0.5) * 6.0, 8.0, 29.0)
+      * min(1.0, 0.46 + amount * 0.64) * mix(1.0, 0.75 + 0.5 * min(grow, 1.6), u.cfVary) * (1.0 + 0.30 * fork);
+    // Together with the half-cell normal bound, this keeps a site's support in the 3 by 3 search.
+    let halfWidth = min(0.90 * THUMB_CELL, width);
+    let side = ((lx - ax) * tx + (ly - ay) * ty) / halfWidth;
+    let tau = abs(side);
+    if (tau >= 1.0) { continue; }
+    let length = min(L, u.coFReach);
+    let tip = min(0.9 * halfWidth, length);
+    let reach = (length - tip) * (1.0 - pow(tau, 4.0)) + tip * sqrt(max(0.0, 1.0 - tau * tau));
+    // A cleft shortens the middle and leaves both prongs connected to the bank along the coast normal.
+    let cleft = 1.0 - smoothstep(0.06, 0.45, tau);
+    let r = reach * (1.0 - 0.47 * fork * cleft);
+    if (uhash(i, j, salt, 0x7e1u) < u.cfInlet) {
+      inlet = max(inlet, r);
+    } else {
+      best = max(best, r);
+      let t = clamp(outward / max(length, 1.0), 0.0, 1.0);
+      let axis = mix(tau, abs(tau - 0.42 * t), fork);
+      let crown = 1.0 - smoothstep(0.0, 0.82, axis);
+      let shoulder = smoothstep(0.0, max(3.0, 0.24 * halfWidth), r - outward);
+      spine = max(spine, crown * shoulder * (1.0 - 0.78 * smoothstep(0.15, 0.95, t)));
+    }
   } }
-  return best - inlet + vnoise(lx / 12.0, ly / 12.0, salt ^ 0x5c1u) * 1.6;
+  let rag = vnoise(lx / 12.0, ly / 12.0, salt ^ 0x5c1u) * 1.6;
+  return vec2f(best - inlet + rag, spine);
 }
-// thumbReach: the world position and inland normal go into the shape's frame; the lattice is turned 26 degrees off the axes.
-fn thumbReach(wx: f32, wy: f32, nx: f32, ny: f32, amount: f32) -> f32 {
+// The world position and inland normal go into the shape's frame; the lattice is turned 26 degrees off the axes.
+fn thumbReach(wx: f32, wy: f32, nx: f32, ny: f32, amount: f32, outward: f32) -> vec2f {
   var lx = wx; var ly = wy; var mx = nx; var my = ny;
   if (u.framed != 0u) {
     lx = u.inv0 * wx + u.inv2 * wy + u.inv4; ly = u.inv1 * wx + u.inv3 * wy + u.inv5;
@@ -1739,7 +1753,7 @@ fn thumbReach(wx: f32, wy: f32, nx: f32, ny: f32, amount: f32) -> f32 {
     mx = mx / ml; my = my / ml;
   }
   let ca = 0.8988; let sa = 0.4384;
-  return thumbAt(ca * lx + sa * ly, -sa * lx + ca * ly, ca * mx + sa * my, -sa * mx + ca * my, amount);
+  return thumbAt(ca * lx + sa * ly, -sa * lx + ca * ly, ca * mx + sa * my, -sa * mx + ca * my, amount, outward);
 }
 // The inland unit normal at a cell: the gradient of the blurred signed distance (plane CSS), clamped at the box.
 fn coastNormal(x: i32, y: i32, cells: u32) -> vec3f {
@@ -1749,10 +1763,7 @@ fn coastNormal(x: i32, y: i32, cells: u32) -> vec3f {
   if (len < 1.0e-3) { return vec3f(0.0, 0.0, 0.0); }
   return vec3f(gx / len, gy / len, 1.0);
 }
-// H24: the height (units above the sea) of a finger's flat top, the same on every world.
-const FINGER_LOW = 3.5;
-// At each cell near the coast the finger field is read at the nearest coast point (back along the normal) and the cell is raised to a flat tongue (or
-// sunk, for an inlet). U marks the raised cells for the connectivity march; F keeps a flat finger's height for the layers.
+// A lobe follows the coast normal. U marks its connected footprint and F stores its height allowance for the ledges.
 @compute @workgroup_size(8, 8)
 fn coastFinger(@builtin(global_invocation_id) g: vec3u) {
   let x = u.rx0 + i32(g.x); let y = u.ry0 + i32(g.y);
@@ -1764,12 +1775,17 @@ fn coastFinger(@builtin(global_invocation_id) g: vec3u) {
   if (nm.z == 0.0) { return; }
   let sd = select(-dist, dist, Sc[CRR * cells + i] > sea);
   let wx = f32(x) * u.spacing; let wy = f32(y) * u.spacing;
-  let f = clamp(thumbReach(wx - sd * nm.x, wy - sd * nm.y, nm.x, nm.y, u.coFAmt), -u.coFReach, u.coFReach);
+  let lobe = thumbReach(wx - sd * nm.x, wy - sd * nm.y, nm.x, nm.y, u.coFAmt, max(0.0, -sd));
+  let f = clamp(lobe.x, -u.coFReach, u.coFReach);
   if (sd < 0.0 && -sd < f) {
-    F[PH * cells + i] = clamp(sea + FINGER_LOW, u.minH, u.maxH);
+    let bankRise = max(0.0, u.baseH - sea);
+    let foot = clamp(0.6 * bankRise, 0.8, 3.5);
+    let crest = max(0.0, bankRise - foot) * min(0.75, 0.88 * u.coFAmt);
+    let height = foot + crest * lobe.y * smoothstep(0.0, 4.0, f + sd);
+    F[PH * cells + i] = clamp(sea + height, u.minH, u.maxH);
     claimRock(i);
     Sc[CUU * cells + i] = 1.0;
-    Sc[CFF * cells + i] = FINGER_LOW;
+    Sc[CFF * cells + i] = height;
   } else if (sd > 0.0 && sd < -f) {
     F[PH * cells + i] = clamp(sea - 0.5 - 2.5 * (1.0 - sd / -f), u.minH, u.maxH);
     claimRock(i);
@@ -1910,7 +1926,7 @@ fn coastLayers(@builtin(global_invocation_id) g: vec3u) {
     let k = floor(q);
     level = foot + riser * (k + sm(ledge, 1.0, q - k));
   }
-  // Fingers stay as flat as they were laid, under the ledge they would be raised to.
+  // The ledges cut into the lobe profile without raising its sides or its tapering tip.
   let ff = Sc[CFF * cells + i];
   if (ff > 0.0) { level = min(level, ff); }
   F[PH * cells + i] = clamp(min(min(base, u.baseH), sea + level * sm(0.0, 5.0, d)) + max(0.0, base - u.baseH), u.minH, u.maxH);

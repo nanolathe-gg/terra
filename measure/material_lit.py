@@ -9,7 +9,7 @@ from it is its structure, not the height:
                largest along the light's azimuth: this is the light's axis (the sign, toward or away from the light, is not in the image).
   coherence    (l1 - l2) / (l1 + l2) of that tensor: 0 isotropic, 1 all one direction. It mixes the light's effect with real streaks.
   light        the light's azimuth in turns (0 = from +x, a quarter turn towards +y, which is down the screen) for the generator's `light`:
-               the gradient axis, on the side facing west (retail's light comes from the west, EXPERIMENTS row 66, 82). The image cannot
+               the gradient axis, on the side facing west (retail's light comes from the west, docs/retail-match/EXPERIMENTS.md rows 66 and 82). The image cannot
                tell the two ends of the axis apart; this convention picks the one.
   streak       angle (degrees) of the long axis of the structure at sigma 4, and its coherence: where the grain runs.
   shear        the whole-number slope k (y = -k x) nearest the streak angle, what the generator can wrap (engine-materials.wgsl).

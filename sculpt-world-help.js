@@ -83,7 +83,7 @@ export const WORLD_HELP = {
   beachWidth: 'Widens the strip of beach material along the shore.',
   apron: 'Extends sand outward from the foot of raised rock.',
   shallowDepth: 'Sets how far below sea level the shallow color extends before grading toward deeper water.',
-  deepDepth: 'Sets the depth that takes the deep water color.',
+  deepDepth: 'Sets how much water it takes to cover the lit bed with the liquid material. A shallow value keeps the surface pigment visible in thin pools.',
   waterSoft: 'Averages the depth used for water color across nearby pixels, smoothing small depth changes in the color.',
   crispShore: 'Sharpens the color boundary where dry ground meets shallow water.',
   deepEdge: 'Ramp grades between shallow and deep water colors. Hard step puts the change at a distinct depth.',

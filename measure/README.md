@@ -2,7 +2,8 @@
 
 Each script compares renders with retail art, using the section catalog
 written by `cmd/sectioncat` (branch `sct-reader`). The catalog and renders
-stay outside Git.
+stay outside Git. This page lists the main scripts; the rest describe
+themselves in their own header comments.
 
 | Script | Measures |
 | --- | --- |
@@ -29,7 +30,7 @@ Renders with heights come from `capture/capture.mjs` scenes that set
 `"heights": true`. Pass `ours <label> <stem>...` (stems without `.png`),
 or `retail <manifest.json> <catalog root>`.
 
-Lava (retail maps exported by `tools/neural-terrain/export -planet Lava`):
+Lava (retail maps exported with the parent Nanolathe project's retail exporter):
 
 | Script | Measures |
 | --- | --- |

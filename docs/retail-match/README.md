@@ -48,7 +48,7 @@ commit only on your branch, and do not land, merge or push.
 ```sh
 git worktree add ../terraform-wt-match-<world> -b match-<world> main
 cd ../terraform-wt-match-<world>
-export PYTHON=/Users/daniel/src/terraform/.venv/bin/python   # numpy, scipy, Pillow
+export PYTHON=<main checkout>/.venv/bin/python   # numpy, scipy, Pillow
 sh repro/match.sh <world>             # the bases, trial-000 and holdout-000; about a minute
 ```
 
@@ -108,6 +108,11 @@ Change nothing else:
    For each window, write down what differs most. Shape comes first: does
    our ground rise where retail's does? Then where things show: rock, sand,
    grass. Then texture, then color.
+
+   Then break each window into its stages (see "Stages" below):
+   `sh repro/match.sh <world> --stages`. Start with the retail read, before
+   you look at ours. Then read `stages.md` and the sheets. The stage that
+   carries a gap tells you which kind of lever to reach for first.
 2. **Pick one difference and a lever.** Use PLAYBOOK.md's tables. Prefer the
    lever that fixes the cause:
    - a material for what a surface is made of;
@@ -115,6 +120,11 @@ Change nothing else:
    - a rock type for how rock is built;
    - a World control for light, relief and effects.
 3. **Try it.**
+   - **Name your target.** Add `--aim <window>:<class>:<metric>` (for
+     example `--aim green-2:slope:lines`, the finding's key) to every trial
+     and probe. The log follows each gap you aim at and says when it stalls
+     (see "When a gap stalls"). Without it, the log has to guess your target
+     from what moved.
    - **One World control:** `sh repro/match.sh <world> --probe key=a,b,c
      --note "why"` sweeps values without editing a file. A `--probe` or
      `--query` value beats the scenes' own (the printout says when).
@@ -173,6 +183,12 @@ Change nothing else:
      cited that way). Cite a crop before you re-render a trial to see it.
    
    To revert it, restore the files (`git checkout -- <file>`).
+
+   **When your eye overrules the numbers, record it.** That means dropping a
+   change the numbers liked, or keeping one they did not. Run
+   `sh repro/match.sh <world> --verdict trial-NNN drop --why "..."`. These
+   records are how the harness learns which numbers to trust (see
+   "Calibration").
 5. **Checkpoint every 25 trials or so.**
    - Run `sh repro/match.sh <world> --log` and look at the trend, and at
      its count of trials per kind of lever. If one kind dominates, turn to
@@ -199,6 +215,115 @@ Change nothing else:
    materials and the map lane take many trials to explore.
    
    Then write the report.
+
+## When a gap stalls
+
+The trial printout and `--log` flag a gap as **STALLED** when 8 attempts
+aimed at it (a probe sweep counts as one) have not shrunk it by 15% from its
+best, across 3 or more kinds of lever. **STALLING** means the same, but with
+fewer kinds tried: try the other kinds first. A stalled gap is the signal to
+stop tuning it and find out why:
+
+1. **Find the stage.** Run `sh repro/match.sh <world> --stages --window
+   <window>` and read that class's row in `stages.md` and its
+   `sheets/<window>/<class>.png` (see "Stages"). The largest trusted stage
+   gap names the kind of lever that can reach it.
+2. **Check that kind was really tried.** If the stage is placement and no
+   surface layer trial aimed at the gap, it has not stalled. It is untried.
+   Go back to the loop.
+3. **Test the missing property with an oracle trial.** Write the smallest
+   shader change that adds what the stage lacks, and run it as an oracle
+   trial (see "Oracle trials"). If the gap closes and the crops look closer,
+   you have shown what the engine needs. If it does not close, the missing
+   piece is something else: look again before you propose it.
+4. **Write the proposal** with the oracle trial's id, numbers and crops
+   (REPORT.md, section 6, "Oracle"). If no shader change can test it (a new
+   tool, a stroke option, a new fact), say so and say why.
+
+Then move on to another gap. A stalled gap is not a reason to stop the
+round.
+
+## Stages
+
+`sh repro/match.sh <world> --stages [--window W]` breaks each tuning window
+into the stages a terrain picture is made of, retail beside ours, and writes
+`stages-NNN/stages.md` with the sheets (`repro/match_stages.py`). Retail is
+one finished picture, so its stages are estimates. Each estimator runs the
+same way on retail's picture and on ours. Our engine's own views (Clay, the
+unlit material, the picture before the dither, our real heights) check the
+estimator: a `?` marks a stage whose estimate does not recover our own view
+there (its trust is under .5). Read an untrusted stage by eye only.
+
+| Stage | Retail's estimate | Our engine's view | A gap here points at |
+| --- | --- | --- | --- |
+| height | its 16 px heights | our real heights | the shape lane (strokes, Steps, the map's ground relief), landform options, or a shape proposal |
+| light | the step within each palette ramp | Clay | relief: rock type faces and cracks, a material's relief (Light nodes), World relief controls. The lighting itself is the owner's |
+| placement | which palette ramp (the paint) each pixel uses | the unlit material | where things show: surface layers and their rules, which material a rock type or layer draws |
+| predither | the picture blurred 1 px | `palette=off` | texture in the material itself: grain, patches, cracks (the material graph, rock type cracks) |
+| dither | what the 1 px blur removed | our final picture | the output stage. The owner keeps it unchanged (decision 25): report it, do not chase it (the class `dither` finding is report-only and never stalls) |
+
+Finer height detail than the 16 px heights is not recovered from the
+picture. Measured on red-3: shape from shading on our own render matched our
+own detail heights at a correlation of only .06. Our Clay render follows our
+height gradient at .66 at 64 px but only .12 at 4 px, so fine shading most
+likely comes from the material's relief rather than the heights. Compare fine
+relief in the light stage instead.
+
+**The retail read.** Before anyone looks at ours, a fresh agent reads each
+window's `sheets/<window>/retail.png` (retail's five stages alone). For each
+stage it writes what the original artist most likely made: the landforms
+behind the heights, the light and relief, which paint goes where and by what
+rule, the texture before the dither, and the dither. It writes this to
+`$R/retail-reads/<window>.md`. Write it once per window and reuse it in later
+rounds, so the read does not drift toward whatever ours looks like. It is
+text, never a picture: no traced masks or shapes.
+
+**Stages are not a license to paint.** A placement gap says the world's
+rules put paint in the wrong place. Fix the rule (a surface layer's
+condition, a rock type's material), not the map. The trial printout counts
+each scene's paint strokes against the base. A new paint stroke needs the
+by-eye reason a map's own choice needs (step 4 above), and it never copies a
+stage map. The goal is retail's look from the world's own rules.
+
+## Oracle trials
+
+An oracle trial tests what an engine change would do before anyone builds
+it: `sh repro/match.sh <world> --patch change.diff --note "..." --aim ...`.
+
+- The patch is a `git diff` of `.wgsl` files only. Make it in your
+  worktree, save it outside the checkout, and restore the shader at once
+  (`git checkout -- engine-frag.wgsl`). Never commit it.
+- The trial renders with the patched shaders from a fresh folder of its own
+  and is logged as `oracle-NNN`. It is never kept and never ported as is,
+  and it is not the base or the previous trial for the trials around it.
+  `--stages --patch` shows its stages.
+- Keep the patch small and aimed at one property: for example, more relief
+  at 16-32 px on banks, or a broad pattern reaching deep water. If it
+  clears the gap, cite it in the proposal. If it does not, that is evidence
+  too.
+- Spend at most about one trial in ten on oracles. They answer "what would
+  help", not "what to keep".
+
+## Calibration
+
+The class metrics are only worth the weight the eye gives them.
+`$PYTHON repro/match_calibrate.py <out>[:<branch>] ...` counts, for each
+judged change, which way each class gap moved, and reports how often each
+metric agreed with the judge, with the count and who judged. Judgements come
+from `<out>/verdicts.jsonl`, which `match.sh --verdict trial-NNN keep|drop
+--by owner|reviewer|agent --why "..."` writes, and from a round branch's
+commits (a keep by the round agent, which the numbers partly chose, so it
+agrees by construction).
+
+A reviewer records every keep or drop decided by eye, and every owner call.
+A metric that agrees with the owner's and reviewers' calls no more often
+than chance becomes a proposal to re-weight it or drop it from the findings.
+It is not changed on thin data.
+
+Class metric version 2 added edge direction (`horizontal`), the dither's
+strength (`dither`) and the palette indices a class uses (`palette`). A base
+scored by an older version is re-scored from its kept pictures at the next
+trial. The window shape and look scores did not change.
 
 ## Rules of evidence
 
@@ -290,3 +415,12 @@ refuse report files from a delegated agent), put the whole report in your
 final message instead; the reviewer saves it there. Keep running notes in
 `<out>/NOTES.md` as you go: round 6 ran out of working memory at 94 trials,
 and its notes carried the round.
+
+## Earlier retail gaps
+
+The H cards (2026-10-30 to 2026-11-03) listed the retail looks they could
+not reach from numbers alone: Archipelago's shelf halo, Green's block cells
+and rim fissures, Red's mud polygons, Ice's shelf colors, Moon's uphill
+folds and others. That list is the "Small leftovers" row of
+`docs/TERRAIN_ENGINE.md` at commit `3ee2584d`. Read it before a round on
+those worlds.

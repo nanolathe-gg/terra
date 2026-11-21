@@ -845,7 +845,7 @@
   "vent": {"params": {"size": 1.8, "thick": 1.2, "rim": 0.4, "rimSat": 2.2, "spread": 3}}
  },
  "world": {
-    "materials": {"ground": "desert-ground", "water": "desert-water", "rock": "desert-rock", "slope": "desert-slope", "debris": "desert-debris", "high": "desert-cap", "soil": "desert-soil", "snow": "desert-snow", "moss": "desert-moss", "sand": "desert-sand", "band": "desert-band", "crystal": "crystals"},
+    "materials": {"ground": "desert-painted-grit", "water": "desert-water", "rock": "desert-rock", "slope": "desert-slope", "debris": "desert-debris", "soil": "desert-soil", "moss": "desert-moss", "sand": "desert-sand", "band": "desert-band", "crystal": "crystals"},
     "knobDefaults": {
         "lightCap": 1.25,
         "sunTilt": 0.5,
@@ -853,9 +853,9 @@
         "strata": 1,
         "strataContrast": 1,
         "columnContrast": 0,
-        "banding": 0.9,
-        "strataGrain": 0.25,
-        "crackSeverity": 0,
+        "banding": 0.43,
+        "strataGrain": 0.76,
+        "crackSeverity": 0.1,
         "crackMajor": 0.2,
         "crackMinor": 0.1,
         "crackHairline": 0,
@@ -866,19 +866,17 @@
         "undulationArt": 0,
         "plainRelief": 0,
         "flatOcclusion": 0,
-        "reliefAmount": 0.15,
-        "gentleRelief": 0.2,
+        "reliefAmount": 0.22,
+        "gentleRelief": 0.38,
         "faceFill": 0,
         "ambient": 0.3,
-        "baseBand": 1,
+        "baseBand": 0,
         "desertCapFlat": 1,
-        "faceBlock": 1,
-        "faceJoint": 0.15,
+        "faceBlock": 0.54,
+        "faceJoint": 0.07,
         "faceWear": 0.8,
-        "faceCrease": 1,
-        "highland": 1,
-        "highFrom": 40,
-        "highReach": 10
+        "faceCrease": 0.65,
+        "crackFrom": 0.26
       },
       "engineDefaults": {
         "erosion": 1,
@@ -1073,14 +1071,14 @@
    "scree": "0"
   },
   "column": {
-   "tones": [[0.4361, 0.3378, 0.3176], [0.4401, 0.5653, 0.6196], [0.2832, 0.3535, 0.3961], [0.3812, 0.2241, 0.2471], [0.1577, 0.2398, 0.3333]],
+   "tones": [[0.4361, 0.3378, 0.3176], [0.4401, 0.5653, 0.6196], [0.2832, 0.3535, 0.3961], [0.3812, 0.2241, 0.2471], [0.412, 0.493, 0.536]],
    "origin": "plain",
    "bands": [6, 0.2],
    "wander": {"terrain": [4, 2.6, 1.2]},
    "sections": [
-    {"start": 1, "beds": [[4.8, 0.5, 0], [1.2, 0.5, 1]]},
-    {"start": 17, "beds": [[3.6, 0.5, 0], [2.4, 0.5, 1]]},
-    {"start": 53, "beds": [[3.6, 0.5, 0], [2.4, 0.5, 1]]},
+    {"start": 1, "beds": [[4.8, 0.5, 0], [0.96, 0.5, 2]]},
+    {"start": 17, "beds": [[3.96, 0.5, 0], [2.04, 0.5, 4]]},
+    {"start": 53, "beds": [[3.96, 0.5, 0], [2.04, 0.5, 4]]},
     {"start": 58, "beds": [[0.3, 0.5, 0], [5.7, 0.5, 1]]},
     {"start": 69, "beds": [[7.7, 0.5, 2], [3.3, 0.5, 3]]}
    ]
