@@ -1098,13 +1098,6 @@ fn rockMaterialOf(slot:u32)->i32 {
  if(u.rockGround>=0&&u.ground[u32(u.rockGround) & groundMask].cacheLayer>=0){return u.rockGround;}
  return -1;
 }
-// A cache layer's art height at a native pixel q, bilinear between texels (the taps that light it read between pixels).
-fn materialReliefBilinear(q:vec2f,layer:i32)->f32 {
- let size=f32(textureDimensions(groundTex).x);let b=floor(q-.5);let f=q-.5-b;
- let a00=textureLoad(materialHeightTex,vec2i(poolWrap(b,size)),layer,0).x;let a10=textureLoad(materialHeightTex,vec2i(poolWrap(b+vec2f(1,0),size)),layer,0).x;
- let a01=textureLoad(materialHeightTex,vec2i(poolWrap(b+vec2f(0,1),size)),layer,0).x;let a11=textureLoad(materialHeightTex,vec2i(poolWrap(b+vec2f(1,1),size)),layer,0).x;
- return mix(mix(a00,a10,f.x),mix(a01,a11,f.x),f.y);
-}
 fn materialRaw(p:vec2f,slot:u32)->vec3f { return materialRawAt(p,u.ground[slot & groundMask].cacheLayer); }
 fn materialRawAt(p:vec2f,layer:i32)->vec3f {
  return textureLoad(groundTex,vec2i(materialPixel(p)),layer,0).rgb;

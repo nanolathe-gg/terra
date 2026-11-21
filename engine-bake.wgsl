@@ -1382,7 +1382,7 @@ fn bake(p: vec2f) -> vec4f {
     height += drift;
     // The bed's lumps lie on the sand the bed holds: silt does not smooth them away (the lake's bed is lumpy ground through the tint).
     height += bedLumps;
-    if(u.groundAny!=0){height+=groundHeight(p)*(1.0-smoothstep(.1,.6,slope))*(1.0-buried)*(1.0-faceBake);}   // rock carries its own material's height (rockDetail)
+    if(u.groundAny!=0){height+=groundHeight(p)*(1.0-smoothstep(.1,.6,slope))*(1.0-buried)*(1.0-faceBake);}   // Rock material relief is lit separately in the color pass.
     // Cracks, carved into the relief; sand fills them.
     var crackAt = cracks(p, fall, faceSlope, crackMask * (1.0 - route), h, max(style.y, 0.0)) * (1.0 - buried);
     // Where rock is broken into blocks, the blocks replace part of the
