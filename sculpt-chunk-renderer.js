@@ -160,7 +160,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const bands=columnRows(this.config.column).bands[0]*Math.max(Math.abs(rock('banding',0))*4,.8);
     // The bed's lumps (bedRelief) stay under the water plane, but the pictures are sensitive to this reach (Green's hills shade differently by about one unit of it), so it keeps counting them.
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
-    const extra=relief+blocks+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(rock('looseSize',6))+Math.abs(n('rippleHeight',1.4))+(rock('debrisAmount',0)>0?1.5*rock('debrisDepth',4):0);
+    const fine=Math.max(Math.abs(n('fineRelief',0)),Math.abs(n('fineLevel',0)))*Math.abs(n('fineSize',8))*.36;   // the bake's fine octaves (engine-common.wgsl fineOctaves): a quarter of each half wavelength (under fineSize / 4 summed), times the direction blend's sqrt 2
+    const extra=relief+blocks+bands+lumps+fine+7.84*Math.abs(n('worms',0))+Math.abs(rock('looseSize',6))+Math.abs(n('rippleHeight',1.4))+(rock('debrisAmount',0)>0?1.5*rock('debrisDepth',4):0);
     const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4+this.groundRelief());
     // The surface facts read the authored height around a pixel in the color pass (engine-common.wgsl): distance to water out to
     // SURFACE_WATER_REACH (192 px), plus the height grid's linear filter. The color record's lattice keeps them (colorLattice).

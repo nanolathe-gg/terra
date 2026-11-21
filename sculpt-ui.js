@@ -170,7 +170,7 @@ export const WORLD_HOMES={
  'World/Light & weather':'sunHeight erosionRain',
  'Ground/Pattern':'groundPatchSize',
  'Surface/':'highland highFrom highReach baseBand baseBandLow baseBandHigh baseBandWander baseBandGaps',
- 'Ground/Bumps & relief':'reliefScale reliefLumps reliefWarp reliefPatchy gentleRelief plainRelief lumpRelief worms',
+ 'Ground/Bumps & relief':'reliefScale reliefLumps reliefWarp reliefPatchy gentleRelief plainRelief lumpRelief worms fineRelief fineLevel fineSize fineGrain finePits',
  'Ground/Terrain shape':'undulation undulationScale undulationCover undulationArt faceSteep',
  'Ground/Slope cover':'hillLight slopeTexture slopeMarks wrinkles',
  'Ground/Low ground':'lowReach lowGrain',

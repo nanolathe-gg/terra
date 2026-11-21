@@ -1319,6 +1319,14 @@ fn geometryIndex(p:vec2i)->u32 {
     return u32(q.y)*geometryFrame.width+u32(q.x);
 }
 #ifdef GEOMETRY_PASS
+// The height outward the solid lacks at p: the rock's (rockDetail) where a rock face is, and the world's fine relief (fineDetail) about the
+// hit `at`. Either alone is exactly its own value.
+fn surfaceDetail(p:vec3f,site:RockSite,fine:FineSite,at:vec2f)->f32 {
+    var h=0.0;
+    if(site.on){h=rockDetail(p,site);}
+    if(fine.on){h+=fineDetail(p.xy,fine,at);}
+    return h;
+}
 @group(3) @binding(0) var<storage,read_write> geometryOut:array<PackedSurfaceRecord>;
 @fragment
 fn geometryMain(v:VertexOut)->@location(0) vec4f {
@@ -1332,13 +1340,14 @@ fn geometryMain(v:VertexOut)->@location(0) vec4f {
     // Rock finer than the solid's voxels (rockDetail, a height outward), read as a 1 px solid's normal reads its field: it bends the normal the light reads,
     // deepens the cavity where it hollows (voxelCavity's first ring: its weight and its reach) and casts its own short shadow.
     // Keep fine rock when a pixel is at most half a voxel wide. At 3 px or coarser in a 4 px solid, it reads as single-pixel noise.
+    // The world's fine relief (fineSite) finer than the solid joins it here, on any dry ground: its height adds to the rock's.
     if(vs.step>1.5*u.chunkScale){
-        let site=rockSite(hit);
-        if(site.on){
+        let site=rockSite(hit);let fine=fineSite(hit.xy);
+        if(site.on||fine.on){
             let ax=select(vec3f(0,0,1),vec3f(1,0,0),abs(normal.z)>.9);let t=normalize(cross(normal,ax));let b=cross(normal,t);
             let e=.75*max(u.chunkScale,1.0);   // voxelGradient's spacing in a 1 px solid
-            let d0=rockDetail(hit,site);let d1=rockDetail(voxelOffset(hit,t*e),site);let d2=rockDetail(voxelOffset(hit,-t*e),site);
-            let d3=rockDetail(voxelOffset(hit,b*e),site);let d4=rockDetail(voxelOffset(hit,-b*e),site);
+            let d0=surfaceDetail(hit,site,fine,hit.xy);let d1=surfaceDetail(voxelOffset(hit,t*e),site,fine,hit.xy);let d2=surfaceDetail(voxelOffset(hit,-t*e),site,fine,hit.xy);
+            let d3=surfaceDetail(voxelOffset(hit,b*e),site,fine,hit.xy);let d4=surfaceDetail(voxelOffset(hit,-b*e),site,fine,hit.xy);
             if(abs(d0)+abs(d1)+abs(d2)+abs(d3)+abs(d4)>0.0){
                 lit=normalize(normal-(t*(d1-d2)+b*(d3-d4))/(2.0*e));
                 let k=.5*(.25*(d1+d2+d3+d4)-d0)/max(e,1.0);
@@ -1346,7 +1355,7 @@ fn geometryMain(v:VertexOut)->@location(0) vec4f {
                 let lt=u.light-normal*dot(u.light,normal);let lw=length(lt);
                 if(lw>.05&&sun>0.0){
                     let dir=lt/lw;let rise=dot(u.light,normal)/lw;var over=0.0;
-                    for(var i=1;i<=3;i++){let s=f32(i)*.8;over=max(over,rockDetail(voxelOffset(hit,dir*s),site)-d0-s*rise);}
+                    for(var i=1;i<=3;i++){let s=f32(i)*.8;over=max(over,surfaceDetail(voxelOffset(hit,dir*s),site,fine,hit.xy)-d0-s*rise);}
                     sun*=1.0-smoothstep(.2,1.0,over);
                 }
             }

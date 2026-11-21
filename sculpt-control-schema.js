@@ -117,6 +117,7 @@ export function worldControlRequirement(key,v){
  // Plants grow only on surface layers that carry them (World › Surface; worldPanelValues' plants).
  if(key==='plantRelief')return n('plants')>0?'':'No surface layer grows plants: give one plants in World › Surface to use this setting.';
  if(['undulationScale','undulationCover','undulationArt'].includes(key))return needs('undulation','Undulation height');
+ if(['fineSize','fineGrain'].includes(key))return Math.max(n('fineRelief'),n('fineLevel'))>0?'':'Raise Fine relief on slopes or on level ground to use this setting.';
  if(key==='lowReach')return Number(v.lowGrain??1)<1?'':'Lower Grain kept in Low ground to use this setting.';
  // Strata, the foot band and the cap color the beds of a rock column: the world's own, or one the map adds (the Rock column panel; worldPanelValues passes the active one).
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return NO_COLUMN;
@@ -176,7 +177,7 @@ export const WORLD_PRIMARY_CONTROLS=new Set([
  'bedDip','bedDipDir','faceStretch','faceBlockHeight','faceRound','faceJoint','faceExtrude','faceLamina','faceLaminaSize','faceScratchLength','faceScratchAngle',
  'rockFace','faceRock','rockFaceFrom','rimReach','faceCreaseSize','faceCrease','faceBlock','faceBlockSize','faceBed','faceLedge','faceRun','faceScratch','faceScratchSize','faceLean','faceGrass','faceWear','faceShade','faceLayers','faceMass','faceTone','faceStrata','faceWet',
  'groundPatch','groundPatchSize','undulation','undulationScale','undulationCover','undulationArt','coastRamp','faceSteep','lowReach','lowGrain',
- 'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief',
+ 'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief','fineRelief','fineLevel','fineSize','fineGrain','finePits',
  'flatShadow','flatOcclusion','sunTilt','sunHeight','ambient','shadeDepth','lightCap','creaseShade',
  'hillLight','faceFill','rockCrown','highland','sandCrown','slopeTexture','erosionRain','wetSwath','wetGround','lushness','soilRim','slopeMarks','wrinkles',
  'shineRockSharp','shineRockRough','shineRockScale',

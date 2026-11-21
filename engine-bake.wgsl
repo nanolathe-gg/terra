@@ -1310,6 +1310,8 @@ fn bake(p: vec2f) -> vec4f {
     // Height scales with slope, with a floor so gentle lumps are visible.
     var height = value * u.reliefAmount * max(clamp(faceSlope, 0.0, 2.5), 0.25 * u.gentleRelief) * u.reliefScale * gain * patchy * styleScale(style.x);
     height += plain;
+    // Fine relief (world): its octaves the 2 px solid resolves (engine-common.wgsl fineSite); the hit draws the finer ones.
+    if (fineOn()) { height += fineBake(p); }
     // Lunar regolith: fine wormy ridges on any slope, fading onto the
     // level dust, as on the retail Moon sections.
     var wormDark = 0.0;
