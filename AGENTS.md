@@ -2,21 +2,34 @@
 
 Terraform is an experimental browser (WebGPU) terrain and map editor for
 Total Annihilation. These rules apply to every agent working in this
-repository. The owner's decisions behind them are in
-[docs/TERRAIN_ENGINE.md](docs/TERRAIN_ENGINE.md) ("Decisions" and "Rules for
-the cards"). Setup and ports are in
-[BACKLOG.md's ground rules](BACKLOG.md#ground-rules-every-card). Where this
-page and an older card disagree, this page wins.
+repository. The goal, the owner's decisions behind these rules and the
+architecture are in [docs/DESIGN.md](docs/DESIGN.md); setup is in
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Where this page and another doc
+disagree, this page wins. Code and tests cite these rules by number: keep the
+numbering.
 
 ## How to work
 
 1. **Work in a worktree:** `git worktree add ../terraform-wt-<task> -b <task> main`.
    Never edit the main checkout or another agent's worktree. Never reset,
    rebase, stash, amend or force-push `main` or anyone else's work.
-2. **Use your own server, browser port and assets root** (BACKLOG ground
-   rule 2). Never stop a process you did not start. Port 8801 is the
-   owner's editor, and the Chrome checks default to it (CDP 9450): always
-   pass `--server` and `--port`.
+2. **Use your own server, browser port and assets root.** Never stop a
+   process you did not start. Port 8801 is the owner's editor, and the
+   Chrome checks default to it (CDP 9450): always pass `--server` and
+   `--port`. Ports 8766-8812 belong to other sessions, and the server's
+   default port (8767) is among them, so always pass `--port` too:
+
+   ```
+   R=/tmp/nanolathe-map-editor
+   mkdir -p $R/agent-<task>
+   go run ./cmd/terraform --port <yours> --assets-root $R/agent-<task> \
+     > $R/agent-<task>/server.log 2>&1 &
+   ```
+
+   Some tools use `<cdp>` through `<cdp>+2`. Retail crops and measuring
+   inputs under `$R` (`$R/repro-r7`, `$R/retail-<world>`, `$R/assets-*`) are
+   read-only. Optional Python scripts use the main checkout's
+   `.venv/bin/python`.
 3. **Do the task you were given, at the size you were given.** Add no
    panels, pages, buttons, tools or controls the task does not ask for. If
    you think the editor needs one, propose it in your report.
@@ -177,7 +190,7 @@ See [the asset workflow](docs/PREVIEW_ASSETS.md).
 Optimize for fast iteration on this unreleased editor. Run checks that can
 catch a failure caused by your change. Do not run every integration check,
 every scene, control sweeps, realism reports or performance benchmarks for
-every change. Older cards asking for broad checks do not override this rule.
+every change. Older docs or scripts asking for broad checks do not override this rule.
 
 - During iteration, run relevant unit tests (`node --test repro/paths.test.mjs`,
   for example) and inspect changed editor behavior. Documentation-only edits

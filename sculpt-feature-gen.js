@@ -1361,12 +1361,19 @@ function paintDepositPebbles(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
 
 // rim: the lightness of the ground round the crack, scaled; rimSat how much richer its hue is; spread how far the rim reaches (px; 2: Green's
 // thin scorch); thick the crack's width, scaled. look 'pit' draws a dark hole in a ring of lumps (lumps: bubbles, Lava's) or cracked
-// plates (Crystal's) instead of a crack: hole and ring (radius px), cell (px of one lump or plate), lumpTone (their lightness against the ground).
-export const VENT_DEFAULTS = { size: 1, forks: 3, rim: 0.72, rimSat: 1.15, spread: 2, thick: 1, look: 'crack', hole: 6, ring: 22, cell: 9, lumps: 1, lumpTone: 0.6 };
+// plates (Crystal's) instead of a crack: hole and ring (radius px), cell (px of one lump or plate), lumpTone (their lightness against the ground), holeAspect (the opening's elongation),
+// and rimLayers (how strongly the overlapping crust shelves read).
+export const VENT_DEFAULTS = { size: 1, forks: 3, rim: 0.72, rimSat: 1.15, spread: 2, thick: 1, look: 'crack', hole: 6, ring: 22, cell: 9, lumps: 1, lumpTone: 0.6, holeAspect: 1, rimLayers: 0 };
+// The painter is shared by previews and export. Keep every stamp inside their 128 px ground patch.
+const ventRing = (ring, size) => clamp(ring * size, 1, 55);
+export function ventPaintRadius({look = 'crack', ring = VENT_DEFAULTS.ring, size = 1} = {}) {
+  return look === 'pit' ? Math.max(48, Math.ceil(1.15 * ventRing(ring, size))) : 48;
+}
 export function paintVent(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const P = { ...VENT_DEFAULTS, ...params }, palette = ctx.palette, q = paletteSearch(palette), lit = groundLight(ctx);
   const r = rng(seed), rn = rng(mix32(seed, 4));
-  const bw = 96, bh = 96, ox = Math.round(cx) - 48, oy = Math.round(cy) - 48;
+  const half = ventPaintRadius(P);
+  const bw = 2 * half, bh = bw, ox = Math.round(cx) - half, oy = Math.round(cy) - half;
   if (P.look === 'pit') return paintVentPit(ground, cx, cy, P, seed, ctx, { bw, bh, ox, oy });
   const core = new Uint8Array(bw * bh);   // 1 = crack, thickness irrelevant after drawing
   function stamp(x, y, t) {
@@ -1414,15 +1421,19 @@ export function paintVent(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
 // each a seeded cell of the ring; the ring's rim is ragged and thins to the ground.
 function paintVentPit(ground, cx, cy, P, seed, ctx, { bw, bh, ox, oy }) {
   const palette = ctx.palette, q = paletteSearch(palette), L = lightOf(ctx), r = rng(seed), rn = rng(mix32(seed, 4)), s1 = (r() * 1e6) | 0;
-  const R = P.ring * P.size, hole = P.hole * P.size, cell = Math.max(4, P.cell * Math.sqrt(P.size)), bubble = P.lumps > 0.5;
+  const R = ventRing(P.ring, P.size), hole = P.hole * P.size, cell = Math.max(4, P.cell * Math.sqrt(P.size)), bubble = P.lumps > 0.5;
+  const aspect = clamp(P.holeAspect, 1, 3.5), layering = clamp(P.rimLayers, 0, 1);
+  const axis = hash2(seed, 73, 11) * TAU;
   const seedAt = (i, j) => [(i + 0.1 + 0.8 * hash2(i, j, s1)) * cell, (j + 0.1 + 0.8 * hash2(i, j, s1 + 1)) * cell];
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
     const X = x + ox, Y = y + oy, dx = X - cx, dy = Y - cy, rr = Math.hypot(dx, dy * 1.05), th = Math.atan2(dy, dx);
     const edge = R * (0.78 + 0.5 * (fbm(Math.cos(th) * 2.2 + 5, Math.sin(th) * 2.2 + 5, s1 + 3, 3) - 0.5) + 0.12), hl = hole * (0.75 + 0.5 * vnoise(Math.cos(th) * 2.5 + 9, Math.sin(th) * 2.5 + 9, s1 + 4));
     if (rr > edge) continue;
     const base = getGround(ground, X, Y);
+    const along = Math.cos(th - axis);
+    const openingDistance = rr * Math.sqrt(1 + (aspect - 1) * (1 - along * along * (1 + 1 / aspect)));
     let tone;
-    if (rr < hl) tone = 0.1 + 0.1 * rn();
+    if (openingDistance < hl) tone = 0.1 + 0.1 * rn();
     else {
       const u = X + 4096, v = Y + 4096, i0 = Math.floor(u / cell), j0 = Math.floor(v / cell); let d1 = 1e9, d2 = 1e9, sx = 0, sy = 0, id = 0;
       for (let j = j0 - 1; j <= j0 + 1; j++) for (let i = i0 - 1; i <= i0 + 1; i++) { const [px, py] = seedAt(i, j), d = Math.hypot(u - px, v - py); if (d < d1) { d2 = d1; d1 = d; sx = px; sy = py; id = i * 7919 + j; } else if (d < d2) d2 = d; }
@@ -1432,6 +1443,13 @@ function paintVentPit(ground, cx, cy, P, seed, ctx, { bw, bh, ox, oy }) {
         else if (d1 > br - 1.3) tone = 0.2;
         else { const n = [(u - sx) / br, (v - sy) / br], facing = -(n[0] * L.x + n[1] * L.y); tone = P.lumpTone * (1 + 0.4 * facing * 1.3) * (0.82 + 0.3 * hash2(id, 3, s1)) * (0.92 + 0.16 * rn()); }
       } else tone = d2 - d1 < 0.8 + 0.4 * rn() ? 0.14 : P.lumpTone * (0.75 + 0.5 * hash2(id, 5, s1)) * (0.9 + 0.2 * rn());
+      if (layering > 0) {
+        const breaks = vnoise(Math.cos(th) * 5 + rr / 13, Math.sin(th) * 5, s1 + 8);
+        const travel = (openingDistance - hl) / Math.max(1, edge - hl) + 0.12 * (breaks - 0.5);
+        const shelf = 1 - smoothstep(0.07, 0.18, Math.abs(((travel * 2.65 + 0.45) % 1) - 0.5));
+        tone *= 1 - 0.66 * layering * shelf * smoothstep(0.17, 0.56, breaks)
+          * (1 - smoothstep(0.7, 1, rr / edge));
+      }
       tone *= 1 - 0.35 * smoothstep(0.55, 1, rr / edge);   // the ring grades to the ground at its rim
       if (rr > edge - 2.5 && rn() > (edge - rr) / 2.5) continue;
     }

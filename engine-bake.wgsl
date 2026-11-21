@@ -1066,13 +1066,22 @@ fn sandRipples(p: vec2f, lambda: f32) -> vec3f {
 fn crustPillows(p: vec2f, fall: vec2f, count: f32, tall: f32) -> vec2f {
     let size = u.pool / count;
     let warp = vec2f(poolNoise(p, 31.0, 3.0), poolNoise(p, 31.0, 17.0)) * 0.22 * u.lavaPillow;
-    let pil = cells((poolPos(p) + warp) / size, vec2f(1.0 / 1.35, 1.0), 5.0, vec2f(0.12, 0.76), count, fall);
+    let q = (poolPos(p) + warp) / size;
+    let pil = cells(q, vec2f(1.0 / 1.20, 1.0), 5.0, vec2f(0.12, 0.76), count, fall);
     let pd = sqrt(vec3f(pil.best, pil.second, pil.third));
     let t = clamp(pd.x / max(pd.y, 1e-3), 0.0, 1.0);
-    let dome = 1.0 - pow(t, 2.4);
-    let triple = 1.0 - smoothstep(0.0, 0.16, pd.z - pd.x);
-    let height = u.lavaPillow * mix(0.035, 0.11, tall) * (dome + 0.7 * (cellHash(pil.id + 36.7).x - 0.5)) - u.lavaPillow * mix(0.03, 0.08, tall) * triple;
-    let dark = mix(0.2, 1.5, tall) * smoothstep(0.80, 0.97, t) + mix(0.6, 2.4, tall) * triple * smoothstep(0.35, 0.8, t);
+    let seed = cellHash(pil.id + 36.7);
+    let dome = sqrt(max(0.0, 1.0 - t * t));
+    let shelf = mix(0.48, 0.73, seed.x);
+    let shelfDistance = (t - shelf) * size * 0.48;
+    let shelfMark = (1.0 - smoothstep(0.40, 1.50, abs(shelfDistance)))
+        * smoothstep(-0.36, 0.35, poolNoise(p, 18.0, 6.0));
+    let tilt = dot((seed - 0.5) * 0.8, q - pil.point);
+    let triple = (1.0 - smoothstep(0.0, 0.13, pd.z - pd.x)) * smoothstep(0.60, 0.98, t);
+    let rim = 1.0 - smoothstep(0.24, 1.35, (pd.y - pd.x) * size);
+    let cap = dome + mix(0.12, 0.28, tall) * (1.0 - smoothstep(-0.9, 0.9, shelfDistance)) + tilt;
+    let height = size * (mix(0.055, 0.17, tall) * cap - mix(0.019, 0.07, tall) * triple);
+    let dark = mix(0.58, 2.0, tall) * rim + mix(0.44, 1.05, tall) * shelfMark + mix(0.4, 1.5, tall) * triple;
     return vec2f(height, dark);
 }
 fn crustChips(p: vec2f, count: f32, tall: f32) -> vec2f {
@@ -1088,7 +1097,8 @@ fn lavaCrust(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
     // Lava's plain undulates up to ~4 units over the base, so the crust starts above that (open ground keeps its own lumps).
     let gate = u.lavaCrust * smoothstep(u.base + 2.5, u.base + 6.5, h);
     // The fall-line relief gives way on the hill and on its foot's slope; the banks well below the plain keep theirs.
-    let calm = u.lavaCalm * max(smoothstep(u.base + 0.2, u.base + 2.5, h), smoothstep(u.base - 0.6, u.base - 0.1, h) * smoothstep(0.06, 0.22, slope));
+    let calm = u.lavaCalm * smoothstep(0.0, 0.35, u.lavaCrust)
+        * max(smoothstep(u.base + 0.2, u.base + 2.5, h), smoothstep(u.base - 0.6, u.base - 0.1, h) * smoothstep(0.06, 0.22, slope));
     if (gate <= 0.0) { return vec3f(0.0, 0.0, calm); }
     let across = vec2f(fall.y, -fall.x);
     let tall = smoothstep(u.base + 18.0, u.base + 70.0, h);
@@ -1098,8 +1108,9 @@ fn lavaCrust(p: vec2f, h: f32, slope: f32, fall: vec2f) -> vec3f {
     let chipCount = max(1.0, u.pool / u.lavaChip);
     let pillows = mix(crustPillows(p, fall, floor(pillowCount), tall), crustPillows(p, fall, floor(pillowCount) + 1.0, tall), fract(pillowCount));
     let chips = mix(crustChips(p, floor(chipCount), tall), crustChips(p, floor(chipCount) + 1.0, tall), fract(chipCount));
-    var height = pillows.x + chips.x;
-    var dark = max(pillows.y, chips.y);
+    let chipsOnCap = mix(0.84, 0.48, tall);
+    var height = pillows.x + chips.x * chipsOnCap;
+    var dark = max(pillows.y, chips.y * chipsOnCap);
     // Veins hang down the fall line: zero lines of a noise stretched along it, in stretches that begin and end.
     if (u.lavaVeins > 0.0) {
         let qv = vec2f(dot(p, across) / 7.0, dot(p, fall) / 40.0) + 0.5 * vec2f(valueNoise(p / 23.0 + 5.0), valueNoise(p / 23.0 + 9.0));

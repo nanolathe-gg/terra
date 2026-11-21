@@ -2,7 +2,7 @@
 
 One row per experiment, newest last. The renders, crops and keys stay
 outside Git (the session scratchpad and /private/tmp/nanolathe-map-editor).
-Blind rounds follow docs/PLAN_TERRAIN_EDITOR.md §10.
+Blind rounds followed docs/PLAN_TERRAIN_EDITOR.md §10 (in history at commit 3ee2584d). Frozen since 2026-11-03.
 
 | # | Change | Knobs | Evidence | Verdict |
 | --- | --- | --- | --- | --- |
