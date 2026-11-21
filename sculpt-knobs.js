@@ -25,7 +25,7 @@ export const KNOBS = [
     ['sandLee','Wind drifts (sand in the lee of rises)',0,2,.05,0],['wind','Wind toward (degrees; ripples and drifts)',0,360,5,20],['sandDust','Dusting tint',0,1,.05,.5],['sandGrass','Vegetation through sand',0,1,.05,.6],['sandLight','Weathered lightness',0,1,.05,.25],
     ['ripple','Ripple length (px)',0,16,1,7],['rippleHeight','Ripple height',0,3,.1,1.4]]],
   ['Cracks', [['crackSeverity','Crack depth (above 1 the fine fractures fill in)',0,1.5,.05,.6],['crackSpacing','Crack spacing (px)',16,96,2,40],['crackFrom','Cracks and facets from slope (majors from a third of it)',.05,1.2,.01,.44],
-    ['crackMajor','Major cracks',0,1,.05,.8],['crackMinor','Minor cracks',0,1,.05,.75],['crackHairline','Hairline crazing',0,1,.05,.6],['crackBlocks','Facets (block relief)',0,1.5,.05,.6],
+    ['crackMajor','Major cracks',0,1,.05,.8],['crackMinor','Minor cracks',0,1,.05,.75],['crackHairline','Hairline crazing',0,1,.05,.6],['crackBlocks','Facets (block relief)',0,3,.05,.6],
     ['crackWidth','Width (px)',.5,2.5,.1,1],['crackNetwork','Majors: rills to plates',0,1,.05,.35],
     ['crackDark','Floor darkness',0,1,.05,.75]]],
   ['Contour bands', [['banding','Strength',0,1,.05,0],['bandSoftness','Riser share',.05,1,.05,.35],['bandLevel','Lines on level ground (strength, times the slopes\')',0,2,.05,0],['bandFill','Extra lines where level-ground bands run far apart',0,1,.05,0],['sandBanding','Streaks on sand and ramps',0,1,.05,0],['sandBandSpacing','Streak height step',.3,4,.1,2]]],
