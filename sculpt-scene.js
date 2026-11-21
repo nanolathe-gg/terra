@@ -225,8 +225,8 @@ export const SHAPE_FIELDS=[
   // Local vegetation inside the shape (card C5 stage 2): a change about the world's own cover, 0 none.
   ['styleVegetation','style-vegetation','Local vegetation',['landform'],-100,100,5,100,'Grass and moss cover inside the shape, times 1 + this: below 0 more bare rock, above 0 more cover.'],
   // E10 (Lava): finger size; layer width variation; circle size of the circular layers.
-  ['fingerSize','finger-size','Lobe size',['landform'],20,300,5,100,'Fingers on the joined coast: length and (less) width of each finger. Fingers never reach past this stroke\'s bank.'],
-  ['fingerVary','finger-vary','Lobe variety',['landform'],0,100,5,100,'Shore lobes gather in clusters, and a few grow long and wide (spits and broad lobes) among many small ones. 0: an even row of fingers.'],
+  ['fingerSize','finger-size','Lobe size',['landform'],20,300,5,100,'Length and width of the shore lobes. Each lobe rises into a rounded spine, with room to taper at its tip.'],
+  ['fingerVary','finger-vary','Lobe variety',['landform'],0,100,5,100,'Shore lobes gather in clusters. Some grow into wide spits with forked tips. 0: an even row of fingers.'],
   ['fingerInlet','finger-inlet','Inlet share',['landform'],0,100,5,100,'The share of shore lobes that cut a tapering inlet into the land (water or lava reaching in) instead of a tongue of land reaching out. 0: all tongues.'],
   ['riverDepth','river-depth','Channel depth',['landform'],25,400,5,100,'Rivers: how deep the channel cuts, as a share of its usual depth (a quarter of its width): higher for a narrow river that still runs deep and dark, lower for a shallow, pale one.'],
   ['layerVary','layer-vary','Layer width variation',['landform'],0,100,5,100,'How much each layer\'s width and riser height change along the shore and from one layer to the next, so risers bunch, part and merge as retail\'s do. 0 keeps the even layers.'],
