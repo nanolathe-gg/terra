@@ -910,7 +910,7 @@
   "rockCurvature": 0.28,
   "wetBand": 13,
   "shallowDepth": 2,
-  "deepDepth": 42,
+  "deepDepth": 18,
   "grassDetail": 1.0,
   "rockDetail": 1.0,
   "waterDetail": 1.0,
