@@ -150,6 +150,22 @@ Leads:
    engine (round 15's notes; a convexity layer draws blobs, not lines:
    trial-032).
 
+The review of round 16 (2026-11-20) built none of its four engine proposals:
+- **Line darkness per rock type:** trial-092's hatch (evidence/z92.png) still
+  reads as sparse dark lines beside retail's dense faint hatch, by eye, and
+  scored .120 against the kept .117. Darkness alone would not add the
+  density; find what draws the hatch's spacing first.
+- **Output dither re-picking grass indices:** the owner kept the palette
+  output stage (decision 25). Report the 169 share; don't tune toward it.
+- **Self-shadow depth per rock type:** this is the light, the owner's call,
+  asked alongside round 15's faceFill .24. closeShadow 1 hurt green-4
+  (trial-094).
+- **A terrace-foot fact:** three earlier tries at the same finding failed
+  (stepCrease, Steps 12, the convexity layer); it needs a throwaway proof
+  before a design.
+A scene's own surface list now names materials, not `@roles`: the validator
+refuses `@rock` there (round 16's convexrock layer with `@rock` drew nothing).
+
 ## Pilot notes (2026-11-18)
 
 The harness's first run, by the agent that built it. Its trials are in

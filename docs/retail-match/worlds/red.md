@@ -103,14 +103,34 @@ Leads:
    surface layer of red-crumple on sloped ground near water (trial-066: red-2's
    smooth bank took it, .09 to .13) did not draw it. Next: a bank material with
    down-slope streaks and cracks, as a layer that red-2's river bank escapes
-   (a rule on the sea's depth, or each map's own amount).
+   (a rule on the sea's depth, or each map's own amount). Not yet tried with
+   red-3 tuning: shoreRock, shoreShelf and bankRock (rounds 1 and 2 tried them
+   before any coast window tuned); try them first.
 3. **Edge orientation** is most of red-3's look (.50): retail's land edges
    run vertical (lit from due west: 3248 vertical against 263 horizontal on
    red-3's inland), ours mixed (1880 against 1191). Banding, faceTone, shineRock,
    the rock's bedding (faceLamina, faceLedge, faceBed) and reliefAmount .5-.65
    do not move it (trial-009..012, 040, 056..060). Water Waves direction 0
    gains .02 on red-3 but draws vertical streaks where retail's run diagonal
-   (trial-061). Find which pass draws the horizontal edges on level land.
+   (trial-061). The review traced it (renders of red-3 on Node/Dawn, edges
+   counted on land more than 40 px from water, the score's 1 px blur):
+   - The relief's own light is directional: in Clay, 3060 vertical against
+     1067 horizontal; with reliefAmount and plainRelief 0 almost no edges
+     are left (92/0). A review sun (`sun=90`) turns the counts round
+     (1094/3213), so the relief has no direction of its own.
+   - Not the cause: lightCap, flatShadow, flatOcclusion, cavity (0 already),
+     reliefLumps, reliefWarp, lumpRelief, gentleRelief, plainRelief, the
+     materials' own dither, red-plain's spots.
+   - **Our palette dither alone draws about 800 horizontal edges** on red-3's
+     plain: with red-plain one flat color and the relief off, 816 horizontal
+     against 853 vertical are left. Retail's plain uses the same four palette
+     colors at the same pixel contrast (pixel-scale luma s.d. 11.4, ours
+     11.3), but its dither runs in rows, so its edges run vertical. The
+     output dither is the owner's (palette output stage, decision 25): no
+     data lever changes this share, so don't chase edge_horizontal on level
+     ground.
+   - The reachable part is the coast bank (lead 2): its dark blotches are
+     round cells, edges in every direction, where retail's bank is streaked.
 4. **Red-2's upland** reads as broken lit lumps now, but darker and busier
    than retail's lighter plates with thin dark cracks (crops/r2-up2-036.png).
    Stepped versions drew dark risers (trial-029..031). Shore plates draw gray
@@ -122,8 +142,14 @@ Leads:
 6. **Deep water's 32 px patches** are too few (red-4 .48 against 1.14,
    red-3 .53 against .87); red-water's broad noise, its Patch size at 40 and
    waterSoft move nothing (trial-051, 052, 064). deepDepth 18 created this
-   finding (red-3 deep 32 px 1.42 to .56): trace how deep water samples its
-   material before tuning it.
+   finding (red-3 deep 32 px 1.42 to .56). The review measured red-4's water
+   more than 60 px from land: ours already matches retail there (32 px .21
+   against .18, 8 px .47 against .47), and red-water's broad mix .35 at size
+   40 does reach it (.21 to .31). So the gap is in the deep class next to
+   the shelf, where retail mottles softly and ours steps to the deep color:
+   at deepDepth 42 the depth mottle (engine-frag.wgsl, the shallow-to-deep
+   ramp) drew those patches. Try a wider ramp (shallowDepth lower against
+   deepDepth 18) before the material.
 7. **The knob** (darkknob) is even now but lacks retail's lit crest and dark
    east lee (red-2 steep.png); the Knob tool draws it and was not viewed.
 8. Relief .8 holds: .5 takes red-1 from .07 to .20 (trial-059), .65 to .11
