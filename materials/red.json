@@ -1080,7 +1080,8 @@
         "sunTilt": 0,
         "bedCracks": 0.55,
         "bedCrackSize": 42,
-        "wetBand": 4
+        "wetBand": 4,
+        "crispShore": 0.5
       },
       "engineDefaults": {
         "erosion": 1,
