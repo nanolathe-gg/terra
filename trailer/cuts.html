@@ -1,0 +1,166 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Trailer cuts</title>
+<!-- Trailer concepts A and B (docs/TRAILER.md, "Three concepts"), drawn from engine stills (trailer/stills.mjs): ?cut=worlds or ?cut=sections.
+     Not part of the editor or the site: trailer/render-explainer.mjs serves it with the stills folder as layers/ and captures frame(i) at 30 fps. -->
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style>
+<canvas id="c" width="1280" height="720"></canvas>
+<script type="module">
+const W = 1280, H = 720, FPS = 30, CUT = new URLSearchParams(location.search).get('cut') || 'worlds';
+const ctx = document.getElementById('c').getContext('2d');
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const ease = t => { t = clamp(t); return t * t * (3 - 2 * t); };
+const span = (t, a, b) => clamp((t - a) / (b - a));
+const image = async file => { const im = new Image(); im.src = 'layers/' + file; await im.decode(); return im; };
+const json = async file => (await fetch('layers/' + file)).json();
+const FONT = '"Helvetica Neue", Helvetica, Arial, sans-serif';
+function text(str, alpha, {x = 56, y = 650, size = 30, align = 'left', weight = 500, color = '#fff'} = {}) {
+  if (alpha <= 0 || !str) return;
+  ctx.save(); ctx.globalAlpha = alpha; ctx.textAlign = align; ctx.font = `${weight} ${size}px ${FONT}`; ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = 14; ctx.fillStyle = color; ctx.fillText(str, x, y); ctx.restore();
+}
+const fadeIO = (t, a, b, f = .35) => ease(span(t, a, a + f)) * (1 - ease(span(t, b - f, b)));
+function caption(t, a, b, title, sub = '') { const al = fadeIO(t, a, b); text(title, al, {y: sub ? 628 : 660}); text(sub, al * .9, {y: 664, size: 20, weight: 400}); }
+function draw(img, alpha = 1, sx = 0, sy = 0, sw = W, sh = H) { if (alpha <= 0) return; ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H); ctx.restore(); }
+function cursor(x, y, alpha = 1) {
+  if (alpha <= 0) return; ctx.save(); ctx.globalAlpha = alpha; ctx.translate(x, y); ctx.scale(1.3, 1.3); ctx.beginPath();
+  [[0, 0], [0, 22], [6, 17], [10, 26], [14, 24], [10, 15], [17, 15]].forEach(([a, b], i) => i ? ctx.lineTo(a, b) : ctx.moveTo(a, b)); ctx.closePath();
+  ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
+}
+// A smooth curve through the nodes (Catmull-Rom), as a smoothed route draws them.
+function smooth(points) {
+  if (points.length < 3) return points;
+  const out = [], P = i => points[clamp(i, 0, points.length - 1)];
+  for (let i = 0; i < points.length - 1; i++) for (let s = 0; s < 10; s++) { const t = s / 10, p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
+    out.push([0, 1].map(k => .5 * (2 * p1[k] + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t * t + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t * t * t))); }
+  out.push(points.at(-1)); return out;
+}
+// A stroke's path drawn up to `p` of its length (a single point grows a ring), smoothed; returns the pen's place.
+function path(nodes, p, alpha = 1) {
+  const points = smooth(nodes);
+  if (p <= 0) return points[0];
+  ctx.save(); ctx.globalAlpha = alpha; ctx.lineCap = ctx.lineJoin = 'round';
+  if (points.length === 1) { const [x, y] = points[0]; ctx.strokeStyle = '#4fd3ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, 6 + 28 * ease(p), 0, Math.PI * 2 * ease(p)); ctx.stroke(); ctx.restore(); return [x, y]; }
+  const len = []; let total = 0; for (let i = 1; i < points.length; i++) { const d = Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]); len.push(d); total += d; }
+  let want = total * clamp(p), tip = points[0]; ctx.beginPath(); ctx.moveTo(...points[0]);
+  for (let i = 1; i < points.length && want > 0; i++) { const f = Math.min(1, want / len[i - 1]); tip = [points[i - 1][0] + (points[i][0] - points[i - 1][0]) * f, points[i - 1][1] + (points[i][1] - points[i - 1][1]) * f]; ctx.lineTo(...tip); want -= len[i - 1]; }
+  ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = 6; ctx.stroke(); ctx.strokeStyle = '#4fd3ff'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.restore(); return tip;
+}
+// The end card shared by every cut.
+let logo;
+function endCard(t, a, b) {
+  const al = fadeIO(t, a, b, .5); if (al <= 0) return;
+  ctx.save(); ctx.globalAlpha = al; ctx.drawImage(logo, 0, 60, W, H - 120, 160, 70, W - 320, (H - 120) * (W - 320) / W); ctx.restore();
+  text('A map editor for Total Annihilation', al, {x: W / 2, y: 560, size: 34, align: 'center'});
+  text('Exports .ufo maps that play in the game', al * .85, {x: W / 2, y: 604, size: 22, weight: 400, align: 'center'});
+}
+
+// ---------- A: one editor, every world
+const WORLDS = [['green', 'Green Planet', 'Plateau · Mountain · Crater · Deep water'], ['red', 'Red Planet', 'Canyon · Crescent · Craterlet · Knob'],
+  ['archipelago', 'Archipelago', 'Island · Atoll · Islet scatter · Rock knob'], ['moon', 'Moon', 'Fresh crater · Terraced crater · Wrinkle ridge · Dome'],
+  ['lush', 'Lush', 'Mesa · Ridge · Swamp · Outcrop'], ['lava', 'Lava', 'Cone · Vent · Lava pit · Shield'], ['desert', 'Painted Desert', 'Butte · Hoodoos · Gray dome · Cap knob'],
+  ['crystal', 'Crystal', 'Crystal · Spires · Shards · Deep water'], ['ice', 'Ice', 'Ice cliff · Prism · Butte · Boulder field']];
+async function worldsCut() {
+  const data = {};
+  for (const [w] of WORLDS) { const info = await json(`worlds/${w}/info.json`); data[w] = {info, steps: await Promise.all(info.strokes.map((_, i) => image(`worlds/${w}/step-${i}.png`))), final: await image(`worlds/${w}/final.png`)}; }
+  const blank = {}; for (const [w] of WORLDS) blank[w] = data[w].steps[0];
+  const T0 = 2.6, BUILD = 1.15, PER = 1.75, others = WORLDS.slice(1), tOthers = T0 + BUILD * data.green.steps.length + .4, tDetail = tOthers + PER * others.length, tEnd = tDetail + 3.2, DURATION = tEnd + 4.2;
+  return {DURATION, frame(t) {
+    if (t < T0) { text('A map editor for Total Annihilation', fadeIO(t, .3, T0 - .1, .5), {x: W / 2, y: H / 2 + 14, size: 44, align: 'center'}); return; }
+    if (t < tOthers) {   // Green, stroke by stroke: the path, then the engine's picture with that stroke
+      const g = data.green, n = g.steps.length, k = Math.min(n - 1, Math.floor((t - T0) / BUILD)), u = (t - T0 - k * BUILD) / BUILD;
+      if (k > 0) draw(g.steps[k - 1]); else { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); draw(g.steps[0], .0); }
+      if (k === 0) { ctx.save(); ctx.globalAlpha = .35 * ease(span(t, T0, T0 + .3)); ctx.drawImage(g.steps[0], 0, 0); ctx.restore(); }
+      draw(g.steps[k], ease(span(u, .55, .9)));
+      const tip = path(g.info.strokes[k].points, ease(span(u, 0, .5)), 1 - ease(span(u, .7, 1)));
+      cursor(tip[0], tip[1], 1 - span(t, tOthers - .5, tOthers));
+      caption(t, T0 + .2, tOthers, 'Draw shapes', 'Terra builds the ground, rock, water and light');
+      return;
+    }
+    if (t < tDetail) {   // every other world: its own tools, built in a blink, held
+      const i = Math.floor((t - tOthers) / PER), u = t - tOthers - i * PER, [w, name, tools] = others[i], d = data[w];
+      const steps = d.steps.length, k = Math.min(steps - 1, Math.floor(u / .16));
+      draw(d.steps[k]); if (k < steps - 1) draw(d.steps[k + 1], (u / .16) % 1);
+      if (i > 0 && u < .12) draw(data[others[i - 1][0]].final, 1 - u / .12);
+      text(name, ease(span(u, .15, .4)), {y: 628, size: 34}); text(tools, ease(span(u, .25, .5)) * .9, {y: 664, size: 20, weight: 400});
+      return;
+    }
+    if (t < tEnd) {   // 1x: the desert's hoodoos, then 3x of the same pixels
+      const d = data.desert.final, z = ease(span(t, tDetail + .3, tDetail + 2.2)), sw = W / (1 + 2 * z), sh = H / (1 + 2 * z), cx = clamp(720, sw / 2, W - sw / 2), cy = clamp(540, sh / 2, H - sh / 2);
+      ctx.imageSmoothingEnabled = false; draw(d, 1, cx - sw / 2, cy - sh / 2, sw, sh); ctx.imageSmoothingEnabled = true;
+      caption(t, tDetail + .2, tEnd, 'Every pixel drawn for your map', 'Rocks, grit and shadows at 1x, in TA\'s 256 colors');
+      return;
+    }
+    endCard(t, tEnd, DURATION);
+  }};
+}
+
+// ---------- B: ready-made sections, then Terra
+// The section half uses Total Annihilation's own Green Planet map-editor sections (the retail SCT files, decoded read-only into PNGs outside the
+// repository and copied to <stills>/retail/ for the render). Nothing retail is committed; the cut's frames stay outside Git like every render.
+async function sectionsCut() {
+  const names = ['Green27', 'Green17', 'Green18', 'Green28', 'Green39', 'Green30'], sec = {}; for (const n of names) sec[n] = await image(`retail/${n}.png`);
+  const flatImg = await image('retail/GreenFlat01.png');
+  const keys = await Promise.all([0, 1, 2].map(k => json(`sections/ridge-${k}-green/info.json`)));
+  const ridge = await Promise.all([0, 1, 2].map(k => image(`sections/ridge-${k}-green/final.png`)));
+  // The same hill on every world, Green and Red (the classic defaults) first and held a little longer.
+  const ALL = [['green', 'Green Planet', .8], ['red', 'Red Planet', .8], ['archipelago', 'Archipelago', .42], ['moon', 'Moon', .42], ['lush', 'Lush', .42], ['lava', 'Lava', .42], ['desert', 'Painted Desert', .42], ['crystal', 'Crystal', .42], ['ice', 'Ice', .42]];
+  const worlds = await Promise.all(ALL.map(([w]) => image(`sections/ridge-2-${w}/final.png`)));
+  const want = keys[0].strokes[0].points, at = x => { for (let i = 1; i < want.length; i++) if (x <= want[i][0]) { const [x0, y0] = want[i - 1], [x1, y1] = want[i]; return y0 + (y1 - y0) * (x - x0) / (x1 - x0); } return want.at(-1)[1]; };
+  // Where a map maker would put them: the closest diagonal ridges, centered on the path every ~240 px, snapped to the 32 px grid.
+  const snap = v => Math.round(v / 32) * 32;
+  const placed = [['Green27', 250], ['Green17', 470], ['Green18', 700], ['Green28', 930], ['Green17', 1120]].map(([n, cx]) => ({n, x: snap(cx - 128), y: snap(at(cx) - 128)}));
+  const ground = () => { for (let y = 0; y < H; y += 1024) for (let x = 0; x < W; x += 1024) ctx.drawImage(flatImg, x, y); };
+  const dashed = (pts, a) => { if (a <= 0) return; ctx.save(); ctx.globalAlpha = a; ctx.setLineDash([10, 8]); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.beginPath(); smooth(pts).forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); ctx.restore(); };
+  const T = {title: [0, 3.2], paste: [3.2, 11], limits: [11, 14.5], draw: [14.5, 17], edit: [17, 21.5], worlds: [21.5, 21.5 + ALL.reduce((a, w) => a + w[2], 0)], end: [21.5 + ALL.reduce((a, w) => a + w[2], 0) + .3, 21.5 + ALL.reduce((a, w) => a + w[2], 0) + 4.8]}; const DURATION = T.end[1];
+  const lerpPts = (A, B, f) => A.map((p, i) => p.map((v, k) => v + (B[i][k] - v) * f));
+  return {DURATION, frame(t) {
+    if (t < T.title[1]) { text('Most TA maps are built from ready-made sections', fadeIO(t, .3, T.title[1] - .1, .5), {x: W / 2, y: H / 2 + 12, size: 38, align: 'center'}); return; }
+    if (t < T.draw[0]) {   // the map editor's way, with its real sections
+      ground();
+      const per = (T.paste[1] - T.paste[0] - .8) / placed.length;
+      placed.forEach((p, k) => { const u = span(t, T.paste[0] + .4 + k * per, T.paste[0] + .4 + (k + .6) * per); if (u <= 0) return;
+        const fx = W - 150, fy = 90 + names.indexOf(p.n) * 92, e = ease(u), x = fx + (p.x - fx) * e, y = fy + (p.y - fy) * e, sz = 80 + 176 * e;
+        ctx.drawImage(sec[p.n], x, y, sz, sz); if (u < 1) { ctx.strokeStyle = '#ffd24f'; ctx.lineWidth = 2; ctx.strokeRect(x, y, sz, sz); cursor(x + sz / 2, y + sz / 2); } });
+      dashed(want, .85 * ease(span(t, T.paste[0], T.paste[0] + .4)));
+      // the section palette
+      const fx = W - 166, pa = 1 - ease(span(t, T.paste[1] - .3, T.paste[1] + .3)); ctx.save(); ctx.globalAlpha = pa; ctx.fillStyle = 'rgba(16,18,22,.92)'; ctx.fillRect(fx, 40, 156, 50 + names.length * 92);
+      names.forEach((n, k) => ctx.drawImage(sec[n], fx + 16, 90 + k * 92, 80, 80)); ctx.restore();
+      text('Sections', pa, {x: fx + 16, y: 70, size: 16}); names.forEach((n, k) => text(n, .8 * pa, {x: fx + 102, y: 134 + k * 92, size: 12, weight: 400}));
+      if (t >= T.limits[0]) { const a = ease(span(t, T.limits[0], T.limits[0] + .4)); ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = 'rgba(255,210,79,.9)'; ctx.lineWidth = 2; placed.forEach(p => ctx.strokeRect(p.x + 1, p.y + 1, 254, 254)); ctx.restore(); }
+      caption(t, T.paste[0] + .2, T.limits[0], 'The classic way: paste ready-made sections', 'Total Annihilation\'s own Green Planet sections, as its map editor ships them');
+      caption(t, T.limits[0], T.draw[0], 'Fast, but every hill comes from a fixed set', 'Fixed shapes and directions, joined at the edges of their squares');
+      return;
+    }
+    if (t < T.edit[0]) {   // Terra: the same path, drawn
+      const u = span(t, T.draw[0], T.draw[0] + 1.2); draw(ridge[0], ease(span(t, T.draw[0] + .9, T.draw[1] - .3)));
+      if (ease(span(t, T.draw[0] + .9, T.draw[1] - .3)) < 1) { ctx.save(); ctx.globalAlpha = 1 - ease(span(t, T.draw[0] + .9, T.draw[1] - .3)); ground(); ctx.restore(); }
+      const tip = path(want, ease(u)); cursor(tip[0], tip[1]);
+      caption(t, T.draw[0] + .1, T.edit[0], 'Terra: draw the hill you want', 'Any path, any size: rendered for exactly that shape');
+      return;
+    }
+    if (t < T.worlds[0]) {   // drag a node, then another: the hill follows
+      const u = span(t, T.edit[0] + .2, T.worlds[0] - .4) * 2, k = Math.min(1, Math.floor(u)), f = ease(u - k);
+      const A = keys[k].strokes[0].points, B = keys[Math.min(2, k + 1)].strokes[0].points, pts = lerpPts(A, B, f);
+      draw(ridge[k]); draw(ridge[Math.min(2, k + 1)], ease(span(f, .55, 1)));
+      path(pts, 1, .9); pts.forEach(([x, y]) => { ctx.fillStyle = '#fff'; ctx.fillRect(x - 6, y - 6, 12, 12); ctx.strokeStyle = '#000'; ctx.strokeRect(x - 6, y - 6, 12, 12); });
+      const moving = pts[k === 0 ? 3 : 5]; cursor(moving[0] + 4, moving[1] + 4);
+      caption(t, T.edit[0] + .1, T.worlds[0], 'Change it any time', 'Move a node and the ground, rock and light follow');
+      return;
+    }
+    if (t < T.end[0]) {   // the same shape on other worlds
+      let u = t - T.worlds[0], k = 0; while (k < ALL.length - 1 && u >= ALL[k][2]) { u -= ALL[k][2]; k++; }
+      draw(worlds[k]);   // hard cuts, one world after another
+      text('Any world', fadeIO(t, T.worlds[0] + .05, T.end[0], .25), {y: 628, size: 34}); text(ALL[k][1], .9, {y: 664, size: 22, weight: 400});
+      return;
+    }
+    endCard(t, T.end[0], DURATION);
+  }};
+}
+
+logo = await image('logo-green/final.png');
+const endOnly = {DURATION: 5, frame: t => endCard(t, 0, 5)};
+const cut = CUT === 'sections' ? await sectionsCut() : CUT === 'end' ? endOnly : await worldsCut();
+window.frame = n => { ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); cut.frame(n / FPS); };
+window.frames = Math.round(cut.DURATION * FPS); window.ready = true;
+</script>

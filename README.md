@@ -42,8 +42,8 @@ Chrome or Edge, Safari 26, or Firefox with WebGPU enabled. Open the editor,
 choose a world and map size, and start drawing. Hover over any control for
 help.
 
-The hosted editor will be at <https://terra.nanolathe.gg> once the project
-is public. Until then, run it locally.
+The hosted editor is at <https://terra.nanolathe.gg>. You can also run it
+locally.
 
 ## Running locally
 

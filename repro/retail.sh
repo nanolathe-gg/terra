@@ -13,7 +13,7 @@
 # $R/retail/<worktree>/<world>, or <world>-<hash of the query> with a query. Retail pixels stay there, never in the checkout.
 here=$(cd "$(dirname "$0")" && pwd); repo=$(cd "$here/.." && pwd)
 R=${R:-/tmp/nanolathe-map-editor}
-py=${PYTHON:-/Users/daniel/src/terraform/.venv/bin/python}
+py=${PYTHON:-$(dirname "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)")/.venv/bin/python}  # the main checkout's venv
 world=$1; [ $# -gt 0 ] && shift
 [ -n "$world" ] && [ "${world#-}" = "$world" ] || { sed -n '2,3p' "$0" >&2; exit 2; }
 query=; base=; out=

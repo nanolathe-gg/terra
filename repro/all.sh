@@ -14,7 +14,7 @@
 # pair.png and layout.png, and <out-dir>/sheet.png with every world.
 set -e
 crops=${REPRO_CROPS:-/tmp/nanolathe-map-editor/repro-r7}
-py=${PYTHON:-/Users/daniel/src/terraform/.venv/bin/python}
+py=${PYTHON:-$(dirname "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)")/.venv/bin/python}  # the main checkout's venv
 here=$(cd "$(dirname "$0")" && pwd)
 # One scene (the loop below runs these): all.sh --one <scene> <out-dir> <configs> <chrome> <server> <port>
 if [ "$1" = --one ]; then

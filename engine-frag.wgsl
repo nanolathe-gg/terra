@@ -313,6 +313,31 @@ fn surfaceEdge(share: f32, e: vec4f, p: vec2f, pixel: vec2f) -> f32 {
     if (e.x >= 1.0 && e.y == 0.0) { return share; }
     return clamp((share + surfaceNoise(e, p, pixel) - 0.5) / max(e.x, 0.001) + 0.5, 0.0, 1.0);
 }
+struct ReliefLight { normal: vec3f, sky: f32, direct: f32, flat: f32 }
+var<private> reliefLight: ReliefLight;
+// Fine relief follows each material through the surface stack.
+// Adjacent texels preserve two-pixel patterns that symmetric taps would cancel.
+fn materialReliefLight(m: i32, q: vec2f, projected: bool) -> f32 {
+    if (m < 0 || u.diagnosticView == 6 || reliefLight.direct <= 0.0 || u.shadeDepth <= 0.0 || u.chunkScale >= 2.0) { return 1.0; }
+    let material = u32(m);
+    let cache = u.ground[material & groundMask];
+    if (cache.cacheLayer < 0 || cache.finish.x <= 0.0) { return 1.0; }
+    let normal = reliefLight.normal;
+    let h = materialRelief(q, material);
+    let dx = materialRelief(q + vec2f(1.0, 0.0), material) - h;
+    let dy = materialRelief(q + vec2f(0.0, 1.0), material) - h;
+    // A projected texture moves up half a screen pixel for each unit of height. Use its gradient along the surface.
+    let grad = vec3f(dx, dy, select(0.0, -0.5 * dy, projected));
+    let tangent = grad - normal * dot(normal, grad);
+    let fine = normalize(normal - tangent);
+    let sun = max(0.0, dot(normal, u.light));
+    let sunFine = max(0.0, dot(fine, u.light));
+    let cap = reliefLight.flat * u.lightCap;
+    let base = min(reliefLight.sky + reliefLight.direct * sun, cap);
+    let detailed = min(reliefLight.sky + reliefLight.direct * sunFine, cap);
+    let fade = 1.0 - smoothstep(1.0, 2.0, u.chunkScale);
+    return 1.0 + (detailed - base) * (fade * u.shadeDepth / max(mix(reliefLight.flat, base, u.shadeDepth), 0.02));
+}
 // The stage's layers over `color` in place; `cover` gets each built-in slot's coverage (a union where several layers draw one slot), and
 // `over` the share material layers cover (they lie over what is below, so the built-ins' coverage under them shrinks).
 // Where a pixel reads its ground materials (fragmentMain sets it: the world point, moved on the solid's cut faces to the native pixel they show at).
@@ -365,15 +390,17 @@ fn surfaceStage(stage: u32, color: ptr<function, vec3f>, src: ptr<function, arra
 #endif
         if (surfacePreviewSeen >= 0.0) { surfacePreviewSeen *= 1.0 - c; }   // a later layer lies over the previewed one
         if (i32(layerRow) == u.surfacePreview) { surfacePreviewCover = c; surfacePreviewSeen = c; }
+        var source = (*src)[k];
+        if (r0.z >= 0.0) {
+            let material = i32(r0.z);
+            source = groundPigment(groundAt, u32(material), surfaceFacts[3], surfaceFacts[4]);
+            source *= materialReliefLight(material, groundAt, false);
+        }
+        if (builtin && stage == 5u && k >= 5u) { source = mix(source, riverBedOver.rgb, riverBedOver.a); }   // sand over a braided river’s gravel
+        *color = mix(*color, source, c);
         if (builtin) {
-            // A built-in that draws a material (docs/SURFACE_LAYERS.md phase 4) lays that material's color by its own share.
-            var source = (*src)[k];
-            if (r0.z >= 0.0) { source = groundPigment(groundAt, u32(r0.z), surfaceFacts[3], surfaceFacts[4]); }
-            if (stage == 5u && k >= 5u) { source = mix(source, riverBedOver.rgb, riverBedOver.a); }   // sand dust and sand: a braided river's gravel
-            *color = mix(*color, source, c);
             (*cover)[k] = select(1.0 - (1.0 - (*cover)[k]) * (1.0 - c), c, (*cover)[k] == 0.0);   // layers of one slot join as a union
         } else {
-            *color = mix(*color, groundPigment(groundAt, u32(r0.z), surfaceFacts[3], surfaceFacts[4]), c);
             for (var j = 0u; j < 7u; j++) { (*cover)[j] *= 1.0 - c; }
             *over = 1.0 - (1.0 - *over) * (1.0 - c);
         }
@@ -1513,7 +1540,9 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         let castShadow = mix(1.0, shadow, mix(u.flatShadow, 1.0, onSlope)) * closeVis * faceSun;
         let occluded = mix(1.0, ao, mix(u.flatOcclusion, 1.0, onSlope));
         let skyShare = u.ambient * (1.0 - cav) + fill;
+        let directWeight = 0.95 * castShadow * (1.0 - 0.45 * cav);
         let sunShare = 0.95 * direct * castShadow * (1.0 - 0.45 * cav);
+        reliefLight = ReliefLight(normal, skyShare, directWeight, flatLight);
         shading = min((skyShare + sunShare) / flatLight, u.lightCap) * occluded;
         // The share of the light that is sky takes the sky's colour and the share that is sun the sun's; white on both is exactly 1.
         lightTint = 1.0 + (skyShare * (u.skyColor - 1.0) + sunShare * (u.sunColor - 1.0)) / max(skyShare + sunShare, 0.0001);
@@ -1624,6 +1653,10 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
         if (u.slopeSand == 0) { slopeCover *= u.slopeTexture; }
         if (u.slopeSand != 0) { slopeCover *= max(smoothstep(0.15, 0.6, beachField(p) + max(bakedFields(p).a, 0.0)), route); }
         surfMask = array<f32, 7>();
+        // The fallback world ground already contributes relief in the bake.
+        if (slopeCover > 0.0 && u.slopeGround != u.groundDefault) {
+            slopeGrass *= materialReliefLight(u.slopeGround, grainPixel(pixel), h > u.sea);
+        }
         surfSrc[0] = slopeGrass; surfMask[0] = slopeCover;
         surfaceStage(1u, &grass, &surfSrc, &surfMask, &layerCover, &layerOver, p, pixel);   // stage 1: slope cover
         slopeShare = layerCover[0];
@@ -1641,6 +1674,7 @@ fn fragmentMain(v: VertexOut) -> @location(0) vec4f {
     rock*=1.0+mineralPatch*.65;
     // H3 item 4: one placement function (landPlace); its thresholds are rows of materials/green.json.
     rock=mix(rock,rock*.42,u.rock[rs & rockMask].runoffStain*clamp(accumulated.x,0.0,1.0));
+    rock *= materialReliefLight(rockMaterialOf(rs), grainPixel(pixel), h > u.sea);
     var exposed = place.exposed;
     // Soil where the cover thins (u.soilRim). Off the faces the rock's share stops being a blend of grass and rock: rock shows where the share
     // beats a threshold that the rock's own patches and a 4 px grain move, so its edge is a ragged line. Just under that threshold, and just

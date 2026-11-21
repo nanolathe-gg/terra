@@ -1,0 +1,13 @@
+{"biome": "green", "source": {"note": "Trailer hero window (docs/TRAILER.md): a plateau with a cliff wall beside a river, a hill behind. Window 1280 x 720 at the map's top-left. `trailer.steps` are the explainer's edits, applied in order; the final state is what the later layers render."}, "ground": true, "query": "", "strokes": [
+  ["plateau", [[430, 420],
+  [620, 450]], {"card": {"diameter": 420, "widthVary": 10, "terraces": 0}}],
+  ["mountain", [[990, 300],
+  [1170, 250]], {}],
+  ["river", [[0, 640],
+  [200, 676],
+  [400, 650],
+  [600, 690],
+  [800, 660],
+  [980, 600],
+  [1140, 560],
+  [1280, 580]], {"card": {"diameter": 44, "wander": 10}}]], "trailer": {"steps": [{"name": "drag", "frames": 12, "stroke": 0, "point": 1, "to": [720, 390]}, {"name": "section", "frames": 4, "stroke": 0, "card": {"terraces": [0, 2]}}, {"name": "variation", "frames": 8, "stroke": 0, "card": {"widthVary": [10, 45]}}]}}

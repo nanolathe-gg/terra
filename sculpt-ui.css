@@ -26,12 +26,13 @@ fieldset{min-width:0;border:0;padding:0;margin:0}
 .divider{height:20px;width:1px;background:var(--line);margin:0 5px}
 .view-switch{display:flex;gap:3px}
 .view-toggle{display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:11px;margin-left:6px}
-.share-menu{position:relative}
-.share-menu>summary{list-style:none;color:inherit;background:var(--raised);border:1px solid var(--line);border-radius:5px;padding:5px 8px;font-size:11px}
-.share-menu>summary::-webkit-details-marker{display:none}
-.share-menu>summary:hover{background:#344047}
+/* Save as link. Not "share-menu" or "share-panel": content blockers' social-button lists hide those class names. */
+.link-menu{position:relative}
+.link-menu>summary{list-style:none;color:inherit;background:var(--raised);border:1px solid var(--line);border-radius:5px;padding:5px 8px;font-size:11px}
+.link-menu>summary::-webkit-details-marker{display:none}
+.link-menu>summary:hover{background:#344047}
 .popover{position:absolute;width:290px;padding:16px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:0 12px 40px #0008;z-index:20}
-.share-menu .popover{top:38px;left:0}
+.link-menu .popover{top:38px;left:0}
 .shape-panel{border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
 .minimap-panel{padding:10px 12px;border-bottom:1px solid var(--line)}
 .panel-heading{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:8px}
@@ -141,7 +142,7 @@ footer{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 12px;
 .view-tools{gap:3px}
 .topbar button{padding:5px}
 .divider{margin:0 2px}
-.share-menu>summary{padding:5px}
+.link-menu>summary{padding:5px}
 .view-tools #one{display:none}
 .tool-settings{padding:9px}
 .inspector-content{padding:10px}

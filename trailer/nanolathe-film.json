@@ -1,0 +1,126 @@
+{
+ "width": 1280,
+ "height": 720,
+ "fps": 30,
+ "clean": true,
+ "letterbox": 0,
+ "scene": {
+  "kind": "skirmish",
+  "map": "Terra Valley",
+  "seed": 7,
+  "opening": true
+ },
+ "shots": [
+  {
+   "name": "arrival",
+   "ticks": 900,
+   "scene": {
+    "kind": "skirmish",
+    "map": "Terra Valley",
+    "seed": 7,
+    "opening": true
+   },
+   "camera": [
+    {
+     "tick": 0,
+     "x": 0,
+     "z": 0,
+     "zoom": 1.3,
+     "ease": "linear"
+    },
+    {
+     "tick": 200,
+     "x": 0,
+     "z": 0,
+     "zoom": 1.1,
+     "ease": "inout"
+    },
+    {
+     "tick": 820,
+     "x": 504,
+     "z": 488,
+     "zoom": 1.1,
+     "ease": "inout"
+    },
+    {
+     "tick": 900,
+     "x": 504,
+     "z": 488,
+     "zoom": 1.0,
+     "ease": "inout"
+    }
+   ],
+   "text": [
+    {
+     "at": 15,
+     "ticks": 110,
+     "style": "lower",
+     "anim": "rise",
+     "in": 14,
+     "out": 16,
+     "rule": true,
+     "lines": [
+      "Terra Valley, playing in Nanolathe"
+     ]
+    },
+    {
+     "at": 650,
+     "ticks": 140,
+     "style": "caption",
+     "anim": "fade",
+     "in": 12,
+     "out": 16,
+     "lines": [
+      "The metal and trees placed in the editor"
+     ]
+    }
+   ]
+  },
+  {
+   "name": "battle",
+   "ticks": 450,
+   "scene": {
+    "kind": "battle",
+    "map": "Terra Valley",
+    "seed": 3,
+    "pre_ticks": 150,
+    "per_side": 40,
+    "buildings": 6,
+    "factories": true,
+    "roster": "armor",
+    "anchor": [
+     1120,
+     760
+    ]
+   },
+   "camera": [
+    {
+     "tick": 0,
+     "x": -200,
+     "z": 60,
+     "zoom": 0.95
+    },
+    {
+     "tick": 450,
+     "x": 160,
+     "z": -40,
+     "zoom": 0.85,
+     "ease": "inout"
+    }
+   ],
+   "text": [
+    {
+     "at": 120,
+     "ticks": 200,
+     "style": "caption",
+     "anim": "fade",
+     "in": 12,
+     "out": 16,
+     "lines": [
+      "A skirmish on the exported map"
+     ]
+    }
+   ]
+  }
+ ]
+}

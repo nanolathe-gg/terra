@@ -138,22 +138,23 @@ fn voxelJointResolved(width:f32,step:f32)->f32 { return max(width,1.5*step); }
 // voxel squared, so its edges blur by sigma^2 = .24 rounds step^2, which widens the opening by about 2 sigma, keeping its volume.
 fn voxelJointSeen(width:f32,step:f32)->f32 { let r=voxelJointResolved(width,step);return sqrt(r*r+.96*min(4.0*u.rock[rs & rockMask].faceWear,4.0)*step*step); }
 // What rockDetail reads once at a pixel, for every tap around it: the rock's gates and gain (voxelDensity's own), its beds' gathered share.
-struct RockSite { on:bool, face:f32, layers:f32, gain:f32, gathered:f32, wear:f32, cover:f32, layer:i32, relief:f32 }
+struct RockSite { on:bool, face:f32, layers:f32, gain:f32, gathered:f32, wear:f32 }
 fn rockSite(p:vec3f)->RockSite {
     useRock(p.xy);
-    var site=RockSite(false,0.0,0.0,0.0,0.0,0.0,0.0,-1,0.0);
-    let m=rockMaterialOf(rs);let layer=select(-1,u.ground[u32(max(m,0)) & groundMask].cacheLayer,m>=0);let relief=select(0.0,u.ground[u32(max(m,0)) & groundMask].finish.x,layer>=0);
-    if(u.rock[rs & rockMask].rockFace<=0.0||max(max(max(u.rock[rs & rockMask].faceJoint,u.rock[rs & rockMask].faceLamina),relief),u.rock[rs & rockMask].faceLedge)<=0.0){return site;}
+    let empty=RockSite(false,0.0,0.0,0.0,0.0,0.0);
+    let rock=u.rock[rs & rockMask];
+    let cuts=max(max(rock.faceJoint,rock.faceLamina),rock.faceLedge);
+    if(rock.rockFace<=0.0||cuts<=0.0){return empty;}
     let source=voxelAuthored(p.xy);let guide=voxelGuide(p.xy);let nz=sqrt(max(.000225,1.0-dot(guide.xy,guide.xy)));
     let slope=length(broadGradient(p.xy));let route=routeProtection(p.xy);
     let painted=voxelPaintRock(p.xy);let rim=rimRockAt(p.xy);
     let face=max(rockFaceGate(slope,painted,route),rimRelief(rim,route))*(1.0-softBankAt(p.xy));
     let soil=u.rock[rs & rockMask].faceLayers*smoothstep(.08,.6,slope)*smoothstep(.5,.9,nz)*(1.0-route);
     let heightGate=voxelRockHeight(p,max(painted,rim));
-    if(max(face,soil)*heightGate<.001){return site;}
+    if(max(face,soil)*heightGate<.001){return empty;}
     var gathered=0.0;var hard=.55;
     if(u.rock[rs & rockMask].columnCount>0){let column=voxelColumnCoord(p);let gg=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary),length(source.yz)/max(source.w,.015));gathered=gg.y;hard=gg.x;}
-    return RockSite(true,face,face+soil*3.0,u.rock[rs & rockMask].rockFace*.5*voxelRelief(p.xy,slope)*heightGate,gathered,voxelJointWear(hard),face*heightGate,layer,relief);
+    return RockSite(true,face,face+soil*3.0,u.rock[rs & rockMask].rockFace*.5*voxelRelief(p.xy,slope)*heightGate,gathered,voxelJointWear(hard));
 }
 fn rockLayers(p:vec3f,gathered:f32)->f32 { let l=voxelFine(p,voxelColumnCoord(p),gathered);return l.x+l.y; }
 // The height (outward) the solid lacks at p, near the pixel its site was read at.
@@ -171,14 +172,7 @@ fn rockDetail(p:vec3f,site:RockSite)->f32 {
         let s1=vec3f(0,0,1);let s2=vec3f(0,0,vs.step);
         h+=.25*(rockLayers(p-s1,site.gathered)+rockLayers(p+s1,site.gathered)-rockLayers(p-s2,site.gathered)-rockLayers(p+s2,site.gathered))*site.layers*(1.0-.5*site.wear);
     }
-    // The rock material's art height (its grit) about its middle, at the native pixel p projects to (a height unit rises half a pixel):
-    // the grain the color reads, so the light and the color agree.
-    var grit=0.0;
-    if(site.layer>=0&&site.relief>0.0){
-        let q=vec2f(p.x,p.y-(max(p.z,u.sea)-u.base)*.5)/min(u.chunkScale,1.0);   // voxelRayPoint's shift: below the sea a ray projects at its level
-        grit=(materialReliefBilinear(q,site.layer)-.5*site.relief)*site.cover;
-    }
-    return h*site.gain+grit;
+    return h*site.gain;
 }
 // The surface the solid is built from (voxelPrepare caches it on the lattice; the color pass compares its hit with it): the drawn surface, its ice
 // softened over raised ground.

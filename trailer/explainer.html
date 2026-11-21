@@ -1,0 +1,275 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Trailer explainer</title>
+<!-- The trailer's explainer (docs/TRAILER.md shots 1-6), drawn from one scene's layers (trailer/layers.mjs). Not part of the editor or the site:
+     trailer/render-explainer.mjs serves it with the layers and captures frame(i) for i = 0.. at 30 fps. -->
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style>
+<canvas id="c" width="1280" height="720"></canvas>
+<script type="module">
+const W = 1280, H = 720, FPS = 30, G = 640, SW = 640, SH = 360;   // window, frame rate, height grid (2 px samples), relief raster
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const info = await (await fetch('layers/info.json')).json();
+const f32 = async file => new Float32Array(await (await fetch('layers/' + file)).arrayBuffer());
+const image = async file => { const im = new Image(); im.src = 'layers/' + file; await im.decode(); return im; };
+const keys = await Promise.all(info.keys.map(async k => ({...k, h: await f32(k.file)})));
+const authored = await f32('heights-authored.f32'), weathered = await f32('heights-weathered.f32');
+const [finalImg, clayImg, clay8, clay4, materialImg] = await Promise.all(['final.png', 'clay.png', 'clay-v8.png', 'clay-v4.png', 'material.png'].map(image));
+const BASE = info.base, LO = 60, HI = 260;
+const DIAMETER = {plateau: 420, mountain: 200, river: 44};
+
+// ---------- helpers
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const ease = t => { t = clamp(t); return t * t * (3 - 2 * t); };
+const span = (t, a, b) => clamp((t - a) / (b - a));
+const canvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+const pixelsOf = img => { const c = canvas(img.width, img.height), x = c.getContext('2d'); x.drawImage(img, 0, 0); return x.getImageData(0, 0, img.width, img.height).data; };
+const clayPx = pixelsOf(clayImg), materialPx = pixelsOf(materialImg), finalPx = pixelsOf(finalImg);
+
+// Top-down grayscale height image of one height array (the window's 640 x 360 samples).
+const grayCache = new Map();
+function grayOf(h) {
+  if (grayCache.has(h)) return grayCache.get(h);
+  const c = canvas(SW, SH), x = c.getContext('2d'), d = x.createImageData(SW, SH);
+  for (let j = 0; j < SH; j++) for (let i = 0; i < SW; i++) { const g = 12 + 243 * clamp((h[j * G + i] - LO) / (HI - LO)), o = (j * SW + i) * 4; d.data[o] = d.data[o + 1] = d.data[o + 2] = g; d.data[o + 3] = 255; }
+  x.putImageData(d, 0, 0); grayCache.set(h, c); return c;
+}
+function drawGray(h, alpha = 1) { ctx.save(); ctx.globalAlpha = alpha; ctx.imageSmoothingEnabled = true; ctx.drawImage(grayOf(h), 0, 0, W, H); ctx.restore(); }
+
+// The relief in TA's camera, raised by k (0 flat, 1 the editor's projection: a height unit rises half a pixel above the base height),
+// front to back per column. tone: 0 the height's gray, 1 a plain lit gray (ready for the material mask).
+const relief = canvas(SW, SH), reliefCtx = relief.getContext('2d'), reliefData = reliefCtx.createImageData(SW, SH), reliefU32 = new Uint32Array(reliefData.data.buffer);
+function drawRelief(h, k, tone) {
+  reliefU32.fill(0xff000000);
+  const L = [-0.55, -0.62, 0.56];
+  for (let i = 0; i < SW; i++) {
+    let top = SH;
+    for (let j = G - 2; j >= 0; j--) {
+      const v = h[j * G + i], sy = j - (v - BASE) * k / 4;   // samples are 2 px: half a pixel a unit is a quarter of a sample
+      const t = Math.floor(sy); if (t >= top) continue;
+      const dx = (h[j * G + Math.min(i + 1, G - 1)] - h[j * G + Math.max(i - 1, 0)]) / 4, dy = (h[(j + 1) * G + i] - h[Math.max(j - 1, 0) * G + i]) / 4;
+      const n = Math.hypot(dx, dy, 1), lit = clamp(0.5 + 0.62 * ((-dx * L[0] - dy * L[1] + L[2]) / n), 0.12, 1.15);
+      const g0 = 12 + 243 * clamp((v - LO) / (HI - LO)), g = (g0 * (1 - tone) + 200 * tone) * (k > 0.05 ? (1 - k * 0.35) + k * 0.35 * lit * 1.3 : 1);
+      for (let y = Math.max(t, 0); y < top && y < SH; y++) {
+        const face = y > t + 1 ? 0.62 : 1, c = clamp(g * face, 0, 255) | 0;
+        reliefU32[y * SW + i] = 0xff000000 | c << 16 | c << 8 | c;
+      }
+      top = Math.max(t, 0); if (top <= 0) break;
+    }
+  }
+  reliefCtx.putImageData(reliefData, 0, 0);
+  ctx.save(); ctx.imageSmoothingEnabled = true; ctx.drawImage(relief, 0, 0, W, H); ctx.restore();
+}
+
+// Material classes from the page's material view (and water from the final picture), as flat colors: a stand-in mask (docs/TRAILER.md).
+const CLASS = {grass: [86, 196, 120], rock: [150, 120, 210], sand: [240, 180, 70], water: [70, 140, 235]};
+const maskCanvas = canvas(W, H);
+{
+  const x = maskCanvas.getContext('2d'), d = x.createImageData(W, H);
+  for (let p = 0; p < W * H; p++) {
+    const o = p * 4, r = materialPx[o], g = materialPx[o + 1], b = materialPx[o + 2], fr = finalPx[o], fg = finalPx[o + 1], fb = finalPx[o + 2];
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let c = CLASS.rock;
+    if (fb > fr + 50 && fb > fg + 20) c = CLASS.water;
+    else if (g > r + 12 && g > b + 12) c = CLASS.grass;
+    else if (r > b + 35 && max - min > 35 && r > 110) c = CLASS.sand;
+    d.data[o] = c[0]; d.data[o + 1] = c[1]; d.data[o + 2] = c[2]; d.data[o + 3] = 255;
+  }
+  x.putImageData(d, 0, 0);
+}
+
+// Paths: the strokes as smooth polylines with their nodes, drawn up to `progress` of their length.
+function smooth(points) {
+  if (points.length < 3) return points.map(p => [...p]);
+  const out = [], P = i => points[clamp(i, 0, points.length - 1)];
+  for (let i = 0; i < points.length - 1; i++) for (let s = 0; s < 12; s++) {
+    const t = s / 12, p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
+    out.push([0, 1].map(k => 0.5 * (2 * p1[k] + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t * t + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t * t * t)));
+  }
+  out.push([...points.at(-1)]); return out;
+}
+function partial(points, progress) {
+  const pts = smooth(points), len = [0];
+  for (let i = 1; i < pts.length; i++) len.push(len[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const want = len.at(-1) * clamp(progress), out = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    if (len[i] <= want) { out.push(pts[i]); continue; }
+    const f = (want - len[i - 1]) / (len[i] - len[i - 1] || 1); out.push([pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f]); break;
+  }
+  return out;
+}
+const footprint = canvas(W, H), footCtx = footprint.getContext('2d');
+function drawStroke(stroke, progress, alpha = 1, active = -1) {
+  if (progress <= 0) return null;
+  const line = partial(stroke.points, progress), tip = line.at(-1);
+  footCtx.clearRect(0, 0, W, H); footCtx.lineCap = footCtx.lineJoin = 'round'; footCtx.strokeStyle = '#fff'; footCtx.lineWidth = DIAMETER[stroke.kind] ?? 200;
+  footCtx.beginPath(); line.forEach(([x, y], i) => i ? footCtx.lineTo(x, y) : footCtx.moveTo(x, y)); if (line.length === 1) footCtx.lineTo(tip[0] + .1, tip[1]); footCtx.stroke();
+  ctx.save(); ctx.globalAlpha = 0.10 * alpha; ctx.drawImage(footprint, 0, 0); ctx.restore();
+  ctx.save(); ctx.globalAlpha = alpha; ctx.lineCap = ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = 6; ctx.beginPath(); line.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+  ctx.strokeStyle = '#4fd3ff'; ctx.lineWidth = 3; ctx.stroke();
+  const total = smooth(stroke.points).length;
+  stroke.points.forEach((p, i) => {
+    const at = stroke.points.length > 1 ? i / (stroke.points.length - 1) : 0; if (at > progress + 1e-6) return;
+    const s = i === active ? 9 : 6; ctx.fillStyle = i === active ? '#ffd24f' : '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
+    ctx.fillRect(p[0] - s, p[1] - s, 2 * s, 2 * s); ctx.strokeRect(p[0] - s, p[1] - s, 2 * s, 2 * s);
+  });
+  ctx.restore(); return tip;
+}
+function drawCursor(x, y, alpha = 1, grab = false) {
+  ctx.save(); ctx.globalAlpha = alpha; ctx.translate(x, y); ctx.scale(1.3, 1.3);
+  ctx.beginPath(); [[0, 0], [0, 22], [6, 17], [10, 26], [14, 24], [10, 15], [17, 15]].forEach(([a, b], i) => i ? ctx.lineTo(a, b) : ctx.moveTo(a, b)); ctx.closePath();
+  ctx.fillStyle = grab ? '#ffd24f' : '#fff'; ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
+}
+function caption(text, alpha, {x = 56, y = 664, size = 30, align = 'left', sub = ''} = {}) {
+  if (alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha = alpha; ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
+  ctx.font = `500 ${size}px "Helvetica Neue", Helvetica, Arial, sans-serif`; ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 12;
+  ctx.fillStyle = '#fff'; ctx.fillText(text, x, y);
+  if (sub) { ctx.font = `400 ${Math.round(size * .62)}px "Helvetica Neue", Helvetica, Arial, sans-serif`; ctx.fillStyle = 'rgba(255,255,255,.82)'; ctx.fillText(sub, x, y + size * .95); }
+  ctx.restore();
+}
+// A stage's caption: fades in at a, out at b.
+const stage = (t, a, b, text, sub) => caption(text, ease(span(t, a, a + .4)) * (1 - ease(span(t, b - .4, b))), {sub, y: 640});
+
+// The inset panel of shot 3: the section curve and the Variation slider (the editor's controls, simplified).
+const PLATEAU_KNOTS = [[0, 0], [.02, .01], [.08, .12], [.17, .36], [.215, .9], [.235, .975], [.2625, 1], [1, 1]];
+const profile = (x, terr) => {   // the half-section from the foot (x 0) to the middle (x .5), terraced by terr (0..1)
+  let y = 1; for (let i = 1; i < PLATEAU_KNOTS.length; i++) if (x <= PLATEAU_KNOTS[i][0]) { const [x0, y0] = PLATEAU_KNOTS[i - 1], [x1, y1] = PLATEAU_KNOTS[i]; y = y0 + (y1 - y0) * (x - x0) / (x1 - x0); break; }
+  return y + (Math.min(1, Math.round(y * 3) / 3) - y) * terr;
+};
+function panel(t, alpha, terr, variation, label) {
+  if (alpha <= 0) return;
+  const x0 = 900, y0 = 48, w = 330, h = 250;
+  ctx.save(); ctx.globalAlpha = alpha;
+  ctx.fillStyle = 'rgba(20,22,26,.86)'; ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect(x0, y0, w, h, 10); ctx.fill(); ctx.stroke();
+  ctx.font = '500 17px "Helvetica Neue", Helvetica, Arial'; ctx.fillStyle = '#fff'; ctx.fillText('Section', x0 + 18, y0 + 30);
+  const gx = x0 + 18, gy = y0 + 46, gw = w - 36, gh = 110;
+  ctx.strokeStyle = 'rgba(255,255,255,.12)'; for (let i = 0; i <= 4; i++) { ctx.beginPath(); ctx.moveTo(gx, gy + gh * i / 4); ctx.lineTo(gx + gw, gy + gh * i / 4); ctx.stroke(); }
+  ctx.beginPath(); for (let s = 0; s <= 120; s++) { const u = s / 120, xx = u < .5 ? u * 2 : (1 - u) * 2, yv = profile(xx * .5, terr); ctx.lineTo(gx + gw * u, gy + gh - gh * yv); }
+  ctx.strokeStyle = '#4fd3ff'; ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.font = '400 15px "Helvetica Neue", Helvetica, Arial'; ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillText('Variation', x0 + 18, y0 + 196);
+  const sx = x0 + 110, sw = w - 140, sy = y0 + 191;
+  ctx.fillStyle = 'rgba(255,255,255,.2)'; ctx.fillRect(sx, sy - 2, sw, 4); ctx.fillStyle = '#4fd3ff'; ctx.fillRect(sx, sy - 2, sw * variation, 4);
+  ctx.beginPath(); ctx.arc(sx + sw * variation, sy, 8, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = '400 13px "Helvetica Neue", Helvetica, Arial'; ctx.fillText(label, x0 + 18, y0 + 232);
+  ctx.restore();
+}
+
+// Voxels: 16 px cubes on the weathered height, falling into place, shaded from the engine's clay picture.
+const CELL = 16, cells = [];
+for (let cy = 0; cy < 60; cy++) for (let cx = 0; cx < W / CELL; cx++) {
+  const wx = cx * CELL, wy = cy * CELL, j = Math.min(G - 1, (wy + 8) >> 1), i = (wx + 8) >> 1, v = weathered[j * G + i];
+  const top = wy - (v - BASE) / 2; if (top > H + 20 || top + CELL + Math.max(0, (v - BASE) / 2) < -20) continue;
+  const sx = Math.min(W - 1, wx + 8), sy = clamp(Math.round(top + 8), 0, H - 1), o = (sy * W + sx) * 4;
+  const hash = Math.sin(cx * 12.9898 + cy * 78.233) * 43758.5453 % 1;
+  cells.push({wx, wy, top, rise: Math.max(0, (v - BASE) / 2), color: [clayPx[o], clayPx[o + 1], clayPx[o + 2]], delay: Math.abs(hash) * .5 + Math.hypot(wx - 640, wy - 380) / 1400});
+}
+function drawCubes(t) {   // t: seconds since the drop began
+  for (const c of cells) {
+    const u = clamp((t - c.delay) / .55); if (u <= 0) continue;
+    const fall = (1 - ease(u)) * -520, top = c.top + fall, [r, g, b] = c.color;
+    ctx.globalAlpha = clamp(u * 3);
+    ctx.fillStyle = `rgb(${r * .62 | 0},${g * .62 | 0},${b * .62 | 0})`; ctx.fillRect(c.wx, top + CELL, CELL, c.rise + 1);
+    ctx.fillStyle = `rgb(${r},${g},${b})`; ctx.fillRect(c.wx, top, CELL, CELL);
+    ctx.strokeStyle = 'rgba(0,0,0,.28)'; ctx.lineWidth = 1; ctx.strokeRect(c.wx + .5, top + .5, CELL - 1, CELL - 1);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Tiles: 256 px, from the middle out: the rough pass (an 8x coarser picture), then final.
+const rough = canvas(W / 8, H / 8); rough.getContext('2d').drawImage(finalImg, 0, 0, W / 8, H / 8);
+const TILES = [];
+for (let y = 0; y < H; y += 256) for (let x = 0; x < W; x += 256) TILES.push({x, y, d: Math.hypot(x + 128 - 640, y + 128 - 360)});
+TILES.sort((a, b) => a.d - b.d).forEach((tile, n) => { tile.rough = n * .09; tile.final = .9 + n * .14; });
+function drawTiles(t) {
+  ctx.drawImage(clayImg, 0, 0);
+  for (const tile of TILES) {
+    const w = Math.min(256, W - tile.x), h = Math.min(256, H - tile.y);
+    if (t >= tile.final) ctx.drawImage(finalImg, tile.x, tile.y, w, h, tile.x, tile.y, w, h);
+    else if (t >= tile.rough) { ctx.imageSmoothingEnabled = false; ctx.drawImage(rough, tile.x / 8, tile.y / 8, w / 8, h / 8, tile.x, tile.y, w, h); ctx.imageSmoothingEnabled = true; }
+    const flash = t >= tile.final ? 1 - span(t, tile.final, tile.final + .35) : t >= tile.rough ? .35 : 0;
+    if (flash > 0) { ctx.strokeStyle = `rgba(79,211,255,${flash})`; ctx.lineWidth = 2; ctx.strokeRect(tile.x + 1, tile.y + 1, w - 2, h - 2); }
+  }
+}
+
+// ---------- the timeline
+const byStep = name => keys.filter(k => k.step === name);
+const draws = byStep('draw'), drags = byStep('drag'), sections = byStep('section'), variations = byStep('variation');
+const keyAt = (list, f) => { f = clamp(f, 0, list.length - 1); const a = Math.floor(f), b = Math.min(list.length - 1, a + 1); return {a: list[a], b: list[b], f: f - a}; };
+const lerpStrokes = (A, B, f) => A.strokes.map((s, i) => ({kind: s.kind, points: s.points.map((p, j) => p.map((v, k) => v + (B.strokes[i].points[j][k] - v) * f))}));
+const T = {title: [0, 3], draw: [3, 8], drag: [8, 10.5], section: [10.5, 11.8], variation: [11.8, 13.2], rise: [13.2, 15.2], time: [15.2, 17.6], mask: [17.6, 19.6], cubes: [19.6, 22.2], solid: [22.2, 24.6], tiles: [24.6, 28.2], hold: [28.2, 30]};
+const DURATION = 30;
+const blend = new Float32Array(G * G);
+
+function frame(n) {
+  const t = n / FPS;
+  ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  if (t < T.title[1]) {
+    const a = ease(span(t, .4, 1.1)) * (1 - ease(span(t, 2.3, 2.9)));
+    caption('A map editor for Total Annihilation', a, {x: W / 2, y: H / 2 + 14, size: 44, align: 'center'});
+    return;
+  }
+  if (t < T.drag[0]) {   // shot 2: draw
+    const per = (T.draw[1] - T.draw[0]) / draws.length;
+    let tip = null;
+    for (let i = 0; i < draws.length; i++) {
+      const a = T.draw[0] + i * per, done = span(t, a + per * .85, a + per * .85 + .5);
+      if (done > 0) drawGray(draws[i].h, i === 0 ? ease(done) : 1);
+      if (done > 0 && i > 0 && done < 1) { drawGray(draws[i - 1].h, 1); drawGray(draws[i].h, ease(done)); }
+    }
+    const strokes = draws.at(-1).strokes;
+    for (let i = 0; i < strokes.length; i++) { const a = T.draw[0] + i * per; const p = span(t, a, a + per * .8); const tp = drawStroke(strokes[i], ease(p)); if (p > 0 && p < 1) tip = tp; }
+    if (!tip) { const i = Math.min(strokes.length - 1, Math.floor((t - T.draw[0]) / per)); tip = strokes[i].points.at(-1); }
+    drawCursor(tip[0], tip[1], ease(span(t, T.draw[0], T.draw[0] + .3)));
+    stage(t, 3.2, 8.0, 'Draw the shape', 'Paths with a few nodes make the heights');
+    return;
+  }
+  if (t < T.rise[0]) {   // shot 3: adjust
+    let list, f, name;
+    if (t < T.section[0]) { list = drags; f = ease(span(t, T.drag[0] + .4, T.drag[1] - .2)) * (list.length - 1); name = 'drag'; }
+    else if (t < T.variation[0]) { list = sections; f = ease(span(t, T.section[0] + .2, T.section[1] - .2)) * (list.length - 1); name = 'section'; }
+    else { list = variations; f = ease(span(t, T.variation[0] + .2, T.variation[1] - .2)) * (list.length - 1); name = 'variation'; }
+    const {a, b, f: ff} = keyAt(list, f);
+    drawGray(a.h); if (ff > 0) drawGray(b.h, ff);
+    const strokes = lerpStrokes(a, b, ff);
+    strokes.forEach((s, i) => drawStroke(s, 1, 1, name === 'drag' && i === 0 ? 1 : -1));
+    const node = strokes[0].points[1];
+    if (name === 'drag') { const toNode = ease(span(t, T.drag[0], T.drag[0] + .4)), from = draws.at(-1).strokes[2].points.at(-1); drawCursor(from[0] + (node[0] - from[0]) * toNode, from[1] + (node[1] - from[1]) * toNode, 1, toNode >= 1); }
+    const terr = name === 'drag' ? 0 : name === 'section' ? f / (sections.length - 1) : 1, vari = name === 'variation' ? .1 + .5 * f / (variations.length - 1) : .1;
+    panel(t, ease(span(t, T.drag[1] - .3, T.drag[1])), terr, vari, name === 'section' ? 'Bend the side: ledges' : name === 'variation' ? 'Roughen the outline' : '');
+    stage(t, 8.1, 13.2, 'Adjust it', 'Move a node, bend the section, add variation: the heights follow');
+    return;
+  }
+  if (t < T.cubes[0]) {   // shot 4: into 3D, Time, materials
+    const k = ease(span(t, T.rise[0], T.rise[1] - .2)), w = ease(span(t, T.time[0] + .2, T.time[1] - .2)), tone = ease(span(t, T.time[0], T.mask[0] + .3));
+    for (let i = 0; i < authored.length; i++) blend[i] = authored[i] + (weathered[i] - authored[i]) * w;
+    drawRelief(blend, k, tone);
+    if (t < T.rise[0] + .8) { const a = 1 - span(t, T.rise[0], T.rise[0] + .8); drawGray(authored, a * (1 - k)); variations.at(-1).strokes.forEach(s => drawStroke(s, 1, a)); }
+    if (t >= T.mask[0]) {
+      const sweep = ease(span(t, T.mask[0], T.mask[1] - .3)) * (W + 200) - 100;
+      ctx.save(); ctx.beginPath(); ctx.rect(0, 0, Math.max(0, sweep), H); ctx.clip(); ctx.globalCompositeOperation = 'multiply'; ctx.drawImage(maskCanvas, 0, 0); ctx.restore();
+    }
+    stage(t, T.rise[0] + .3, T.time[0] + .1, 'Height becomes ground', '');
+    stage(t, T.time[0] + .1, T.mask[0], 'Time weathers it', 'Rain, rockfall and sand move material');
+    stage(t, T.mask[0], T.cubes[0] + .2, 'Each place gets a material', 'Grass, rock, sand, water');
+    return;
+  }
+  if (t < T.tiles[0]) {   // shot 5: the solid
+    const fade = 1 - ease(span(t, T.cubes[0], T.cubes[0] + .9));
+    if (fade > 0) { drawRelief(weathered, 1, 1); ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.drawImage(maskCanvas, 0, 0); ctx.restore(); ctx.save(); ctx.globalAlpha = 1 - fade; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); ctx.restore(); }
+    else ctx.clearRect(0, 0, W, H), ctx.fillStyle = '#000', ctx.fillRect(0, 0, W, H);
+    if (t < T.solid[0] + .6) drawCubes(t - T.cubes[0]);
+    const s0 = T.solid[0];
+    const layers = [[clay8, s0, s0 + .6], [clay4, s0 + .9, s0 + 1.4], [clayImg, s0 + 1.7, s0 + 2.2]];
+    for (const [img, a, b] of layers) { const u = ease(span(t, a, b)); if (u > 0) { ctx.save(); ctx.globalAlpha = u; ctx.drawImage(img, 0, 0); ctx.restore(); } }
+    stage(t, T.cubes[0] + .2, T.solid[0] + .2, 'A solid made of voxels', '');
+    stage(t, T.solid[0] + .2, T.tiles[0] + .1, 'Weathered in 3D', 'Ledges, bulging walls, broken blocks');
+    return;
+  }
+  drawTiles(t - T.tiles[0]);   // shot 6: light and materials
+  stage(t, T.tiles[0] + .2, T.hold[0] + .2, 'Light and materials', 'Rays through the solid, drawn in TA\'s 256 colors');
+  stage(t, T.hold[0] + .2, DURATION, 'The editor\'s own picture', '');
+}
+window.frame = frame; window.frames = Math.round(DURATION * FPS); window.ready = true;
+</script>

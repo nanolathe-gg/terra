@@ -4148,6 +4148,20 @@
     "label": "2"
    }
   ],
+  "knob-slabShallows": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 0.5,
+    "label": "0.5"
+   },
+   {
+    "value": 1,
+    "label": "1"
+   }
+  ],
   "knob-absorbDepth": [
    {
     "value": 0,
@@ -4296,6 +4310,20 @@
    {
     "value": 150,
     "label": "150"
+   }
+  ],
+  "plate-steps": [
+   {
+    "value": 0,
+    "label": "0"
+   },
+   {
+    "value": 4,
+    "label": "4"
+   },
+   {
+    "value": 8,
+    "label": "8"
    }
   ],
   "plate-material": [

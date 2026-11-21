@@ -861,7 +861,8 @@
 
     "rubble",
 
-    "scarp"
+    "scarp",
+    "fracturedglacier"
 
    ],
 
@@ -976,6 +977,38 @@
 
      }
 
+    },
+    "fracturedglacier": {
+     "label": "Fractured glacier ice",
+     "material": "ice-fractured-glacier",
+     "knobs": {
+      "faceRindTone": 0.45,
+      "faceRind": 0.8,
+      "faceShade": 0.55,
+      "faceTone": 0.05,
+      "faceWet": 0.2,
+      "fineRelief": 0.31,
+      "fineSize": 10,
+      "fineGrain": -0.59,
+      "faceBlock": 1.75,
+      "faceBlockSize": 48,
+      "faceRound": 0.3,
+      "rockFace": 2.7,
+      "absorbDepth": 0.4,
+      "shadowTint": 0.5,
+      "shineRock": 0.6,
+      "shineRockSharp": 40,
+      "crackSeverity": 0,
+      "iceSnow": 0,
+      "iceFall": 0,
+      "iceApron": 0,
+      "faceStretch": 3,
+      "faceJoint": 0.85,
+      "faceSecondary": 0.47,
+      "faceJointTilt": 25,
+      "faceBreak": 0.36,
+      "iceCrystal": 0.2
+     }
     }
 
    }
