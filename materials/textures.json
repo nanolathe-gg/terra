@@ -500,9 +500,9 @@
    {"id":"spots","type":"noise","kind":"smooth","name":"Hot spots","params":{"size":1.6,"detail":0,"layers":0,"seed":1},"in":{"in":null},"x":0,"y":188},
    {"id":"grain","type":"noise","kind":"smooth","name":"Fine grain","params":{"size":1.2,"detail":0,"layers":0,"seed":2},"in":{"in":null},"x":236,"y":-37},
    {"id":"c1","type":"combine","kind":"add","name":"Hot spots in clouds","params":{"amount":0.45,"offset":0.5},"in":{"a":"clouds","b":"spots","mask":null},"x":236,"y":113},
-   {"id":"c2","type":"combine","kind":"add","name":"Grain on top","params":{"amount":0.7,"offset":0.5},"in":{"a":"c1","b":"grain","mask":null},"x":472,"y":38},
-   {"id":"lv","type":"levels","name":"Stretch","params":{"low":0,"high":1,"gamma":1,"invert":0},"in":{"in":"c2"},"x":708,"y":38},
-   {"id":"lava","type":"gradient","name":"Dark red to orange","params":{"ease":0},"in":{"in":"lv"},"stops":[[0.05,0.48,0.03,0],[0.3,0.6,0.08,0],[0.5,0.72,0.11,0],[0.75,0.8,0.12,0],[1.0,1.0,0.28,0]],"x":944,"y":38},
+   {"id":"c2","type":"combine","kind":"add","name":"Grain on top","params":{"amount":0.52,"offset":0.5},"in":{"a":"c1","b":"grain","mask":null},"x":472,"y":38},
+   {"id":"lv","type":"levels","name":"Stretch","params":{"low":-0.04,"high":1.04,"gamma":1,"invert":0},"in":{"in":"c2"},"x":708,"y":38},
+   {"id":"lava","type":"gradient","name":"Dark red to orange","params":{"ease":0},"in":{"in":"lv"},"stops":[[0,0.34,0.01,0],[0.17,0.51,0.038,0],[0.35,0.655,0.095,0],[0.5,0.721,0.109,0],[0.66,0.8,0.125,0],[0.87,0.887,0.163,0],[1,1,0.28,0]],"x":944,"y":38},
    {"id":"material","type":"output","name":"Material","params":{"relief":0},"in":{"color":"lava","height":null,"shine":null},"x":1180,"y":38}
   ],
   "controls": [{"label":"Cloud size","node":"clouds","param":"size","min":1.5,"max":24},{"label":"Lava colors","node":"lava","param":"stops"}],
