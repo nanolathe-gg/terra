@@ -550,7 +550,7 @@
         "fillFollow": 1,
         "fineRelief": 1.5,
         "fineLevel": 0.3,
-        "fineSize": 6,
+        "fineSize": 24,
         "fineGrain": 0.6,
         "finePits": 0.4,
         "looseSupply": 0,
