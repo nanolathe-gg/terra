@@ -1,4 +1,4 @@
-// Actual Save -> Load between isolated browser profiles. Authored fixture only.
+// Download and share the same save, then open both in an isolated Chrome profile. Authored fixture only.
 // node repro/save-load.mjs --server http://127.0.0.1:<yours> --port <cdp> --out <dir>
 import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import assert from 'node:assert/strict';
@@ -9,6 +9,8 @@ import {mkdirSync,mkdtempSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {resolve,join} from 'node:path';
 import {cdpPortFree} from './cdp-port.mjs';
+import {gzipText} from '../sculpt-share.js';
+import {checkSave} from '../deploy/worker/worker.js';
 const args=process.argv.slice(2),opt=k=>args[args.indexOf(k)+1],server=args.includes('--server')?opt('--server'):'',port=Number(args.includes('--port')?opt('--port'):0);
 if(!server||!Number.isInteger(port)||port<1024)throw Error('Give your own --server and --port; the check uses that CDP port and the next.');
 const out=resolve(args.includes('--out')?opt('--out'):mkdtempSync(join(tmpdir(),'terraform-save-load-')));mkdirSync(out,{recursive:true});
@@ -26,24 +28,59 @@ async function open(offset){
   await send('Runtime.enable');await send('Page.enable');return {send,ev,ready,errors};
 }
 const image=page=>page.ev(`(async()=>{const b=await sculptCanvas.debugBake({x:240,y:180,width:160,height:128},1),c=new OffscreenCanvas(b.width,b.height);c.getContext('2d').drawImage(b,0,0);b.close();return Array.from(c.getContext('2d').getImageData(0,0,c.width,c.height).data);})()`);
-const normalize=s=>({...s,nodes:s.nodes.map(n=>({...n,hidden:Boolean(n.hidden)}))});
+const normalize=({pictures,...s})=>({...s,nodes:s.nodes.map(n=>({...n,hidden:Boolean(n.hidden)}))});
+async function shareLink(page) {
+  await page.ev(`document.getElementById('share-menu').open=true; true`);
+  for (let i=0;i<220;i++) {
+    const href=await page.ev(`document.getElementById('share-url').value`);
+    if (href) return new URL(href);
+    await sleep(100);
+  }
+  throw Error(await page.ev(`document.getElementById('share-message').textContent`));
+}
+const base=new URL(server);
+if (base.protocol!=='http:' || !['127.0.0.1','localhost'].includes(base.hostname)) throw Error('Use your own loopback development server.');
+const maps=new URL('/api/maps',base);
+const services=await (await fetch(new URL('/services.json',base))).json();
+assert.equal(new URL(services.maps.url,base).href,maps.href,'This check writes only to the loopback save service.');
 try{
   const source=await open(0);
   // The map's world settings come from the address here (rows, a borrowed beach, the sun's color); a map saves them whole (owner, 2026-11-19).
-  await source.send('Page.navigate',{url:`${server}/?biome=green&mapX=2&mapY=1&sea=95&scratch=save-test&gpuMB=512&heapMB=1536&sunColor=ffd9a8&terraceBreak=.7&beachFrom=zhon&erosionRain=0&lowTint=.4`});await source.ready();
+  await source.send('Page.navigate',{url:`${server}/?biome=green&mapX=2&mapY=1&sea=95&scratch=save-test&gpuMB=512&heapMB=1536&sunColor=ffd9a8&terraceBreak=.7&beachFrom=zhon&erosionRain=0&lowTint=.4&crackFrom=0.12&crackBlocks=3`});await source.ready();
   await source.ev(`(()=>{const w=document.getElementById('weather');if(w.checked)w.click();const own=sculptDebug.sketch().materials.map(m=>m.worldGround?{...m,seed:3}:m),free=[...Array(23).keys()].map(i=>i+1).find(i=>!own.some(m=>m.slot===i)),sand={...Object.fromEntries(Object.entries(own.find(m=>m.worldGround)).filter(([k])=>!/^world/.test(k))),slot:free,name:'Second ground',seed:9};window.__fixture={slot:free,count:own.length+1};sculptDebug.scene([['hill',[[240,230],[430,260]],{card:{elevation:95,gullies:20}}],['paint',[[150,150]],{groundPreset:free,card:{diameter:120,amount:100,softness:0}}]],{ground:true,materials:[...own,sand]});const d=sculptRegion.mapData();d.name='Collaboration fixture';d.description='Self-contained save';d.starts=[{x:128,z:128},{x:768,z:256}];d.settings.minWind=7;d.features=[{kind:'deposit',v:0,x:8,z:8,metal:143}];sculptRegion.restoreMapData(d);return true;})()`);await source.ready();
   // Capture the blob produced by the real button; suppress the browser's disk download.
   await source.send('Browser.setDownloadBehavior',{behavior:'deny'});
-  const saved=JSON.parse(await source.ev(`(async()=>{const original=URL.createObjectURL;URL.createObjectURL=blob=>{window.savedBlob=blob;return original(blob);};document.getElementById('save').click();return await savedBlob.text();})()`));
+  const saveText=await source.ev(`(async()=>{
+    const download=new Promise(resolve=>{
+      const original=URL.createObjectURL;
+      URL.createObjectURL=blob=>{URL.createObjectURL=original;resolve(blob);return original(blob);};
+    });
+    document.getElementById('save').click();
+    const blob=await Promise.race([download,new Promise((_,reject)=>setTimeout(()=>reject(Error('No map file was downloaded')),4000))]);
+    return blob.text();
+  })()`);
+  const saved=JSON.parse(saveText);
+  assert.deepEqual(Object.keys(saved.pictures),['map']);
+  assert.ok(saved.pictures.map.image.startsWith('data:image/webp;base64,'));
+  assert.equal(saved.rock.crackFrom,0.12);
+  assert.equal(saved.rock.crackBlocks,3);
+  const link=await shareLink(source);
+  assert.equal(link.origin,base.origin);
+  const id=link.searchParams.get('map');
+  assert.match(id,/^[a-z2-7]{16}$/);
+  const response=await fetch(new URL(maps.pathname+'/'+id,base));
+  assert.equal(response.status,200);
+  assert.ok(await response.text()===saveText,'The shared JSON differs from the downloaded bytes.');
+  await checkSave(await gzipText(saveText));
   assert.equal(saved.worldSettings.name,'Green Planet');assert.equal(saved.worldSettings.colors.sun,'#ffd9a8');assert.equal(saved.worldSettings.knobs.beachFrom,'zhon');assert.equal(saved.worldSettings.knobs.erosionRain,'0');assert.ok(saved.worldSettings.surface?.length,'the surface layers are saved whole');
   // The map's materials travel in the save; the world it embeds carries its own two (the ground was given another seed above).
   const fixture=await source.ev('window.__fixture');assert.equal(saved.materials.find(m=>m.worldGround).seed,3);assert.equal(saved.materials.length,fixture.count);assert.deepEqual(saved.worldSettings.materials,saved.materials.filter(m=>Object.keys(m).some(k=>/^world[A-Z]/.test(k)&&m[k])));
   // lowTint is a removed row (round 7): an address that names it leaves it out of the save, as the open would drop it.
   assert.equal(saved.worldSettings.knobs.lowTint,undefined);
   const uniforms=await source.ev(`Object.fromEntries(Object.keys(sculptDebug.sketch().worldSettings.knobs).map(k=>[k,sculptCanvas.renderer.variant.get(k)]))`);
-  const file=join(out,'map.json');writeFileSync(file,JSON.stringify(saved));const before=await image(source);
+  const file=join(out,'map.json');writeFileSync(file,saveText);const before=await image(source);
   const recipient=await open(1);
-  await recipient.send('Page.navigate',{url:`${server}/?biome=red&mapX=1&mapY=1&scratch=recipient`});await recipient.ready();
+  await recipient.send('Page.navigate',{url:`${server}/?biome=red&mapX=1&mapY=1`});await recipient.ready();
   const doc=await recipient.send('DOM.getDocument'),input=await recipient.send('DOM.querySelector',{nodeId:doc.root.nodeId,selector:'#file'});
   await recipient.send('DOM.setFileInputFiles',{nodeId:input.nodeId,files:[file]});await recipient.ready(`sculptDebug.biome==='green'&&sculptRegion.mapData().name==='Collaboration fixture'`);
   const restored=await recipient.ev('sculptDebug.sketch()');writeFileSync(join(out,'restored.json'),JSON.stringify(restored));
@@ -56,7 +93,14 @@ try{
   const changedUniforms=Object.keys(uniforms).filter(k=>uniforms[k]!==restoredUniforms[k]).map(k=>`${k}: ${uniforms[k]} -> ${restoredUniforms[k]}`);
   assert.equal(changedUniforms.join(', '),'','renderer settings differ after loading');
   const after=await image(recipient);assert.equal(Buffer.from(after).equals(Buffer.from(before)),true,'rendered pixels differ after a fresh-profile load');
+  await recipient.send('Page.navigate',{url:link.href});
+  await recipient.ready(`document.getElementById('status').textContent.includes('Opened a shared map')`);
+  const shared=await recipient.ev('sculptDebug.savedMap()');
+  assert.deepEqual(shared.pictures,saved.pictures);
+  assert.ok(isDeepStrictEqual(normalize(await recipient.ev('sculptDebug.sketch()')),normalize(saved)),'The opened link differs from the downloaded map.');
+  assert.equal((await shareLink(recipient)).href,link.href);
+  assert.ok(Buffer.from(await image(recipient)).equals(Buffer.from(before)),'Rendered pixels differ after opening the share link.');
   for(const page of [source,recipient])assert.deepEqual(page.errors,[]);
-  const report={sameRecipe:true,matchingPixels:before.length/4,rgbaSHA256:createHash('sha256').update(Buffer.from(before)).digest('hex'),world:saved.worldSettings.name,biome:saved.biome};
+  const report={sameRecipe:true,sameDownloadAndShareBytes:Buffer.byteLength(saveText),sameLinkAfterOpening:true,matchingPixels:before.length/4,rgbaSHA256:createHash('sha256').update(Buffer.from(before)).digest('hex'),world:saved.worldSettings.name,biome:saved.biome};
   writeFileSync(join(out,'report.json'),JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify(report));
 }finally{for(const {ws,browser}of browsers){ws?.close();browser.kill();}}

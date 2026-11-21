@@ -1933,12 +1933,11 @@ function workingCopy() {
   s.world=worldId;
   return withPictures(s);
 }
-// A save with the map's picture drawn so far (Maps' entry and Download file; a share link carries none). Attaching it costs nothing: it is
-// drawn only when the editor is idle (picturesNow), never while saving. Tool pictures stay in the page.
+// The map's latest picture travels with the save. Tool pictures stay in the page.
 function withPictures(s) { const p=savedPictures(pictures); if (p) s.pictures=p; return s; }
 
 // The pictures (sculpt-thumbnails.js): the map from above, which the save carries, drawn once the map has been left alone for PICTURE_QUIET
-// after a change (or when it is downloaded); and each toolbar tool's stroke in this map's world, kept in the page only, drawn one at a time
+// after a change (or when it is downloaded or shared); and each toolbar tool's stroke in this map's world, drawn one at a time
 // while the editor is idle where a tool's key (what its picture reads) has changed. After a load or a look both start without the wait
 // (picturesSoon). A new map picture reaches the map's entry with the next save, or one save of its own.
 let mapPictureDue=true,picturesUrgent=false,pictureEdits=0,pictureTimer=null,pictureSaveTimer=null,toolPictures=null;
@@ -1959,23 +1958,25 @@ async function picturesNow() {
 // The map's picture: its play area baked at a coarse level through the view's own renderer as the export draws it (the Surface section's
 // design view set aside; never while the view is Clay), in tiles of at most MAP_PICTURE_TILE px (one bake of
 // a whole large map does not fit the renderer's budget), then drawn down to MAP_PICTURE. Between tiles it gives way: an edit, or (unless the
-// artist asked, Download file) any input or view work, stops it, and the next quiet moment starts it again. Measured (M-series Mac, Metal):
+// artist asked to download or share) any input or view work stops it, and the next quiet moment starts it again. Measured (M-series Mac, Metal):
 // a 4 x 4 map is one tile, 24-72 ms; a 16 x 16 map is 16 tiles, 1.0-1.2 s in all, at most 94 ms a tile.
 const MAP_PICTURE_TILE=2048;
 async function drawMapPicture(asked=false) {
   const m=config.map; if (!mapCanvas || !m) return false;
-  const edits=pictureEdits,width=m.playRight??m.width,height=m.playBottom??m.height,fit=mapPictureSize(width,height),t0=performance.now();
+  const edits=pictureEdits,target=pictures,width=m.playRight??m.width,height=m.playBottom??m.height,fit=mapPictureSize(width,height),t0=performance.now();
   const canvas=new OffscreenCanvas(Math.ceil(width/fit.level),Math.ceil(height/fit.level)),g=canvas.getContext('2d',{alpha:false});
   try {
     for (let y=0;y<height;y+=MAP_PICTURE_TILE) for (let x=0;x<width;x+=MAP_PICTURE_TILE) {
-      if (edits!==pictureEdits || !asked && !editorQuiet() || $('clay').checked) return null;   // gave way (or the view is Clay): picturesNow tries again
+      if (edits!==pictureEdits || target!==pictures || !asked && !editorQuiet() || $('clay').checked) return null;   // gave way (or the view is Clay): picturesNow tries again
       const bitmap=await mapCanvas.debugBake({x,y,width:Math.min(MAP_PICTURE_TILE,width-x),height:Math.min(MAP_PICTURE_TILE,height-y)},fit.level,true);   // as the export draws it
       g.drawImage(bitmap,x/fit.level,y/fit.level); bitmap.close?.();
     }
     const image=await encodePicture(canvas,fit.width,fit.height); canvas.width=canvas.height=1;
     pictureStats.map.push(Math.round(performance.now()-t0)); if (pictureStats.map.length>20) pictureStats.map.shift();
-    if (!image) return false;
-    pictures.map={image}; if (edits===pictureEdits) mapPictureDue=false;
+    const valid=copyPictures({map:{image}});
+    if (!valid) return false;
+    if (edits!==pictureEdits || target!==pictures) return null;
+    target.map=valid.map; mapPictureDue=false;
     return true;
   } catch (error) { console.warn('The map picture could not be drawn',error); return false; }
 }
@@ -2038,10 +2039,11 @@ function carryNodes(list,own=mapTools,tables) {
 // shape) wait for a pause of 200 ms instead of saving each time. A save costs about 5 ms of main thread at 40 shapes and 15 ms at 300.
 let lastSaveAt=-Infinity,saveHeld=false;   // saveHeld: commits are coming faster than 200 ms apart
 function persistLater(delay=450) {
+  mapPictureDue=true; pictureEdits++;
   if (!SAVING) { $('save-state').textContent='Comparison sketch · use Map › Save as link or Download file to keep it.'; return; }
   if (!mapStore) { $('save-state').textContent=mapsNote||'Saving in this browser is unavailable. Use Save to keep this map as a file.'; return; }
   if (delay<200) { saveHeld=saveHeld || performance.now()-lastSaveAt<200; if (saveHeld) delay=200; }
-  mapPictureDue=true; pictureEdits++; if (!picturesUrgent) picturesLater();   // the pictures wait for the map to be left alone (not after a load or a look: picturesSoon)
+  if (!picturesUrgent) picturesLater();   // the pictures wait for the map to be left alone (not after a load or a look: picturesSoon)
   clearTimeout(autosaveTimer); autosaveTimer=setTimeout(async () => {
     saveHeld=false;
     if (stroke || moving || loading) { persistLater(); return; }
@@ -2319,14 +2321,21 @@ $('undo').addEventListener('click',() => moveHistory(-1)); $('redo').addEventLis
 $('blank').addEventListener('click',() => { if (stroke) return; applySeedControl(); refinementSeed=seed; cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); nodes=[]; selected=-1;alsoSelected=[]; addGroundNode(); regionalFields.changed(); markChanged(); checkpoint(); status('Blank dry ground.'); schedule(); queueWeather(); });
 // The downloaded file is named after the map (Map › Map name), as the exported .ufo is.
 const mapFileName=() => ($('map-name').value.trim().replace(/[^\w-]+/g,'_').replace(/^_+|_+$/g,'')||'map')+'.json';
-// Download file: the save with its pictures. A map picture that is out of date is drawn first (tens of ms on a 4 x 4 map; never more than 1.5 s, or the
-// file keeps the last one); tool pictures this world still lacks follow when the editor is idle.
+// Download and Share serialize the same snapshot. Give the map picture up to 1.5 seconds to refresh and keep the last picture if it takes longer.
+async function saveDocumentText() {
+  const save=workingCopy();
+  if (!mapPictureDue && save.pictures) return shareText(save);
+  const snapshot=structuredClone(save), edits=pictureEdits, target=pictures;
+  const drawn=await Promise.race([drawMapPicture(true),new Promise(r => setTimeout(() => r(false),1500))]);
+  if (drawn) picturesChanged();
+  if (SAVING) picturesLater(2000);
+  return shareText(edits===pictureEdits && target===pictures ? withPictures(snapshot) : snapshot);
+}
 $('save').addEventListener('click',async () => {
   if (stroke) return;
-  const s=sketch();
-  if (mapPictureDue || !pictures.map) { const drawn=await Promise.race([drawMapPicture(true),new Promise(r => setTimeout(() => r(false),1500))]); if (drawn) picturesChanged(); }
-  download(new Blob([JSON.stringify(withPictures(s))],{type:'application/json'}),mapFileName());
-  if (SAVING) picturesLater(2000);
+  const name=mapFileName();
+  const text=await saveDocumentText();
+  download(new Blob([text],{type:'application/json'}),name);
 });
 $('load').addEventListener('click',() => { if (!stroke) $('file').click(); });
 // With no map open yet, a file picker closed without a file, or a file that fails to load, goes back to the picker: there is still
@@ -2351,7 +2360,7 @@ $('share-menu').addEventListener('toggle',async () => {
   if (!ready || loading || stroke) { shareMessage('The map is still loading. Try again in a moment.'); return; }
   shareMessage('Making your link…');
   try {
-    const text=shareText(sketch());
+    const text=await saveDocumentText();
     const id=text===lastShare.text?lastShare.id:await postMap(service.url,await gzipText(text));lastShare={text,id};
     $('share-url').value=shareUrl(location.href,id); $('share-result').hidden=false;
     shareMessage('Anyone with this link opens a copy of your map. Later edits are not included.');

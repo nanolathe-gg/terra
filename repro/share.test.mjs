@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {gunzipSync, gzipSync} from 'node:zlib';
 import {shareText, gzipText, crc32, shareUrl, mapIdFromSearch, withoutMap, mapsService, postMap, getMap} from '../sculpt-share.js';
 import {mapId} from '../deploy/worker/worker.js';
+import {markEdited} from '../sculpt-tools.js';
 
 const text = JSON.stringify({format: 'nanolathe-terrain-sculpt', version: 6, nodes: [{kind: 'hill', x: 1.5}], note: 'é'.repeat(500)});
 
@@ -61,8 +62,13 @@ test('opening: 404, outage, bad id and damage all leave the map alone and say so
 
 test('share, open, share again gives the same id', async () => {
   // A drawn stroke has no `hidden`; a loaded one has `hidden: false`, keys in another order, and an undefined leftover.
-  const drawn = {format: 'nanolathe-terrain-sculpt', version: 6, nodes: [{kind: 'hill', seed: 3, params: {amount: 70, along: [[0, 1], [1, 0.5]]}}], size: 64, seed: 9};
-  const loaded = JSON.parse(JSON.stringify({seed: 9, size: 64, nodes: [{params: {along: [[0, 1], [1, 0.5]], amount: 70}, hidden: false, seed: 3, kind: 'hill', frame: undefined}], version: 6, format: 'nanolathe-terrain-sculpt'}));
+  const curve = {form: 'hill', knots: [[0, 0], [1, 0]]};
+  const defaults = () => ({curve, amount: 60, along: [[0, 0], [1, 0]]});
+  const stroke = {kind: 'landform', seed: 3, params: {amount: 70, curve, along: [[0, 1], [1, 0.5]]}};
+  const drawn = {format: 'nanolathe-terrain-sculpt', version: 6, nodes: markEdited([stroke], defaults), size: 64, seed: 9};
+  const loaded = JSON.parse(shareText(drawn));
+  loaded.nodes = markEdited([{...loaded.nodes[0], hidden: false, frame: undefined}], defaults);
+  assert.deepEqual(loaded.nodes[0].edited, ['along', 'amount']);
   assert.equal(await mapId(await gzipText(shareText(drawn))), await mapId(await gzipText(shareText(loaded))));
   // What the service stores is the text that was shared, so opening it and sharing it again is a fixed point.
   const text = shareText(drawn);

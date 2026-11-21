@@ -1,7 +1,6 @@
 // A save's picture, and the toolbar's. The save carries one: the map from above (pictures: {map: {image}}, a small WebP data URL), so Maps shows
 // it without opening the map. It is drawn from the map, not part of it: a save without one loads the same and the editor draws it when idle. It
-// travels in the map's entry and in a downloaded file, never in a share link (shareText's save is sketch(), which carries none; the save-link
-// Worker refuses fields it does not know).
+// travels in the map's entry, in a downloaded file, and in a share link.
 // Tool pictures (each toolbar tool's stroke in the map's own world) are drawn when a map opens and kept only in the page: they always show this
 // build and this world, and they cost a save nothing. A key in memory skips a tool whose inputs have not changed since its picture was drawn.
 // Drawing one uses the terrain renderer itself over a small level fixture (as the material editor's pictures do), with a shape engine of its

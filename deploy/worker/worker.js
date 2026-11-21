@@ -25,9 +25,11 @@ export const MAX_RATIO = 40;
 // when the editor's save gains one, and deploy the Worker before the editor that writes it.
 export const SAVE_FIELDS = ['format', 'version', 'nodes', 'map', 'mapData', 'biome', 'world', 'worldSettings', 'size', 'grid', 'baseHeight', 'seaLevel', 'seed',
   'varySeed', 'refinementSeed', 'column', 'rock', 'rocks', 'materials', 'tools', 'toolSettings', 'softness', 'relief', 'materialWeathering', 'depositSpread',
-  'transitionDetail', 'tool', 'diameter', 'amount', 'roughness', 'weather', 'clay', 'light', 'encoding'];
+  'transitionDetail', 'tool', 'diameter', 'amount', 'roughness', 'weather', 'clay', 'light', 'encoding', 'pictures'];
 export const FORMAT = 'nanolathe-terrain-sculpt';
 const ID_RE = /^[a-z2-7]{16}$/;
+const MAP_IMAGE_RE = /^data:image\/webp;base64,[A-Za-z0-9+/]+={0,2}$/;
+const MAX_MAP_IMAGE = 32 * 1024;  // matches the editor's saved map thumbnail limit
 const DEFAULT_ORIGINS = 'https://terra.nanolathe.gg';
 
 const json = (body, status = 200, headers = {}) =>
@@ -96,6 +98,13 @@ export async function checkSave(gz) {
     || !['size', 'grid', 'baseHeight', 'seaLevel', 'seed', 'refinementSeed', 'softness', 'relief', 'materialWeathering', 'depositSpread', 'transitionDetail', 'diameter', 'amount', 'roughness'].every(k => number(save[k]))
     || !['varySeed', 'weather', 'clay'].every(k => flag(save[k])))
     throw new Refusal(400, 'This is not a Terraform save: a field holds the wrong kind of value.');
+  const pictures = save.pictures;
+  if (pictures !== undefined) {
+    const map = pictures?.map, image = map?.image;
+    if (!object(pictures) || Object.keys(pictures).length !== 1 || !map || !object(map) || Object.keys(map).length !== 1
+      || typeof image !== 'string' || image.length > MAX_MAP_IMAGE || !MAP_IMAGE_RE.test(image))
+      throw new Refusal(400, 'This is not a Terraform save: pictures must hold one small WebP map thumbnail.');
+  }
 }
 
 function originAllowed(origin, env) {
