@@ -16,8 +16,8 @@ Means of the tuning windows at the base (main 50328b75): shape .27, look .33.
 
 | Window | Rock slot used | Rock type |
 | --- | --- | --- |
-| red-1 | none set (-1: the world's own rock) | the rock keys in `knobDefaults` (rockFace .8 since round 1) |
-| red-2 | 2 on the knob stroke (round 1); the rest unset | `darkknob` (crust -.3, rockFace 2) |
+| red-1 | 4 on every stroke (round 2) | `softface` (faceRock 0, rockFaceFrom .5): no rock shown, face construction only from slope .5 |
+| red-2 | 2 on the knob stroke (round 1); the rest unset | `darkknob` (crust -.3, rockFace 2, the world's rock material) |
 | red-3 | none set | the world's own rock |
 
 `rubble` (slot 3) reaches no window. red-2 paints Rock (channel 1, amount
@@ -69,7 +69,79 @@ pairs.
   spider, king of the hill and red river.
 - Retail's plain sits at 85 with the sea 5-38 below it.
 
-## Start here (round 2)
+## Start here (round 3)
+
+Round 2 (branch `match-red-2`, 122 of 300 trials; report in the round's
+final message, notes in `$R/match/terraform-wt-match-red-2/red/NOTES.md`)
+took the mean from shape .14, look .17 (trial-000) to shape .13, look .09
+(trial-120: red-1 .11/.10, red-2 .14/.08); held-out red-3 .86 to .83
+(holdout-006). Kept: `wetBand` 4 in knobDefaults; red-2's own water
+(deepDepth 100, bedCracks 0); red-1's strokes on a new rock type
+`softface` (slot 4: faceRock 0, rockFaceFrom .5); red-1's plain rolls
+more (undulation 8, cover .75). Held at review: darkknob drawing
+`red-knob`, a rock material of vertical ribs (red-2 .10 to .08, trial-091):
+its waves run straight down the screen on every face of the dome, top and
+east-west flanks included, so the knob reads as a barcode where retail's
+is a fine even texture (`<out>/crops/r2knob4.png`); and it would draw
+those stripes on every Knob and Crescent tool. Its graph is in the round's
+trial-091 candidate.diff. A world faceRock 0 and then Smooth soil on
+red-1 were kept and replaced: Red's real cliffs are fluted rock
+(`$R/agent-biome-match/out/catalog/red/crops/cliff-ashap_plateau.png`),
+and soil made red-1's steep edges 15x retail.
+
+Leads:
+
+1. **Red-1's faces** on softface still draw 5.2x retail's steep edges,
+   and the lit side reaches luma 108 against 88 (trial-120). The face
+   construction's start trades edges for score: from slope .2 the window
+   reads .19 at 2.6x, .35 .13 at 2.9x, .5 .10 at 5.2x, .8 .12 at 9.9x;
+   Smooth soil .12 at 15.5x (trial-113, 118, 117, 119, 111). Darker
+   red-slope tops clear steep:light but cost red-2 .03 (trial-122).
+   Relief .8 stays the owner's call (relief .5: trial-083).
+2. **Red-2's NW upland** (largest finding, gentle edges 0.00x): retail's
+   upland is pitted 2-8 units in 30-50 px polygon cells. A material of
+   lit 40 px cells with soft dark borders (`red-crumple`, diff in the
+   round's folder) draws the network by eye (trial-071), but our heights
+   there stay level, so the gentle class never forms; a cut landform
+   with heightVary pits the heights but reads crumbly (trial-041/042/073).
+3. **Red-2's bank**: shore edges 6.2x and slope edges 3.4x retail; the
+   relief draws them (relief .5 halves slope edges, trial-083). Waterline
+   controls, shoreRock, bankRock, the dry bank's edge and soil on the bank
+   strokes moved little (trial-060..065, 082, 105, 106).
+4. **Red-3's sea shelf** reads 92 against 65, its share 25% against 15%.
+   World deepDepth 26 (red-2 keeps its own 100) takes red-3 .83 to .80
+   and red-1 .12 to .11 (trial-104, holdout-005), but was judged mainly
+   on the held-out window and not kept. No tuning window has a sea.
+5. **Red-3's coast rock** is blotchy near-black: world rock faceTone .5
+   (its maximum). faceTone .15 calms red-2's knobs by eye at the same
+   score (trial-107; darkknob .1 in trial-092), not kept (its finding
+   moved under a third). Red-3's thin dark pixels (236) are dark rock
+   specks poking into the shelf along its north coast, not the damp band.
+6. **wetBand**: 4 suits the tuning windows; red-3 prefers 1 (holdout-002
+   .81 against .83). At 1-2, red-2 gains about 40 thin dark pixels: the
+   shadow seam at its island knob's waterline, which crosses the line
+   threshold as the bank lightens (trial-049). crispShore .5 removes it
+   on red-2 but costs red-1 (trial-053..055).
+7. **The dry-bank layers** still earn their place at wetBand 4 and 1
+   (trial-056/057).
+8. Red-2's strokes follow the retail water footprint to within a stroke
+   width; moving the second bank stroke east made the look worse
+   (trial-099/100). The stroke `cracks` field is live but gated by world
+   crackSeverity 0.
+
+9. **Relief on red-1's faces:** Relief weaker paint (channel 9) at 100 over
+   the crescent, mesa and basin rims clears steep:edges (5.2x to under 2x)
+   but raises red-1's look .10 to .13 (reviewer's diagnostic, 2026-11-20); at
+   50, steep edges 2x and the same look. So the edge count is not what holds
+   the look; the lit side (108 against 88) and the 32 px patches are.
+10. **The knob's ribs** (held, above): try a finer, fainter texture that
+   does not run one screen direction, or faceScratch (grooves follow the
+   face), and keep the knob's lit top plain.
+
+Reviewer's notes from round 2 still to settle: relief .8 (owner's call),
+and red-1's softface (by eye its crescent and mesa read softer and closer to retail, trial-120 pair).
+
+## Start here (round 2, done)
 
 Round 1 (branch `match-red`, 88 of 300 trials; report in
 `$R/match/terraform-wt-match-red/red/REPORT.md` or the round's final

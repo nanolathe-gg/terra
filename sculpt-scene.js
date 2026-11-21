@@ -314,7 +314,10 @@ export function borrowBeach(config,settings) {
   return config;
 }
 export function addDefaults(settings,defaults={}) { for (const [key,value] of Object.entries(defaults||{})) if (!settings.has(key)) settings.set(key,value); return settings; }
-export const pageSettings=(config,search='') => addDefaults(new URLSearchParams(search),config.defaults);
+// A world's built-in settings in the order the renderer reads them (sculpt-renderer.js: engineDefaults over defaults, the address over both), so the
+// page's settings, its panel and a save hold what the picture draws with (sculpt-save.js worldBase reads one key the same way).
+export const worldDefaults=config => ({...(config.defaults||{}),...(config.engineDefaults||{})});
+export const pageSettings=(config,search='') => addDefaults(new URLSearchParams(search),worldDefaults(config));
 // A world setting the page's address may override (a knob trial in a render's query), else the world's value.
 export const worldSetting=(config,settings,key) => settings.has(key)?Number(settings.get(key)):worldDefault(config,key);
 // A height image's node (sculpt-gpu-fields.js heightsFields: the samples and where they lie), as a scene, a save and the undo history hold it: its

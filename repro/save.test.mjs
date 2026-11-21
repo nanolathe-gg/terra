@@ -109,3 +109,14 @@ test('a stored world becomes a map: changed materials (no slot, marked with what
   assert.equal(s.materials.find(m => m.worldGround).seed, 77, 'the changed ground material is the map\'s');
   assert.equal(s.worldSettings.materials.find(m => m.worldGround).seed, 77);
 });
+test('a map saves the value its world draws with: engineDefaults over defaults, as the renderer reads them', () => {
+  // Moon and seven other worlds: erosion 1 and erosionRain 0 in engineDefaults against defaults.json's 0 and 1.
+  const world={...config,defaults:{...config.defaults,erosion:'0',erosionRain:'1'},engineDefaults:{erosion:'1',erosionRain:'0',erosionEnvelope:'0.12'}};
+  const saved=savedWorld(world,new URLSearchParams(),{name:'Moon',colors:{},knobs:{}});
+  assert.deepEqual([saved.knobs.erosion,saved.knobs.erosionRain,saved.knobs.erosionEnvelope],['1','0','0.12']);
+  // What the artist set, and the address, still win; and the built-in value is no change.
+  assert.equal(savedWorld(world,new URLSearchParams('erosion=0'),{name:'Moon',colors:{},knobs:{}}).knobs.erosion,'0');
+  assert.equal(savedWorld(world,new URLSearchParams(),{name:'Moon',colors:{},knobs:{erosionRain:'1'}}).knobs.erosionRain,'1');
+  assert.equal(worldOverrideCount({name:'Moon',colors:{},knobs:{erosion:'1',erosionRain:'0'}},world),0);
+  assert.equal(worldOverrideCount({name:'Moon',colors:{},knobs:{erosion:'0'}},world),1);
+});

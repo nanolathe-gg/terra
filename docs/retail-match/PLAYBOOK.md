@@ -237,7 +237,8 @@ helps one window and hurts another.
   - **Sea and plain:** the query's `sea` and `plain` (the plain's height
     above the sea): green-4's low-floored map uses `sea=0&plain=9`.
   - **Water:** the query's `shallowDepth`, `deepDepth`, `bedTint`,
-    `bedBright`, `bedContrast`, `bedCracks` and `wetBand`, where this map's
+    `bedBright`, `bedContrast`, `bedCracks`, `bedRelief`, `bedFlat` and
+    `wetBand`, where this map's
     water or damp bank plainly differs from the world's (red-2's river stays
     light to depth 24, red-3's sea darkens from depth 8). Probe the world
     value first: a map's own value needs a by-eye reason in the report.

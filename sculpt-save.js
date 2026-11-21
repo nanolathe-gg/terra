@@ -55,10 +55,14 @@ export const roleCard=key => ROLE_CARDS[key]??(typeof key==='string'&&key.starts
 // the materials only surface layers draw (soil, snow, moss: Surface layers).
 const ROLE_NAME_KEYS={ground:'worldGround',water:'worldWater',...Object.fromEntries(MAP_ROLES.map(([key,name]) => [name,key]))};
 export const roleNameCard=name => name==='extra'?'tools':ROLE_CARDS[ROLE_NAME_KEYS[name]]??'surface';
+// A world setting's built-in value, in the order the renderer reads them (sculpt-renderer.js: the world's engineDefaults over its defaults), so a
+// map saves the value it draws with. Eight worlds set erosion and erosionRain (Crystal also crystalShallowAll) in engineDefaults against
+// defaults.json's; read defaults first, a saved map reopened with the Time pass set otherwise.
+export const worldBase=(config,key) => config.engineDefaults?.[key]??config.defaults?.[key];
 export const worldKeys=config => new Set([...Object.keys(config.defaults||{}),...Object.keys(config.engineDefaults||{}),...KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)),'beachFrom','sandEdge','fill','relief','palette','sun']);
 export function savedWorld(config,settings,world) {
   const knobs={};
-  for(const key of worldKeys(config)){const value=settings.get(key)??world.knobs?.[key]??config.defaults?.[key]??config.engineDefaults?.[key];if(value!==undefined&&value!==null)knobs[key]=String(value);}
+  for(const key of worldKeys(config)){const value=settings.get(key)??world.knobs?.[key]??worldBase(config,key);if(value!==undefined&&value!==null)knobs[key]=String(value);}
   // The map saves its world whole (owner, 2026-11-19), its surface layers included, so retuning the built-in world never changes it.
   const surface=world.surface??config.surface;
   return {...storedWorldKit(config,world),materials:worldKept(withWorldMaterials(world.materials,config)),name:world.name||config.biome,base:config.biomeId,colors:worldHexColors(config,settings,world.colors||{}),knobs,...(surface?{surface:copySurface(surface)}:{}),engine:engineTables(config),roles:worldRoles(config)};
@@ -68,7 +72,7 @@ const finiteText=v => String(v).trim()!=='' && Number.isFinite(Number(v));
 // A setting that holds a number: a slider (KNOBS), or one whose world default is a number. The served defaults are text ("0.3"), so a default is
 // numeric when its text is a finite number.
 const SLIDERS=new Set(KNOBS.flatMap(([,rows])=>rows.map(([key])=>key)));
-const numericSetting=(config,key) => { const d=config.defaults?.[key]??config.engineDefaults?.[key]; return SLIDERS.has(key)||(d!==undefined&&d!==null&&finiteText(d)); };
+const numericSetting=(config,key) => { const d=worldBase(config,key); return SLIDERS.has(key)||(d!==undefined&&d!==null&&finiteText(d)); };
 export function copySavedWorld(value,config) {
   if(value===undefined)return null;
   if(!value||value.base!==config.biomeId||typeof value.name!=='string'||!value.colors||Array.isArray(value.colors)||typeof value.colors!=='object'||!value.knobs||Array.isArray(value.knobs)||typeof value.knobs!=='object')throw Error('The saved world settings are invalid.');
@@ -102,7 +106,7 @@ export function worldOverrideCount(world,config) {
   let n=0;const known=worldKeys(config);
   for(const [key,value] of Object.entries(world.knobs||{})){
     if(!known.has(key))continue;
-    const base=config.defaults?.[key]??config.engineDefaults?.[key]??defaults[key];
+    const base=worldBase(config,key)??defaults[key];
     const a=Number(value),b=Number(base);if(Number.isFinite(a)&&Number.isFinite(b)?a!==b:String(value)!==String(base))n++;
   }
   const baseColors=worldHexColors(config,new Map(),{}),colors=worldHexColors(config,new Map(),world.colors||{});

@@ -135,3 +135,11 @@ test('world shape inputs track terrain settings while a new brush seed leaves au
   const fallback=nodes.map(n=>n.points?(({seed,...rest})=>rest)(n):n);
   assert.notEqual(worldShapeKey(context(1),fallback),worldShapeKey(context(2),fallback),'an unseeded node still reads the context seed');
 });
+
+test("the page's settings take a world's engineDefaults over its defaults, as the renderer does, and the address over both", () => {
+  // Moon and seven other worlds: erosion 1 and erosionRain 0 in engineDefaults against defaults.json's 0 and 1 (the Rain row read 1 while 0 drew).
+  const moon = {...config, defaults: {...config.defaults, erosion: '0', erosionRain: '1'}, engineDefaults: {erosion: '1', erosionRain: '0', erosionEnvelope: '0.12'}};
+  const s = pageSettings(moon);
+  assert.deepEqual([s.get('erosion'), s.get('erosionRain'), s.get('erosionEnvelope'), s.get('undulation')], ['1', '0', '0.12', '10']);
+  assert.equal(pageSettings(moon, 'erosionRain=0.5').get('erosionRain'), '0.5');
+});

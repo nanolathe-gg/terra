@@ -1079,7 +1079,8 @@
         "shineRockScale": 3,
         "sunTilt": 0,
         "bedCracks": 0.55,
-        "bedCrackSize": 42
+        "bedCrackSize": 42,
+        "wetBand": 4
       },
       "engineDefaults": {
         "erosion": 1,
@@ -1093,7 +1094,9 @@
 
     "darkknob",
 
-    "rubble"
+    "rubble",
+
+    "softface"
 
    ],
 
@@ -1136,6 +1139,20 @@
       "crackDark": 0.8,
 
       "rockCrown": 0.5
+
+     }
+
+    },
+
+    "softface": {
+
+     "label": "Soft face",
+
+     "knobs": {
+
+      "faceRock": 0,
+
+      "rockFaceFrom": 0.5
 
      }
 
