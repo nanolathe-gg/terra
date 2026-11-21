@@ -46,6 +46,7 @@
     "crackMinor": 0.75,
     "crackHairline": 0.6,
     "crackBlocks": 0.6,
+    "crackFrom": 0.44,
     "crackWidth": 1,
     "crackNetwork": 0.35,
     "crackDark": 0.75,

@@ -1077,6 +1077,7 @@ export class TerrainRenderer {
     set('uBedCrackSize', number('bedCrackSize', 36));
     set('uLumpRelief', number('lumpRelief', 4));
     set('uCrackSpacing', number('crackSpacing', 40));
+    set('uCrackFrom', number('crackFrom', 0.44));
     set('uCrackWidth', number('crackWidth', 1));
     set('uCrackNetwork', number('crackNetwork', 0.35));
     set('uCrackMinor', number('crackMinor', 0.75));
