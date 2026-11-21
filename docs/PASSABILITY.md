@@ -27,9 +27,9 @@ routes are outside the claim. Hatching means variation among these references.
 
 The three-cell amphibious reference has underwater span limit 30. Other
 references use unrestricted underwater span (255). Depths and spans are height
-byte units, not degrees. The calibration is Nanolathe research doc 04 §6.1
-(R-DOC04-A/B and R-SLOPE-01) and `research/formats/tdf.md`'s movement schema;
-stock unit files and identifiers are not required by this implementation.
+byte units, not degrees. The calibration comes from the parent Nanolathe project's movement
+research; stock unit files and identifiers are not required by this
+implementation.
 
 ## Terrain and update contract
 
@@ -59,70 +59,6 @@ generated feature footprints. `node repro/passability.mjs --server YOUR_SERVER
 unchanged recipe and art, class switching, feature edits/undo, and Art/Clay.
 An optional local sketch stays outside the repository. The static build carries
 both passability modules.
-
-## Worktree validation (November 6, 2026)
-
-Measured on the owner's authored 8×8 save, kept outside the repository:
-
-- 135 unit/static-build tests pass. Chrome passability acceptance passes,
-  including unchanged recipe/art, all five families, blocking rock edits/undo,
-  and returning to Art/Clay. The feature browser regression and Green brush,
-  undo, export, and `--page8` smoke checks pass.
-- All 30 reference scenes match the pre-change render byte for byte. Regional
-  replay reports zero mismatches; the world-name gate passes without new names.
-- The visible in-app preview samples and classifies 68,112 cells in 2,979 ms.
-  A separate headless Chrome acceptance run took 4,113 ms. These include GPU
-  height sampling; classification alone on the previously sampled grid took
-  38 ms under Node. The Fit diagnostic retained about 3.44 MB in the acceptance
-  viewport, including its viewport image.
-- The west gap's inspected cell spans height bytes 56–61 at sea 75; vehicles and
-  KBots are blocked, both hover and amphibious references pass. In the checked
-  southeast window, 179 candidate cells admit some KBot references and no
-  vehicle references. These are local occupancy results, not connected routes.
-- Two alternating normal-view drag benchmark pairs (`repro/perf.mjs map8
-  --only drag`) keep frame p95 at 16.7–16.8 ms before and after. Pointer-to-picture
-  p95 was 68.2/68.8 ms before and 328.5/69.1 ms after. The first after run's
-  outlier is unresolved; this small sample does not establish pointer latency
-  equivalence. The harness deliberately stops after the drag phase.
-
-By eye, the Fit overlay exposes the river crossings and plateau rim without the
-antialiasing mesh produced by independent translucent cell polygons. It stays
-legible in the narrow in-app browser using the existing Focus canvas control.
-
-Unfinished: exhaustive profile calibration, Nanolathe traversal parity for each
-reference, connected-route checks, turning/traffic, landing suitability, and
-larger-map performance qualification. No claim covers arbitrary mods. The view retains these documented limits when merged to main.
-
-
-## Landing validation after merging main
-
-Baseline: `0caa88ec`. Main merged cleanly into the passability branch before
-repeating the checks. Review also fixed reselecting the active Passability view:
-it now keeps its completed analysis status rather than displaying a waiting
-message that never completes. Chrome acceptance checks the second click.
-
-Measured after that fix:
-
-- 135 unit/static-build tests pass. All 30 reference PNGs are byte-identical
-  to current main. Green and modern Green regional replay have zero mismatches.
-  The world-name gate passes with exactly the baseline's 126 entries.
-- All nine worlds pass 171 brush/undo checks. Eight map exports pass their
-  self-checks; Zhon export remains disabled by design. Green `--page8`, the
-  feature selection/undo/export regression, and the owner's 8×8 passability
-  acceptance test pass. Opening the diagnostic still preserves recipe and art.
-- Three alternating complete `map8 --no-export` performance comparisons finish
-  through scroll with no browser errors. Drag frame p95 stays 16.7–16.8 ms.
-  First updated-chunk p95 is 20.0/17.4/19.0 ms before and 19.5/17.9/17.6 ms
-  after. Pointer-chunk p95 is 116.2/67.8/73.6 ms before and 71.3/76.2/328.5 ms
-  after; two pointer samples in the last after run are censored. These traces
-  contain no main-thread tasks over 50 ms. The pointer-specific outlier recurs
-  during ordinary brush chunk scheduling with the diagnostic closed; its cause
-  remains unresolved, so these runs establish stable frame timing, not pointer
-  latency equivalence. It remains a follow-up rather than a claim of improvement.
-
-The reference-profile and traversal limits above remain unchanged. No unit
-catalog or retail asset files are included.
-
 
 ## Shallow water crossings (November 7, 2026)
 

@@ -78,7 +78,7 @@ These notes are by eye, from the base crops in
   edges (measured at the base: green-3 water `edges` retail .0030, ours .0083;
   round 1's two keeps together brought ours to .0023).
 
-## Known from earlier rounds (docs/BIOME_CATALOG.md, "Green Planet")
+## Known from earlier rounds (docs/retail-match/BIOME_CATALOG.md, "Green Planet")
 
 - Green's slope hatch comes from contour bands 1.3 units apart with a line
   darkness of .65 (`world.column.bands`): `banding` .6, no jag (`bandJag`
