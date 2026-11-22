@@ -200,7 +200,9 @@ export class GpuErosion {
         // A batch shown to wait no longer than a smaller one starts the next pass (latencyBatch), which would otherwise double up from its rate
         // again; a larger batch whose wait grew with the work forgets it.
         const proven=last&&count>last.count&&wait<last.wait*1.3,latency=!last||proven;
-        if(proven)this.latencyBatch[rateKey]=Math.max(this.latencyBatch[rateKey]??0,Math.min(256,count));else if(last&&count>last.count)delete this.latencyBatch[rateKey];
+        // Only a slice with work teaches it: with no active tile a larger batch never waits longer, in any browser (Chrome learned 199
+        // from the load's empty passes and started every later pass as one 199-iteration slice, measured).
+        if(mcells>0){if(proven)this.latencyBatch[rateKey]=Math.max(this.latencyBatch[rateKey]??0,Math.min(256,count));else if(last&&count>last.count)delete this.latencyBatch[rateKey];}
         batch=latency?Math.min(256,Math.max(sized(),count*2)):sized();last={count,wait};
         await yieldWork();
       }
