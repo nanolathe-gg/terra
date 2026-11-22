@@ -484,7 +484,7 @@ export class TerrainRenderer {
   buildMask(mask) {
     const rock = performance.now();
     return Promise.all([this.buildGenericMask(mask), this.voxel.build(mask), this.rockWeather.build(mask)])
-      .then(() => { this.specStats.rockMs = (this.specStats.rockMs ?? 0) + performance.now() - rock; });
+      .then(() => { this.specStats.rockMs = (this.specStats.rockMs ?? 0) + performance.now() - rock; }, error => this.pipelinesFailed(error));
   }
   // The mask's pipelines and this set of gates' bake, all asked for at once.
   async specialize({key, values}) {
@@ -502,8 +502,11 @@ export class TerrainRenderer {
         this.specStats.built++; this.specStats.ms += performance.now() - start;
       }).finally(() => this.specBuilding.delete(key)));
     }
-    await Promise.all([mask, this.specBuilding.get(key)]);
+    await Promise.all([mask, this.specBuilding.get(key).catch(error => this.pipelinesFailed(error))]);
   }
+  // A pipeline that does not build (a shader the browser rejects) fails the same way each time: the first failure is kept, and every later
+  // draw throws it instead of waiting again, so the page shows the error once rather than retrying every frame.
+  pipelinesFailed(error) { this.pipelineFailure ??= error; throw error; }
   // A preview miss retries with uniform gates and starts no specialized compile; only a rock mask with no pipelines yet (start-up, or the
   // first rock type) builds that mask's own. A view final yields the renderer while its specialized set builds; direct readers and export
   // await specialization as before.
@@ -514,6 +517,7 @@ export class TerrainRenderer {
       try{return await work();}
       catch(error){
         if(!(error instanceof SpecializationMiss)||attempt>=4)throw error;
+        if(this.pipelineFailure)throw this.pipelineFailure;
         const mask=preview?error.state?.values?.rockMask??this.rockMask():null;
         if(preview&&this.maskReady(mask)){this.pipelineMode='generic';continue;}
         const ready=preview?this.buildMask(mask):this.specialize(error.state);
