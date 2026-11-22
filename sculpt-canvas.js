@@ -332,7 +332,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       const atSerial=lattice?sourceSerial:serial,atRev=lattice?sourceRev:{...rev};
       let result=await drawTile(view?{reuse,check}:null);
       if(result.reused&&!cached())result=await drawTile({reuse:null});   // prior was dropped while the check ran: the tile is drawn after all
-      const entryFor=bitmap=>({...rect,bitmap,bytes:ow*oh*4,digest:null,kept:false,scale,pixel,fit,lattice:Boolean(lattice),weathered:readWeather,fed:true,serial:atSerial,rev:atRev,shapeRev:feed.revision,pipelineKey:result.pipelineKey,weatherRevB:fit?null:feed.weatherRevB,level:scale,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null});
+      const entryFor=bitmap=>({...rect,bitmap,bytes:ow*oh*4,digest:null,kept:false,scale,pixel,fit,lattice:Boolean(lattice),weathered:readWeather,fed:true,serial:atSerial,rev:atRev,shapeRev:feed.revision,pipelineKey:result.pipelineKey,weatherRevB:fit?null:feed.weatherRevB,level:scale,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null,late:block?result.late??null:null});
       const kept=entry=>{entry.digest=reuse;entry.kept=true;entry.pipelineKey=prior.pipelineKey;entry.finalCostMs=prior.finalCostMs;entry.finalCostBudget=prior.finalCostBudget;return entry;};
       // A kept picture is prior's bitmap; the caller replaces prior with it only while prior is still the cached entry.
       if(check)return {pending:result.check.then(d=>{if(d!==reuse)return null;reused++;metrics();return kept(entryFor(prior.bitmap));},()=>null)};
@@ -706,6 +706,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             e.block=true;e.dirty=changedSince(e.serial,e.input,'F',e.lattice);e.bakedAt=performance.now();if(!e.color)await retainColor(e);
             if(want===coarseLevel){fineSinceCoarse=false;}
             if(prior){if(prior.color!==e.color)renderer.releaseColorTile(prior.color);blockBytes-=prior.bytes;}blocks.set(key,e);blockBytes+=e.bytes;
+            // A preview shown before its voxel count was checked (VoxelSurface render) and found wrong is drawn again, with its geometry record
+            // given up: a color-only redraw (renderColorTile above, which carries late along) would show the same wrong rock.
+            const late=e.late;if(late)late.then(wrong=>{const now=blocks.get(key);if(!wrong||now?.late!==late)return;now.late=null;now.dirty=true;if(now.color){renderer.releaseColorTile(now.color);now.color=null;}schedule();},()=>{});
             paintedView=-1;presentView();presented();rerun=true;
             // The gates in this picture have already answered input. Compile
             // their exact final set without holding another preview behind it.

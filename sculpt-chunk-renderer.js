@@ -633,6 +633,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       const dimensions=await this.allocate(region,w,h,request.width,request.height,Boolean(feed),scale,pixelScale);
       if(feed)await this.feedFromGpu(request,region,dimensions,feed,passes);else this.upload(request,region,dimensions,planes);
       this.activeRegion=region;this.voxelScale=voxelScale;
+      // A gesture's own preview may be shown before its voxel count is checked (VoxelSurface render); the result's late says if it was wrong.
+      this.uncheckedPreview=Boolean(preview);
       // An export draws the world as saved: the Surface section's design view (hidden layers, its coverage preview) is set aside for its tiles,
       // and the view's world sync is left as it was (exportView).
       const view=request.exportArt?this.exportView():null;
@@ -656,7 +658,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       // drain it before recycling the working set, just as on success.
       const completion=this.device.queue.onSubmittedWorkDone();this.previousChunk=completion;
       completion.then(()=>{this.completedChunk=completion;},()=>{});throw error;
-    } finally { this._busy=false;this.cpuWorkingBytes=0;this.fastRaster=false; }   // a bake outside a chunk (timeBake, timeDraw) is never a gesture's
+    } finally { this._busy=false;this.cpuWorkingBytes=0;this.fastRaster=false;this.uncheckedPreview=false; }   // a bake outside a chunk (timeBake, timeDraw) is never a gesture's
   }
   evict() {
     this.trimColorTiles();this.colorTargets.clear();this.voxel?.release();this.rockWeather?.clear();

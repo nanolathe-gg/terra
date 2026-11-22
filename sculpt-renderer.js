@@ -755,7 +755,7 @@ export class TerrainRenderer {
       const pass=commands.beginRenderPass({label:'terrain geometry',colorAttachments:[{view:this.geometryTarget.createView(),clearValue:{r:0,g:0,b:0,a:0},loadOp:first?'clear':'load',storeOp:'store'}],timestampWrites:timer?.timestampWrites});
       const [x,y,w,h]=rect.map(Math.round);pass.setPipeline(this.genericPipelines[this.rockMask()].geometry);pass.setScissorRect(x,y,w+2,h+2);
       pass.setBindGroup(0,this.commonBindGroup('draw'));pass.setBindGroup(1,this.materialBindGroup());pass.setBindGroup(2,volume);pass.setBindGroup(3,this.geometryBinding(this.geometryOutLayout));pass.draw(3);pass.end();timer?.encode(commands);
-    },current);
+    },current,Boolean(this.uncheckedPreview));
     // E is complete for every piece. F has no solid dependency, so its
     // bounded mask staging replaces D instead of adding to the terrain peak.
     this.voxel.clear();current();await this.outputPipelines();current();
@@ -768,7 +768,7 @@ export class TerrainRenderer {
     this.encodeOutput(color,this.voxelColor,this.context.getCurrentTexture());device.queue.submit([color.finish()]);
     this.gpuResult=Promise.all(timers.map(t=>t.result())).then(values=>{const ms=values.reduce((a,b)=>a+(b??0),0);this.lastGPU=ms;return ms;});
     if (this.guard && !await this.guard.check(this, await inputDigest)) inputDigest = null;   // after a violation, no tile is kept
-    return {milliseconds:performance.now()-start,gpuMilliseconds:this.lastGPU,pipelineKey,digest:inputDigest};
+    return {milliseconds:performance.now()-start,gpuMilliseconds:this.lastGPU,pipelineKey,digest:inputDigest,late:this.voxel.late};   // late: VoxelSurface render
   }
   // A checksum of a draw's inputs: every texel of the input textures (INPUT_TEXTURES; textureSums), the settings uniform's bytes but the
   // per-chunk ones, the shader specialization, the canvas and texture sizes, and the world version (worldResource). Null when an input
