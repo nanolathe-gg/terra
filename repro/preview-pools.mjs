@@ -15,7 +15,7 @@ const render=async()=>{await r.renderChunk(request,{...s.drawOptions(),feed,scal
 const exact=await render(),v=r.voxel,seed={...v.predictionStats};assert(seed.seeds>0);
 const original=v.readback.mapAsync.bind(v.readback),encoder=d.createCommandEncoder.bind(d),submit=d.queue.submit.bind(d.queue),labels=new WeakMap();let waiting=false,submittedBeforeReadback=false,presentedBeforeReadback=false;
 d.createCommandEncoder=(desc={})=>{const e=encoder(desc),finish=e.finish.bind(e);e.finish=(...a)=>{const b=finish(...a);labels.set(b,desc.label);return b;};return e;};
-d.queue.submit=commands=>{if(waiting&&commands.some(c=>labels.get(c)==='voxel solid and terrain draw'))submittedBeforeReadback=true;if(waiting&&commands.some(c=>labels.get(c)==='present voxel terrain'))presentedBeforeReadback=true;return submit(commands);};
+d.queue.submit=commands=>{if(waiting&&commands.some(c=>labels.get(c)==='voxel solid and terrain draw'))submittedBeforeReadback=true;if(waiting&&commands.some(c=>labels.get(c)==='terrain color'))presentedBeforeReadback=true;return submit(commands);};
 v.readback.mapAsync=async(...a)=>{waiting=true;await original(...a);await new Promise(r=>setTimeout(r,100));waiting=false;};
 const predicted=await render();v.readback.mapAsync=original;d.createCommandEncoder=encoder;d.queue.submit=submit;
 assert(submittedBeforeReadback,'Prediction still waited before submitting its draw');assert.equal(presentedBeforeReadback,false,'An unvalidated preview was presented');assert.deepEqual(predicted,exact);

@@ -24,7 +24,7 @@ for(const boundary of ['count','solid']){
  await assert.rejects(H.renderWindow(s,{...window,options:{...s.drawOptions(),stale:()=>stale}}),{name:'AbortError'});
  const labels=submitted.slice();await r.previousChunk;
  assert.equal(r.busy,false);assert.equal(r.voxel.owned.length,0);assert.equal(r.voxel.readback.mapState,'unmapped');assert.equal(r.geometryValid,false);assert(allocated.length&&allocated.every(x=>x.destroyed===1),'every canceled owned allocation must retire exactly once');
- assert(!labels.includes('present voxel terrain'),'an obsolete tile must not reach presentation');
+ assert(!labels.includes('terrain color'),'an obsolete tile must not reach presentation');
  if(boundary==='count')assert(!labels.includes('voxel solid and terrain draw'),'obsolete counted solid must not be built');
  else{assert(labels.includes('voxel solid and terrain draw'),'solid boundary must actually be reached');assert(!labels.includes('terrain geometry after voxel solid'),'obsolete solid must not be drawn');}
  mode=null;stale=false;const actual=digest(await H.renderWindow(s,window));assert.equal(actual,expected,'a canceled working set must not corrupt the next tile');results.push({boundary,submitted:labels,allocations:allocated,ownedAfterCancel:0,mappedAfterCancel:false,nextSHA:actual,different:0});
