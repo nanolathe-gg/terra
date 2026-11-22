@@ -15,6 +15,7 @@ const TIME_ROCK = {rockMask: 0};
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // The Time pass's cell, world px: a lattice finer than this is simulated on cells this size and gets the result as a change of its own
 // heights (runCoarse). The game keeps one height per 16 px, so the finer half was art; a pass on 4 px cells costs a quarter of one on 2.
+const FIRST_RATE = 35;     // ms an iteration a million active cells that a Time pass with no measured rate assumes (runGpu)
 const TIME_CELL = 4;
 // Constants of the model. Each comment says what it trades; the four knobs a user sees are
 // erosionAge, erosionRain, columnContrast and talusAngle.
@@ -175,14 +176,17 @@ export class GpuErosion {
       // A slice is sized to about 25 ms of the pass's own GPU work, so input and visible chunks get the queue between slices. A slice's wait
       // also holds whatever else was queued ahead of it (tiles, another Time pass), so it only bounds the pass's own cost: the lowest cost an
       // iteration a million cells has shown (this.rate, per wet or dry pass, drifting up 2% a slice) sizes the batch, and a busy queue no
-      // longer shrinks the slices into many more round trips. The first pass starts at one iteration. Slicing does not change the result.
+      // longer shrinks the slices into many more round trips. Slicing does not change the result.
+      // A pass with no rate yet sizes its first slice by a GPU four times slower than an M3 Pro (Chrome settles there at 8.8 ms an iteration a
+      // million active cells, measured), then doubles as below. It started at one iteration: where every wait costs 100 ms (Firefox), the first
+      // pass of a session, the first drag's (no Time pass runs at load), doubled through eight slices and took 956 ms (measured).
       // The cells are the active tiles' (8 x 8 each), the steps' work: a window that is mostly sea or flat costs little, and timed against the
       // whole window it would lower the rate for the next dense pass, which would then run whole in one slice. A pass with no active tile
       // does no step work and teaches the rate nothing.
       const rateKey=rain!==0?'wet':'dry',mcells=active*64/1e6;this.rate??={};
-      const sized=()=>mcells>0?clamp(Math.floor(25/(this.rate[rateKey]*mcells)),1,256):256;
+      const sized=()=>mcells>0?clamp(Math.floor(25/((this.rate[rateKey]??FIRST_RATE)*mcells)),1,256):256;
       this.latencyBatch??={};
-      let batch=this.rate[rateKey]?Math.max(sized(),this.latencyBatch[rateKey]??0):1,last=null;
+      let batch=Math.max(sized(),this.latencyBatch[rateKey]??0),last=null;
       for(let it=0;it<age;){
         current();const count=Math.min(batch,age-it);
         encoder=device.createCommandEncoder({label:'erosion gpu slice'});
