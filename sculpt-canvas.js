@@ -8,6 +8,8 @@ import {mountMapExport} from './sculpt-export.js';
 import {mountMapFeatures} from './sculpt-features.js';
 import {mountPassability} from './sculpt-passability-view.js';
 import {pagedBudget,VIEW_CANVASES} from './sculpt-scene.js';
+import {warmShapePipelines,feedPasses} from './sculpt-gpu-fields.js';
+import {erosionOf} from './sculpt-erosion.js';
 const $=id=>document.getElementById(id),MB=1024*1024;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const tick=()=>new Promise(resolve=>requestAnimationFrame(resolve));
@@ -36,7 +38,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   };
   config.onDeviceLost=info=>restartForMemory('a lost GPU device',()=>terrainBudget.lost('a lost GPU device',{memory:/out of memory|\boom\b/i.test(info?.message??'')}));
   config.onMemoryPressure=()=>restartForMemory('a GPU allocation failure');
+  // Start-up asks for every pipeline the first picture needs at once: the shape engines' and the feed's as soon as the device exists (while
+  // the renderer's shaders load), the Time pass's and the output stage's once the renderer is made. Each later request shares the build
+  // already under way.
+  config.onDevice=device=>{warmShapePipelines(device);feedPasses(device).catch(()=>{});};
   const output=document.createElement('canvas'),renderer=await TerrainRenderer.createChunked(output,config);
+  renderer.buildOutputPipelines().catch(()=>{});erosionOf(renderer).then(erosion=>erosion.mapsPipeline()).catch(()=>{});
   renderer.drawWhileCompiling=true;   // the view keeps a material's last picture while its new pipeline compiles (sculpt-material-cache.js)
   const g=canvas.getContext('2d'),ink=overlay.getContext('2d'),cache=new Map();
   const previewFields=createPreviewFields(renderer.device,api.previewScene);

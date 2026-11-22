@@ -68,8 +68,9 @@ export class GpuErosion {
   quiet() { return this.running ? new Promise(r => (this.quietWaiters ??= []).push(r)) : Promise.resolve(); }
 
   // H5: the maps pass (engine-weather.wgsl) on the erosion's own device and common source, built on first use.
-  async mapsPipeline() {
-    if (this.maps) return this.maps;
+  // Built once; a start-up warm-up and the first Time pass share the one build.
+  mapsPipeline() { return this.mapsBuilding ??= this.buildMaps().catch(error => { this.mapsBuilding = null; throw error; }); }
+  async buildMaps() {
     const {device} = this, C = GPUShaderStage.COMPUTE, buffer = (type, binding) => ({binding, visibility: C, buffer: {type}});
     const source = this.renderer.timeSources.maps;
     const module = device.createShaderModule({label: 'engine-weather', code: source});

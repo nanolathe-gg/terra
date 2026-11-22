@@ -183,6 +183,7 @@ export class TerrainRenderer {
       if(typeof GPUOutOfMemoryError!=='undefined'&&event.error instanceof GPUOutOfMemoryError&&this.config.onMemoryPressure?.(event.error)){this.recovering=true;event.preventDefault();return;}
       this.reportError(event.error.message);
     });
+    this.config.onDevice?.(device);   // the page's start-up can ask for its own pipelines on this device while the renderer's shaders load
     this.format = navigator.gpu.getPreferredCanvasFormat();
     // A plain unorm canvas stores the shader's values as they are, as the
     // WebGL canvas did (no sRGB encoding); opaque, as WebGL's alpha: false.
@@ -263,8 +264,10 @@ export class TerrainRenderer {
     const bakeLayout = device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, fieldsLayout]});
     this.fieldsLayout = fieldsLayout;
     this.bakePipelineLayout = bakeLayout;
-    this.rockWeather = await RockWeather.create(this,preprocess);
-    this.voxel = await VoxelSurface.create(this,this.volumeSource,preprocess);
+    // Rock weather and the voxel solid start together.
+    // Their sources join the stage scan in a fixed order, whichever is ready first.
+    [this.rockWeather, this.voxel] = await Promise.all([RockWeather.create(this,preprocess), VoxelSurface.create(this,this.volumeSource,preprocess)]);
+    this.stageSources.push({source:this.rockWeather.code,stage:'C'},{source:this.voxel.source,stage:'D'});
     const timeModules=Object.values(this.timeSources).map(source=>({source,stage:'B'}));
     this.timeUniformFields=[...uniformStages(timeModules).keys()].sort();
     this.uniformStages=uniformStages([...this.stageSources,...timeModules]);this.stageSources=null;
@@ -629,7 +632,12 @@ export class TerrainRenderer {
   // The palette's candidate table is built here, in its own submission: the queue runs in order, so every output pass encoded after this
   // call reads the finished table.
   async outputPipelines() {
-    if (!this.outputPipeline) {
+    await this.buildOutputPipelines();
+    if (!this.outputTableBuilt) this.buildOutputTable();
+  }
+  // The output stage's pipelines, built once; a start-up warm-up and the first draw share the one build.
+  buildOutputPipelines() {
+    return this.outputBuilding ??= (async () => {
       const device = this.device, module = device.createShaderModule({label: 'engine-output.wgsl', code: this.outputSource});
       const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
       if (errors.length) throw new Error('nanolathe: engine-output.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
@@ -638,8 +646,7 @@ export class TerrainRenderer {
         device.createRenderPipelineAsync({label: 'output blit', layout: 'auto', vertex: {module, entryPoint: 'blitVertex'}, fragment: {module, entryPoint: 'blitFragment', targets: [{format: this.format}]}, primitive: {topology: 'triangle-list'}}),
         device.createComputePipelineAsync({label: 'output palette table', layout: 'auto', compute: {module, entryPoint: 'buildTable'}})]);
       this.outputTableBuild = build; this.outputBlit = blit; this.outputPipeline = pipeline;
-    }
-    if (!this.outputTableBuilt) this.buildOutputTable();
+    })().catch(error => { this.outputBuilding = null; throw error; });
   }
   buildOutputTable() {
     const device = this.device, count = this.outputPaletteCount;

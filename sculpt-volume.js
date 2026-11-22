@@ -17,7 +17,6 @@ export class VoxelSurface {
   static async create(renderer,source,preprocess){
     const self=new VoxelSurface(renderer);const d=renderer.device;
     const code=preprocess('/*COMMON*/\n'+source,renderer.commonSource,new Set(['VOLUME_COMPUTE']));
-    renderer.stageSources?.push({source:code,stage:'D'});
     const module=d.createShaderModule({label:'voxel solid',code});
     const errors=(await module.getCompilationInfo()).messages.filter(m=>m.type==='error');
     if(errors.length)throw Error(errors.map(m=>`${m.lineNum}: ${m.message}`).join('\n'));

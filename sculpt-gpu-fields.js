@@ -642,19 +642,26 @@ async function sharedShapePipelines(device,pages){
         {binding: 3, visibility: S, buffer: rw}, {binding: 4, visibility: S, buffer: rw}, {binding: 5, visibility: S, buffer: ro}, {binding: 6, visibility: S, buffer: ro}, {binding: 7, visibility: S, buffer: rw}]});
       const pl = device.createPipelineLayout({bindGroupLayouts: [layout]});
       // The pipelines of one variant of the shader: the whole-map text, or the pages text (direct noise, a target's own origin).
-      const buildPipes = (paged, entries) => {
+      // Asked for all at once and async: the browser compiles them in parallel off its GPU thread, where synchronous creation compiled them
+      // one by one and held every other GPU command (the measured start-up's longest wait).
+      const buildPipes = async (paged, entries) => {
         const source = preprocessShader(raw, paged ? ['PAGES'] : []).replace('/*NODE_STRUCT*/', nodeStruct()).replace('/*CV_N*/', `const CV_N = ${CV_N}.0;`);
-        const module = device.createShaderModule({label: paged ? 'shape (pages)' : 'shape', code: source}), out = {};
-        for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
-        return out;
+        const module = device.createShaderModule({label: paged ? 'shape (pages)' : 'shape', code: source});
+        return Object.fromEntries(await Promise.all(entries.map(async e => [e, await device.createComputePipelineAsync({label: e, layout: pl, compute: {module, entryPoint: e}})])));
       };
       const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampFissure', 'smoothCopy', 'blurH', 'blurV', 'ground', 'heights', 'init', 'artHold', 'artLevel', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastJag', 'coastLayers', 'coastPlates', 'coastBeach', 'facetSnap', 'facetApply', 'packPlane', 'lfCrystalSites', 'lfCrystalRoom', 'lfCrystalApply', 'marginSave', 'marginRestore'];
-      const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse'] : [])]);
+      const pipes = await buildPipes(pages, [...MAIN, ...(pages ? ['coarse'] : [])]);
       return {layout,pipes};
     })();
     variants.set(pages,pending);pending.catch(()=>{if(variants.get(pages)===pending)variants.delete(pages);});
   }
   return variants.get(pages);
+}
+
+// Start both variants' pipelines (the whole-map fields' and the paged previews') on a new device, before any engine asks: the page's start-up
+// calls this as soon as the renderer has its device. Errors surface when an engine asks for the same build.
+export function warmShapePipelines(device) {
+  for (const pages of [false, true]) sharedShapePipelines(device, pages).catch(() => {});
 }
 
 export async function createShapeEngine({device, grid, spacing, baseHeight, sea, minH, maxH, refSpacing = spacing, pages = false}) {
