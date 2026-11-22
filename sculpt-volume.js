@@ -27,7 +27,6 @@ export class VoxelSurface {
       const a=d.createBindGroupLayout({entries:reads.map(input)}),b=d.createBindGroupLayout({entries:writes.map(output)});
       self.layouts[entryPoint]={layout:d.createPipelineLayout({bindGroupLayouts:[renderer.commonLayout,empty,a,b]}),reads,writes,a,b};
     }
-    await Promise.all([self.build(0),self.build(15)]);
     self.drawLayout=d.createBindGroupLayout({entries:[0,1,2,3,4,5,7,8].map(input)});
     self.uniform=d.createBuffer({label:'voxel region settings',size:4*256,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
     renderer.track(self.uniform,'voxel settings',4*256,'shared');self.readbacks.push(self.countReadback());
@@ -41,7 +40,7 @@ export class VoxelSurface {
   countReadback(){const b=this.device.createBuffer({label:'voxel allocation count readback',size:32,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});this.all.push(b);this.renderer.track(b,'voxel count readback',32,'shared');return b;}
   // The four counts a piece copied into buffer (repro/preview-pools.mjs delays them). The buffer goes back to the pool once read.
   mapCounts(buffer){return buffer.mapAsync(GPUMapMode.READ).then(()=>{const values=new Uint32Array(buffer.getMappedRange().slice(0));buffer.unmap();this.readbacks.push(buffer);return values;});}
-  // Both allowed rock masks are ready at startup: fixed slot 0, and the recipe table.
+  // A rock mask's passes (0: fixed slot 0; 15: the recipe table), built once: the first draw with the mask asks (renderer.specialize).
   build(mask){
     if(!this.built.has(mask))this.built.set(mask,Promise.all(Object.entries(this.layouts).map(async([entryPoint,l])=>[entryPoint,{...l,pipeline:await this.device.createComputePipelineAsync({label:entryPoint,layout:l.layout,compute:{module:this.module,entryPoint,constants:entryConstants(this.source,entryPoint,{rockMask:mask})}})}]))
       .then(list=>{this.passesBy??={};this.passesBy[mask]=Object.fromEntries(list);}));
