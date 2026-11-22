@@ -630,12 +630,14 @@ export function shapeRequestBytes(prepared){
 // Shader layouts and pipelines depend only on device and storage variant.
 // Each engine still owns all fields, uniforms, scratch and request queues.
 const shapePipelineCache=new WeakMap();
+// The shader text, read once for both variants (they ask together at start-up); a failed read is tried again on the next ask.
+let shapeShader=null;
+const shapeShaderText=()=>shapeShader??=fetch('engine-shape.wgsl').then(r=>{if(!r.ok)throw new Error(`nanolathe: engine-shape.wgsl could not be read (HTTP ${r.status})`);return r.text();}).catch(err=>{shapeShader=null;throw err;});
 async function sharedShapePipelines(device,pages){
   let variants=shapePipelineCache.get(device);if(!variants){variants=new Map();shapePipelineCache.set(device,variants);}
   if(!variants.has(pages)){
     const pending=(async()=>{
-      const r = await fetch('engine-shape.wgsl'); if (!r.ok) throw new Error(`nanolathe: engine-shape.wgsl could not be read (HTTP ${r.status})`);
-      const raw = await r.text();
+      const raw = await shapeShaderText();
       const S = GPUShaderStage.COMPUTE, rw = {type: 'storage'}, ro = {type: 'read-only-storage'};
       const layout = device.createBindGroupLayout({entries: [
         {binding: 0, visibility: S, buffer: {type: 'uniform', hasDynamicOffset: true}}, {binding: 1, visibility: S, buffer: rw}, {binding: 2, visibility: S, buffer: rw},
