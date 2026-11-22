@@ -182,9 +182,7 @@ export class GpuErosion {
       const rateKey=rain!==0?'wet':'dry',mcells=active*64/1e6;this.rate??={};
       const sized=()=>mcells>0?clamp(Math.floor(25/(this.rate[rateKey]*mcells)),1,256):256;
       this.latencyBatch??={};
-      // A pass with no rate yet (the load's passes may have had no active tile, which teaches latencyBatch but not the rate) still starts
-      // at latencyBatch: from 1 it doubled through eight round trips (measured in Firefox: the first drag's 200 iterations took 941 ms).
-      let batch=Math.max(this.rate[rateKey]?sized():1,this.latencyBatch[rateKey]??0),last=null;
+      let batch=this.rate[rateKey]?Math.max(sized(),this.latencyBatch[rateKey]??0):1,last=null;
       for(let it=0;it<age;){
         current();const count=Math.min(batch,age-it);
         encoder=device.createCommandEncoder({label:'erosion gpu slice'});
