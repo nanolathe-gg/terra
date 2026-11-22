@@ -89,7 +89,7 @@ let pagedCoarseStarted=false, mapCanvas=null, regionalFields=null, originCellX=0
 let gpuWeather=null, gpuErosionMs=null, weatherJob=0, weatherBase=null, refined=null, refinedBase=null, weatherState='pending';
 let refinedInvalidRect=null;
 let controlsEditing=false;
-let tool='plateau', seed=DEFAULT_SEED, varySeed=true, refinementSeed=DEFAULT_SEED, stroke=null, pan=null, pointerId=null, loading=false;
+let tool='hill', seed=DEFAULT_SEED, varySeed=true, refinementSeed=DEFAULT_SEED, stroke=null, pan=null, pointerId=null, loading=false;
 const randomSeed=current=>{const next=(Math.random()*4294967296)>>>0;return next===current?(next+1)>>>0:next;};
 let history=[], historyIndex=-1, historySerial=0;
 let revision=0, autosaveTimer, ready=false;
@@ -3513,7 +3513,7 @@ async function boot() {
     // A world whose saved tools or rock types cannot be read opens with its base's own (the store keeps them until this world is next saved).
     try{refreshWorldKit();}catch(err){const w=activeWorld();delete w.tools;delete w.rocks;refreshWorldKit();error(`${w.name||config.biome}’s saved tools and rock types could not be read (${err.message}). It opens with ${config.biome}’s own.`);}
     brushWorldDefinitions=structuredClone(worldToolList);buildShapeOptions();{const kit=instantiateWorldKit(config,activeWorld(),{builtIn:builtInWorld()});mapMaterials=kit.materials;mapRocks=kit.rocks;if(kit.reason)status(kit.reason);}syncMaterialChoices();syncRockAdd();syncRockChoices();buildToolbar();
-    // A new map starts with the world's tools, on the first of them where the world has no Plateau.
+    // A new map starts with the world's tools, on the Hill (small enough to see whole on a new map; the Plateau is 800 px across), or on the first of them where the world has no Hill.
     if (!toolIds().has(tool)) tool=firstTool();
     for (const id of toolIds()) toolSettings[id]=toolCard(id);
     showTool(toolSettings[tool]);
