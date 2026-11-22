@@ -79,9 +79,10 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // Only optional background work and hover detail wait for navigation to
   // settle. Visible terrain starts immediately, including during a held pan.
   const navigationDelay=180;
-  const navigating=()=>Boolean(pan||navigationPointer!==null||navigationTimer!==null);
+  const navigating=()=>Boolean(pan||touchNav||navigationPointer!==null||navigationTimer!==null);
   const bakedBefore=new Set(); let lastScroll=-Infinity,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
-  let heldSince=null,pan=null,space=false,gesture=null,hover=null;
+  let heldSince=null,pan=null,touchNav=null,space=false,gesture=null,hover=null;
+  const touches=new Map();   // the fingers down on the map (touchNavigation below), by pointer id
   const previewRejects=new Set();let previewRejectScope='';
   const DRAFT_LEAD=900;   // ms the whole map's Time pass yields to a shape edit's half-level draft
   const DRAFT_WAIT=3600;   // ms without input after which the finals start although the half-level draft has not arrived
@@ -857,7 +858,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   $('fit').onclick=()=>zoom('overview');$('one').onclick=()=>zoom(1);$('zoom').onchange=e=>zoom(e.target.value==='overview'?'overview':Number(e.target.value));
   // Pinch (Ctrl or Cmd with the wheel, which is how Chrome sends a trackpad pinch; Safari's gesture events) steps through the zoom
-  // menu's levels and keeps the point under the pointer where it is. A plain wheel or two-finger scroll still pans.
+  // menu's levels and keeps the point under the pointer where it is. A plain wheel or two-finger scroll still pans. On a touch screen
+  // two fingers pan and pinch (touchNavigation below); iPad Safari sends gesture events for that pinch too, which wait while a finger is down.
   const ZOOM_LEVELS=[.25,.5,1,2,4];
   function zoomStep(dir,event){
     if(busy||gesture)return;
@@ -875,7 +877,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   },{passive:false});
   let gestureScale=1;
   viewport.addEventListener('gesturestart',event=>{event.preventDefault();gestureScale=1;});
-  viewport.addEventListener('gesturechange',event=>{event.preventDefault();const ratio=event.scale/gestureScale;if(ratio>1.25||ratio<.8){zoomStep(ratio>1?1:-1,event);gestureScale=event.scale;}});
+  viewport.addEventListener('gesturechange',event=>{event.preventDefault();if(touches.size)return;const ratio=event.scale/gestureScale;if(ratio>1.25||ratio<.8){zoomStep(ratio>1?1:-1,event);gestureScale=event.scale;}});
   $('tile-grid').onchange=()=>schedule();
   $('weathered-view').onchange=()=>{
     weatheredView=$('weathered-view').checked;
@@ -1043,6 +1045,70 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   overlay.addEventListener('pointerleave',()=>{hoveredNode=-1;hover=null;overlays();});
   const end=event=>{if(pan?.id===event.pointerId){pan=null;navigationChanged();}if(gesture?.id===event.pointerId){const commit=event.type==='pointerup';released=commit;if(commit)preview(event,true);const s=gesture;gesture=null;if(s.type==='move')api.endMove(commit);else api.endStroke(commit);released=commit;if(commit)pendingStrokeTime=performance.now();}if(overlay.hasPointerCapture(event.pointerId))overlay.releasePointerCapture(event.pointerId);schedule();};
   for(const name of ['pointerup','pointercancel','lostpointercapture'])overlay.addEventListener(name,end);
+  // Touch: one finger uses the tool, two fingers pan and pinch the map. A finger's press waits until it moves 8 px or lifts before the
+  // tools see it, so a second finger that lands before then pans without the first having placed a feature, picked a pixel, selected a
+  // shape or begun a stroke; one that lands later cancels what the first began, as Escape does. Two fingers do not pan under a Pencil or
+  // mouse gesture. Pinching steps through the zoom
+  // menu's levels (one a doubling of the fingers' spread) and the art point between the fingers stays between them. A finger left down
+  // after a pan does nothing until every finger is up or a second joins it again. Apple Pencil and the mouse are not touches and are not held back.
+  const TOUCH_SLOP=8,replayed=new WeakSet();
+  let touchWait=null;   // the first finger's held press: {event}
+  const forward=(type,from,extra={})=>{
+    const e=new PointerEvent(type,{bubbles:true,cancelable:true,composed:true,pointerId:from.pointerId,pointerType:from.pointerType,isPrimary:from.isPrimary,
+      clientX:from.clientX,clientY:from.clientY,screenX:from.screenX,screenY:from.screenY,button:from.button,buttons:from.buttons,width:from.width,height:from.height,
+      pressure:from.pressure,shiftKey:from.shiftKey,altKey:from.altKey,ctrlKey:from.ctrlKey,metaKey:from.metaKey,...extra});
+    replayed.add(e);overlay.dispatchEvent(e);
+  };
+  const releaseWait=()=>{if(!touchWait)return;const {event}=touchWait;touchWait=null;const t=touches.get(event.pointerId);if(t)t.forwarded=true;forward('pointerdown',event);};
+  const midpoint=()=>{const [a,b]=[...touches.values()];return {clientX:(a.x+b.x)/2,clientY:(a.y+b.y)/2};};
+  const spread=()=>{const [a,b]=[...touches.values()];return Math.max(1,Math.hypot(a.x-b.x,a.y-b.y));};
+  function beginTouchNavigation(){
+    touchWait=null;
+    // What the first finger began ends unmade: the terrain's stroke or move, or a feature tool's drag (each listens for its pointer's cancel).
+    for(const [id,t] of touches)if(t.forwarded)forward('pointercancel',{pointerId:id,pointerType:'touch',isPrimary:false,clientX:0,clientY:0,screenX:0,screenY:0,button:0,buttons:0,width:1,height:1,pressure:0});
+    if(gesture||pan||features?.busy){for(const t of touches.values())t.spent=true;return;}   // a Pencil or mouse gesture holds the map
+    const mid=midpoint();
+    touchNav={ids:new Set(touches.keys()),anchor:screen(mid),spread:spread()};
+    for(const id of touchNav.ids)if(!overlay.hasPointerCapture(id))try{overlay.setPointerCapture(id);}catch{}
+    hoveredNode=-1;hover=null;navigationChanged();
+  }
+  function moveTouchNavigation(){
+    // A level each time the spread passes 1.5x (or 1/1.5x) of where the last level began: a doubling of the spread is about one level, and
+    // a finger's wobble at the threshold does not step back and forth. At the end of the menu the threshold moves with the fingers.
+    const mid=midpoint();
+    for(let n=0;n<5&&!busy;n++){
+      const ratio=Math.log2(spread()/touchNav.spread),dir=ratio>.6?1:ratio<-.6?-1:0;if(!dir)break;
+      const was=overview?'overview':scale;zoomStep(dir,mid);touchNav.spread*=2**dir;if((overview?'overview':scale)===was)break;
+    }
+    if(!overview){const r=overlay.getBoundingClientRect();viewport.scrollLeft=Math.max(0,touchNav.anchor.x*scale-(mid.clientX-r.left));viewport.scrollTop=Math.max(0,touchNav.anchor.z*scale-(mid.clientY-r.top));}
+    navigationChanged();
+  }
+  const isTouch=event=>event.pointerType==='touch'&&!replayed.has(event);
+  viewport.addEventListener('pointerdown',event=>{
+    if(!isTouch(event)||event.target!==overlay)return;
+    touches.set(event.pointerId,{x:event.clientX,y:event.clientY,spent:Boolean(touchNav)||touches.size>=2});
+    event.preventDefault();
+    if(touches.size===1){event.stopImmediatePropagation();touchWait={event};return;}
+    event.stopImmediatePropagation();
+    if(touches.size===2&&!touchNav)beginTouchNavigation();   // also a finger put back beside one left down after a pan
+  },{capture:true});
+  viewport.addEventListener('pointermove',event=>{
+    const t=isTouch(event)&&touches.get(event.pointerId);if(!t)return;
+    t.x=event.clientX;t.y=event.clientY;
+    if(touchWait?.event.pointerId===event.pointerId){
+      if(Math.hypot(event.clientX-touchWait.event.clientX,event.clientY-touchWait.event.clientY)<TOUCH_SLOP){event.stopImmediatePropagation();return;}
+      releaseWait();return;   // the tool sees the press, then this move
+    }
+    if(touchNav?.ids.has(event.pointerId)){event.stopImmediatePropagation();event.preventDefault();moveTouchNavigation();return;}
+    if(t.spent||touches.size>1)event.stopImmediatePropagation();
+  },{capture:true});
+  for(const name of ['pointerup','pointercancel'])viewport.addEventListener(name,event=>{
+    const t=isTouch(event)&&touches.get(event.pointerId);if(!t)return;
+    touches.delete(event.pointerId);
+    if(touchWait?.event.pointerId===event.pointerId){if(name==='pointerup')releaseWait();else{touchWait=null;event.stopImmediatePropagation();}return;}   // a tap: the press, then this lift
+    if(touchNav?.ids.has(event.pointerId)){event.stopImmediatePropagation();for(const [,o] of touches)o.spent=true;if(overlay.hasPointerCapture(event.pointerId))overlay.releasePointerCapture(event.pointerId);touchNav=null;navigationChanged();return;}
+    if(t.spent)event.stopImmediatePropagation();
+  },{capture:true});
   // Space held pans the map, wherever the focus is, but in a text field, in a modal dialog, or on a control the artist reached with Tab,
   // which Space presses. A button the mouse clicked keeps the focus, and Space still pans there (it would press it again).
   let tabbed=false;document.addEventListener('pointerdown',()=>{tabbed=false;},true);document.addEventListener('keydown',event=>{if(event.key==='Tab')tabbed=true;},true);
