@@ -36,7 +36,7 @@ export class VoxelSurface {
     return self;
   }
   constructor(renderer){this.renderer=renderer;this.device=renderer.device;this.owned=[];this.made=new WeakSet();   // made: every working resource own() made, for the input checksum's guard
-    this.previewCounts=new Map();this.finalCounts=new Map();this.predictionStats={predicted:0,seeds:0,overflows:0,budgetFallbacks:0,preDrawWaitMs:0,postDrawWaitMs:0};this.finalStats={predicted:0,seeds:0,overflows:0};this.stats={pieces:0,bricks:0,candidateBricks:0,peakBytes:0,allocationMs:0};}
+    this.previewCounts=new Map();this.finalCounts=new Map();this.predictionStats={predicted:0,seeds:0,scaled:0,overflows:0,budgetFallbacks:0,preDrawWaitMs:0,postDrawWaitMs:0};this.finalStats={predicted:0,seeds:0,overflows:0};this.stats={pieces:0,bricks:0,candidateBricks:0,peakBytes:0,allocationMs:0};}
   // Both allowed rock masks are ready at startup: fixed slot 0, and the recipe table.
   build(mask){
     if(!this.built.has(mask))this.built.set(mask,Promise.all(Object.entries(this.layouts).map(async([entryPoint,l])=>[entryPoint,{...l,pipeline:await this.device.createComputePipelineAsync({label:entryPoint,layout:l.layout,compute:{module:this.module,entryPoint,constants:entryConstants(this.source,entryPoint,{rockMask:mask})}})}]))
@@ -153,7 +153,13 @@ export class VoxelSurface {
       // rectangle). A final piece's draw waits for the count, which arrives while the build and wear run; a piece that overflowed builds
       // again at its count, so the picture is the same.
       const preview=r.voxelScale>1,key=preview?[step,s.columnsX,s.columnsY].join(','):[step,...s.origin,s.columnsX,s.columnsY].join(','),counted=preview?this.previewCounts:this.finalCounts;
-      const last=counted.get(key),ps=this.predictionStats,fs=this.finalStats;
+      // A gesture's preview region grows by a column or two every few pictures, and each new size missed its count and waited for it
+      // before drawing (measured in Firefox: 11 of 27 paint-drag pictures, 100 ms each). A missing size takes the count of the nearest
+      // size at the same step, within half again its area either way, scaled by the area; the headroom and the overflow check below cover it.
+      const area=s.columnsX*s.columnsY,near=()=>{let best;for(const [k,v] of counted){const [st,cx,cy]=k.split(',').map(Number),ratio=area/(cx*cy);
+        if(st===step&&ratio<=1.5&&ratio>=1/1.5&&(!best||Math.abs(Math.log(ratio))<Math.abs(Math.log(best.ratio))))best={ratio,count:v*ratio};}return best?.count;};
+      let last=counted.get(key);const ps=this.predictionStats,fs=this.finalStats;
+      if(last===undefined&&preview){last=near();if(last!==undefined)ps.scaled++;}
       let counts=null,capacity=last!==undefined?Math.min(s.capacity,Math.ceil(last*1.5)+64):null;
       const readCounts=async afterDraw=>{const t=preview?performance.now():0,values=await pending;
         if(preview)ps[afterDraw?'postDrawWaitMs':'preDrawWaitMs']+=performance.now()-t;
