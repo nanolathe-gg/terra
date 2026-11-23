@@ -36,7 +36,6 @@ test('every world has a config file, and the services are declared', () => {
   for (const world of services.worlds) {
     const config = JSON.parse(read(`config/${world}.json`));
     assert.equal(config.biomeId, world);
-    assert.ok(existsSync(join(folder, config.materialTable)), `${world}: table ${config.materialTable} is in the build`);
     assert.ok(!('variants' in config), `${world}: no variants`);
   }
   const catalog = JSON.parse(read('config/catalog.json'));

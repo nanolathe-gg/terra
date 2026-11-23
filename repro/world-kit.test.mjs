@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {blankMaterial,copyMaterial,worldMaterials,addMaterial} from '../sculpt-materials.js';
 import {copyRocks,duplicateRock,rockByKey} from '../sculpt-rock-presets.js';
-import {mapOwnedKit,worldKit,storedWorldKit,baseRockKeys,copyMaterialRef,instantiateWorldKit,validateWorldRocks,resolvedWorldCard,worldToolUnavailable,authoredWorldTool,sameKitData,addWorldRockInstance} from '../sculpt-world-kit.js';
+import {mapOwnedKit,worldKit,storedWorldKit,baseRockKeys,copyMaterialRef,instantiateWorldKit,validateWorldRocks,resolvedWorldCard,authoredWorldTool,sameKitData,addWorldRockInstance} from '../sculpt-world-kit.js';
 const config={biomeId:'fixture',materials:{ground:'green-ground',water:'green-water',rock:'green-rock'},tools:[{id:'hill',label:'Hill',icon:'hill',color:'#778899',group:'shape',rock:'soil'}]};
 const graph=blankMaterial();
 const template=(key='wrock-stone',extra={})=>({key,name:'Stone',knobs:{faceWhole:.8},column:null,colors:null,material:{key:'wmat-stone',name:'Stone grain',graph:copyMaterial(graph)},...extra});
@@ -31,7 +31,7 @@ test('load provenance requires exact recipe and material snapshot, not a matchin
 test('full runtime and material tables fail adoption without any partial writes or replacement',()=>{
  const full=Array.from({length:15},(_,i)=>({slot:i+1,key:null,name:'Local '+i,knobs:{faceWhole:i/20},column:null,colors:null})),materials=worldMaterials(config),before=JSON.stringify([full,materials]);
  const result=instantiateWorldKit(config,world(),{rocks:full,materials,source:{}});
- assert.deepEqual(result.rocks,full);assert.deepEqual(result.materials,materials);assert.deepEqual(result.unbound,['wrock-stone']);assert.match(worldToolUnavailable(result.kit.tools[1],result.rocks,result.materials,config),/slot/);
+ assert.deepEqual(result.rocks,full);assert.deepEqual(result.materials,materials);assert.deepEqual(result.unbound,['wrock-stone']);
  assert.equal(JSON.stringify([full,materials]),before);
  let crowded=materials;while(crowded.length<23)crowded=addMaterial(crowded,graph,'Map material').materials;
  const blocked=instantiateWorldKit(config,world(),{rocks:[],materials:crowded,source:{}});
@@ -64,14 +64,14 @@ test('kit object/card key order is canonical, while toolbar order remains meanin
  const two={...w,tools:[...w.tools,tool({id:'world-second',label:'Second'})]};
  assert(!sameKitData(worldKit(config,two),worldKit(config,{...two,tools:[two.tools[0],two.tools[2],two.tools[1]]})),'the authored tools keep their order');
  const absent=instantiateWorldKit(config,{tools:[tool({rock:'wrock-test'})],rocks:[template('wrock-test',{material:{world:'worldSlope'}})]});
- assert.match(worldToolUnavailable(absent.kit.tools.find(authoredWorldTool),absent.rocks,absent.materials,config,absent.kit),/slope cover material is missing/);
- assert.match(worldToolUnavailable(tool({ground:{world:'worldSlope'}}),[],worldMaterials(config),config),/slope cover material is missing/);
+ 
+ 
 });
 
 test('a positive world catalog reference never aliases slot0 through a default-recipe name collision',()=>{
  const c={...config,rock:{recipe:'wrock-stone'}},w=world(),full=Array.from({length:15},(_,i)=>({slot:i+1,key:null,name:'Local '+i,knobs:{},column:null,colors:null}));
  const result=instantiateWorldKit(c,w,{rocks:full,materials:worldMaterials(c),source:{}}),t=result.kit.tools[1];
- assert.match(worldToolUnavailable(t,result.rocks,result.materials,c,result.kit),/15 rock slots/);assert.equal(resolvedWorldCard(t,result.rocks,result.materials,c).rockPreset,-1);
+ assert.equal(resolvedWorldCard(t,result.rocks,result.materials,c).rockPreset,-1);
 });
 
 test('foreign source native tools are not reinterpreted as destination native tools during carry',()=>{
@@ -82,7 +82,7 @@ test('an explicit instance can recover its original world identity after capacit
  const w=world(),full=Array.from({length:15},(_,i)=>({slot:i+1,key:null,name:'Local '+i,knobs:{},column:null,colors:null})),rejected=instantiateWorldKit(config,w,{rocks:full,materials:worldMaterials(config),source:{}});
  assert.deepEqual(rejected.unbound,['wrock-stone']);
  const added=addWorldRockInstance(w.rocks[0],full.slice(0,-1),rejected.materials),bound=added.rocks.map(r=>r.slot===added.slot?{...r,worldKey:w.rocks[0].key}:r);
- assert.equal(worldToolUnavailable(w.tools[1],bound,added.materials,config,worldKit(config,w)),'');assert.equal(resolvedWorldCard(w.tools[1],bound,added.materials,config).rockPreset,15);
+ assert.equal(resolvedWorldCard(w.tools[1],bound,added.materials,config).rockPreset,15);
 });
 
 

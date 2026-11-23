@@ -4,7 +4,7 @@
 import {checkTool,storedCard,worldTools,shapeGone,toolShape,copyMapTools,addMapTool,MAP_TOOLS_MAX} from './sculpt-tools.js';
 import {shapeFrom} from './sculpt-scene.js';
 import {copyRocks,worldRocks,giveRockMaterials,ROCK_SLOTS} from './sculpt-rock-presets.js';
-import {copyMaterial,copyMaterials,addMaterial,worldMaterials,worldOwnMaterials,worldKey,roleName,MAP_ROLES,MATERIAL_SLOTS,materialStates,materialStaged,materialCacheUsage} from './sculpt-materials.js';
+import {copyMaterial,copyMaterials,addMaterial,worldMaterials,worldOwnMaterials,worldKey,MAP_ROLES,MATERIAL_SLOTS,materialStates,materialStaged,materialCacheUsage} from './sculpt-materials.js';
 
 import {orderedText} from './sculpt-share.js';
 
@@ -143,20 +143,6 @@ export function resolvedWorldCard(tool,rocks,materials,config){
   if(rock!==undefined){const r=toolRock(rock,rocks,config);card.rockPreset=r?.slot??-1;}
   if(tool.ground){const slot=materialRefSlot(tool.ground,materials);card.groundPreset=slot?(materials.find(m=>m.slot===slot)?.worldGround?0:slot):-1;}
   return card;
-}
-export function worldToolUnavailable(tool,rocks,materials,config,kit={rocks:[]}){
-  if(!authoredWorldTool(tool))return '';
-  const refReason=ref=>{
-    if(ref?.world&&!materialRefSlot(ref,materials)&&ref.world!=='worldRock')return `The world’s ${ref.world.startsWith('layer:')?'surface layer':roleName(ref.world)} material is missing.`;
-    if(ref?.key){const held=materials.find(m=>m.key===ref.key);if(held&&!materialRefSlot(ref,materials))return `This map keeps a different copy of ${ref.name}.`;}
-    return '';
-  };
-  if(tool.rock&&!toolRock(tool.rock,rocks,config)){
-    const reason=refReason(kit.rocks.find(r=>r.key===tool.rock)?.material);if(reason)return reason;
-    return rocks.length>=ROCK_SLOTS-1?'This map’s 15 rock slots are full.':'Add this tool’s world rock type to this map before drawing with it.';
-  }
-  if(tool.ground&&!materialRefSlot(tool.ground,materials))return refReason(tool.ground)||'This map cannot allocate this tool’s material within its material budget.';
-  return '';
 }
 // An explicit Add/Clone uses the same portable template but allocates only its requested instance; it does not adopt other catalog entries.
 export function addWorldRockInstance(template,rocks,materials){
