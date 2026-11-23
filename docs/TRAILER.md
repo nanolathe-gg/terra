@@ -76,14 +76,16 @@ Changes to the owner's first outline (2026-11-19). Strike any of them.
 ## Cartoon cold open (2026-11-23)
 
 The owner's idea: open on the old way, a person stamping maps by hand. Drawn
-as a flat-shape cartoon (`cuts.html?cut=cartoon`, 12 s): from above, a hand
-with a "HILL 17" rubber stamp prints the same hill along a pencil curve; the
-curve bends but the stamp cannot, a rotated try comes out tilted, the last
-one smears, and a "sigh." Then the match cut: the pencil line becomes a Terra
-path and the paper becomes the engine's render of that ridge. The stamps are
-generic cartoon hills, not retail art. `assemble-combined.sh <cuts> <take>
-cartoon` writes a 65 s version: the cartoon, the real-time take, the quick
-cut of every world, the gameplay and the end card.
+as a flat-shape cartoon (`cuts.html?cut=cartoon`, 11.8 s): from above, a hand
+with a "HILL 17" rubber stamp prints the same hill all over a sheet of graph
+paper, faster and faster; then every print gets the same dashed box and
+"HILL 17" tag, and "Every hill: exactly the same." In the match cut the
+paper dissolves into the engine's render of seven Terra hills at the same
+spots (`trailer/cartoon/hills.json`), each with its own size, height,
+outline and breakup: "Terra: every hill its own." The stamps are generic
+cartoon hills, not retail art. `assemble-combined.sh <cuts> <take> cartoon`
+writes a 65 s version: the cartoon, the real-time take, the quick cut of
+every world, the gameplay and the end card.
 
 ## Combined cut (2026-11-21)
 
