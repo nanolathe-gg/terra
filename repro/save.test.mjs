@@ -120,3 +120,23 @@ test('a map saves the value its world draws with: engineDefaults over defaults, 
   assert.equal(worldOverrideCount({name:'Moon',colors:{},knobs:{erosion:'1',erosionRain:'0'}},world),0);
   assert.equal(worldOverrideCount({name:'Moon',colors:{},knobs:{erosion:'0'}},world),1);
 });
+
+test('a save written before map-owned biomes opens with its template: the starter brushes its strokes name, then its own', async () => {
+  const {hasMapBiome,savedMapTools,applyEngineTables} = await import('../sculpt-save.js');
+  const {addMapTool} = await import('../sculpt-tools.js');
+  const template={biomeId:'green',tools:[{id:'hill',label:'Hill',icon:'hill',color:'#aabbcc',group:'shape',shape:'hill'}]};
+  const world={knobs:{},roles:{ground:'green-ground'},surface:[],engine:{material:{a:1},water:{b:1}}};
+  const own=addMapTool([],[],{label:'Broad hill',icon:'mountain',color:'#d08050',group:'shape',shape:'hill',card:{diameter:300}}).tools;
+  // As main wrote it: material and water tables only, and `tools` only for the map's own.
+  for (const older of [{worldSettings:world},{worldSettings:world,tools:own}]) {
+    assert.equal(hasMapBiome(older),false);
+    assert.deepEqual(savedMapTools(older,template,[],[]).map(t=>t.id),['hill',...(older.tools??[]).map(t=>t.id)]);
+  }
+  // A whole snapshot: every engine table and its brush list, which is the list (a removed starter stays removed).
+  const whole={worldSettings:{...world,engine:{...world.engine,rock:{},features:{}}},tools:own};
+  assert.equal(hasMapBiome(whole),true);
+  assert.deepEqual(savedMapTools(whole,template,[],[]).map(t=>t.id),own.map(t=>t.id));
+  assert.equal(hasMapBiome({...whole,tools:undefined}),false,'no brush list: not whole');
+  // A table the served data lacks is taken whole, not a crash.
+  assert.deepEqual(applyEngineTables({material:{a:1}},{material:{a:2},rock:{presets:{x:1}}}).rock,{presets:{x:1}});
+});

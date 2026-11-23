@@ -6,6 +6,7 @@ import {KNOBS} from './sculpt-knobs.js';
 import {worldHexColors,isTone} from './sculpt-scene.js';
 import {normalizeSet} from './sculpt-feature-set.js';
 import {copySurface,withSurfaceMaterials} from './sculpt-material-model.js';
+import {copyMapTools,starterTools,MAP_TOOLS_MAX} from './sculpt-tools.js';
 
 // The tables of a world's data the renderer reads as they are (not rows): its material constants, water colors and placement thresholds.
 // The map keeps them with its world settings, so retuning a built-in world's table never changes a saved map either. Only a key the
@@ -26,7 +27,8 @@ export function copyEngineTables(value) {
 const mergeKnown=(into,from,depth=0) => { const out={...into}; for (const [k,v] of Object.entries(from)) { if (!Object.hasOwn(into,k)||!sameKind(v,into[k])) continue; out[k]=depth<1&&plain(v)&&plain(into[k])?mergeKnown(into[k],v,depth+1):structuredClone(v); } return out; };
 export function applyEngineTables(config,engine,{replace=false}={}) {
   for (const k of ENGINE_TABLES) {
-    if (plain(engine?.[k])) config[k]=replace?structuredClone(engine[k]):mergeKnown(config[k],engine[k]);
+    // A table the served data lacks is the map's own, whole.
+    if (plain(engine?.[k])) config[k]=replace||!plain(config[k])?structuredClone(engine[k]):mergeKnown(config[k],engine[k]);
     else if (replace && engine) delete config[k];
   }
   return config;
@@ -113,12 +115,18 @@ export function copySavedWorld(value,config) {
 }
 
 
-// Version 6 maps already contained the effective look. Their saved tool list
-// is definitive when present. A pre-snapshot file can still take the ordinary
-// template import path if that template is installed.
+// A save that holds its whole biome: its rows, roles, surface layers, every engine table (the rock and feature tables were added with
+// map-owned biomes, so a save written before them has neither) and its brush list. Such a map opens with no built-in template; an older
+// save opens with its template's data under its own settings, and takes the template's starter brushes with its own (savedMapTools).
 export function hasMapBiome(save) {
-  const world=save?.worldSettings;
-  return plain(world?.knobs)&&plain(world.roles)&&plain(world.engine?.material)&&plain(world.engine?.water)&&Array.isArray(world.surface);
+  const world=save?.worldSettings,engine=world?.engine;
+  return plain(world?.knobs)&&plain(world.roles)&&Array.isArray(world.surface)&&['material','water','rock','features'].every(k=>plain(engine?.[k]))&&Array.isArray(save.tools);
+}
+// A save's brush list: a whole biome's as saved; an older save's own tools after its template's starter brushes, which its strokes name.
+export function savedMapTools(save,config,rocks,materials) {
+  const own=copyMapTools(save?.tools)??[];
+  if (hasMapBiome(save)) return own;
+  return [...starterTools(config,rocks,materials).filter(t=>!own.some(o=>o.id===t.id)),...own].slice(0,MAP_TOOLS_MAX);
 }
 export function mapBiomeConfig(editor,save) {
   const world=save.worldSettings;

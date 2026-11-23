@@ -1,5 +1,5 @@
 import {requestAdapter} from './sculpt-webgpu.js';
-import {worldBase,savedWorld,worldOverrideCount,copySavedWorld,hasMapBiome,mapBiomeConfig,worldKeys,applyEngineTables,copyEngineTables,storedWorldMap,LOOK_CARDS,lookCard,roleCard,roleNameCard,worldRoles,copyRoles,applyRoles} from './sculpt-save.js';
+import {worldBase,savedWorld,worldOverrideCount,copySavedWorld,hasMapBiome,mapBiomeConfig,savedMapTools,engineTables,worldKeys,applyEngineTables,copyEngineTables,storedWorldMap,LOOK_CARDS,lookCard,roleCard,roleNameCard,worldRoles,copyRoles,applyRoles} from './sculpt-save.js';
 import {normalizeSet} from './sculpt-feature-set.js';
 import {changedWeatherTiles,invalidateRefinement,refinementValid} from './sculpt-change-map.js';
 import {configureMap,mapGeometry,mountMapCanvas,validMapSize,savedPlain} from './sculpt-map.js';
@@ -1901,7 +1901,7 @@ const strokeCard=d => strokeCardIn(config,d);
 function scriptedScene(list,{ground=true,tools,materials}={}) {
   const nextMaterials=materials===undefined?mapMaterials:withWorldMaterials(materials,config);
   worldInputQueue.flush();
-  if (tools!==undefined) restoreMapTools(copyMapTools(tools)??[],true);   // a scene's own tools (a scene's `tools`), which its strokes may name
+  if (tools!==undefined) { const starters=new Set((openingConfig.tools??[]).map(t=>t.id)); restoreMapTools([...mapTools.filter(t=>starters.has(t.id)),...(copyMapTools(tools)??[])],true); }   // a scene's own tools (a scene's `tools`), which its strokes may name
   mapMaterials=nextMaterials;syncMaterialChoices();materialEditor?.refresh();if(materials!==undefined)keepWorldMaterials();   // a scene's ground and water become the world's, as an edit's do
   applySeedControl(); refinementSeed=seed;
   cancelWeather(); refined=refinedBase=null; dropGpuWeather(); clearRendererWeather(); 
@@ -2068,11 +2068,12 @@ const savedStrokes=(list,carry,own,tables) => { const ids=toolIds(own),saved=inf
 function loadSketch(s,carry=false) {
   if (!s || s.format!=='nanolathe-terrain-sculpt' || s.version!==6 || s.size!==size || s.grid!==grid || !Array.isArray(s.nodes) || s.nodes.some(n => !n)) throw new Error('Load a map stroke graph with the same canvas and grid size.');
   // Tools and rock types an earlier build kept in a world become the map's own (sculpt-world-kit.js mapOwnedKit), and the world keeps none.
+  const whole=hasMapBiome(s);
   if (!carry) { const owned=mapOwnedKit(s,openingConfig??config); s=owned.sketch; if (owned.lost) status(`${owned.lost} of the world’s own tools did not fit among this map’s ${MAP_TOOLS_MAX}; shapes drawn with them show as Landform.`); }
   { const w=activeWorld(); if (w.tools!==undefined||w.rocks!==undefined) { delete w.tools; delete w.rocks; refreshWorldKit(); } }
   const column=copyColumn(s.column),rock=copyRockSettings(s.rock),rocks=copyRocks(s.rocks),materials=copyMaterials(s.materials);let own=copyMapTools(s.tools)??[];
   const supplied=rocks??(config.mapBiome?[]:worldRocks(config)),adopted=surfaceMaterials(config.surface,adoptWorldMaterials(materials,config,{carried:carry}),{config,nodes:s.nodes,rocks:supplied}),staged=instantiateWorldKit(config,activeWorld(),{rocks:supplied,materials:adopted,source:s.worldSettings??{},append:s.worldSettings?.rocks!==undefined,builtIn:builtInWorld()});
-  if (s.tools===undefined) own=starterTools(openingConfig,staged.rocks,staged.materials);
+  own=whole?own:savedMapTools(s,openingConfig,staged.rocks,staged.materials);
   const ids=toolIds(own);
   const next=deserializeNodes(savedStrokes(s.nodes,carry,own,staged));
   shapeClipboard=null;   // copied shapes name this map's rocks and materials: they do not paste into another map
@@ -2613,10 +2614,13 @@ const ALL_CARDS=LOOK_CARDS.map(([card])=>card),KNOB_KEYS=new Set(KNOBS.flatMap((
 // A built-in world's look as a save would hold it: its rows' defaults, colors, materials, surface, tables, rock types, column and features.
 async function mapLook(s) {
   if (s?.format!=='nanolathe-terrain-sculpt') throw Error('Choose a Terraform map file.');
-  const cfg=await configForSave(s),owned=mapOwnedKit(s,cfg).sketch;
+  const cfg=await configForSave(s),whole=hasMapBiome(s),owned=mapOwnedKit(s,cfg).sketch;
   const rocks=copyRocks(owned.rocks)??[],materials=copyMaterials(owned.materials)??[];
-  return {...owned,worldSettings:copySavedWorld(owned.worldSettings,cfg)??{},rocks,materials,
-    tools:copyMapTools(owned.tools)??starterTools(cfg,rocks,materials),
+  let world=owned.worldSettings;
+  // An older map file is completed from its template, as opening it would: the template's tables under its own, and its game settings.
+  if (!whole && world) world={...world,engine:engineTables(applyEngineTables(engineTables(cfg),world.engine)),game:world.game??config.exportCatalog?.worlds?.[cfg.biomeId]};
+  return {...owned,worldSettings:copySavedWorld(world,cfg)??{},rocks,materials,
+    tools:whole?copyMapTools(owned.tools)??[]:savedMapTools(owned,cfg,rocks,materials),
     mapData:{...(owned.mapData||{}),featureSet:normalizeSet(owned.mapData?.featureSet,cfg)}};
 }
 async function builtInLook(id) {
