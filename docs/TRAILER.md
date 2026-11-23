@@ -89,12 +89,12 @@ every world, the gameplay and the end card.
 
 ## End card (2026-11-23)
 
-The logo is the owner's own map, `trailer/logo-terra.json`: "Terra"
-written on Painted Desert (8 x 8), with an alluvial fan above the letters
-and shallow water below. `logo-from-save.mjs` opens it in the real editor
-through Open, waits for weathering, and captures the canvas without the
-editor's overlays (`--zoom 0.34 --center 2200,1780` frames the whole
-composition; `--zoom 0.8 --center 2280,2060` frames the letters alone).
+The logo is the owner's own map, `trailer/logo-terra.json` (TerraLogo):
+"Terra" written on Painted Desert (8 x 8), with three small stamps beside
+the T, an alluvial fan above and shallow water below. `logo-from-save.mjs`
+opens it in the real editor through Open, waits for weathering, and
+captures the canvas without the editor's overlays. The card shows the
+letters only (owner, 2026-11-23): `--zoom 0.8 --center 2215,2075`.
 `cuts.html` fits the picture above the card's two lines (`?logo=` picks
 another picture). It replaces the Green TERRA letters (`logo-green.json`),
 which stay for comparison.
