@@ -21,7 +21,8 @@ test('every library material is valid, compiles, and survives a copy unchanged',
     assert.equal(program.instructions.length, m.nodes.length);
     assert.match(source.main, /fn groundMain/); assert.match(programSource(program, true).main, /fn thumbMain/);
     assert.equal(m.nodes.filter(n => n.type === 'output').length, 1, key);
-    assert.ok(m.palette.length >= 2 && m.dither.amount > 0, key + ' is reduced to a palette');
+    if (m.palette.length) assert.ok(m.palette.length >= 2 && m.dither.amount > 0, key + ' uses its material palette');
+    else assert.equal(m.dither.amount, 0, key + ' keeps continuous color until the lit map is reduced');
   }
 });
 
