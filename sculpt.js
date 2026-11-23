@@ -3485,16 +3485,31 @@ async function boot() {
     loadingStep('Reading the world…');
     services=await (await fetch('services.json')).json();   // which server-side services this host has (export, features, saving to a server)
     await chooseMap();
-    const pending=await takePendingSketch(experiment.get('pendingSketch'));
-    const look=await takePendingSketch(experiment.get('lookFrom'));
+    let pending=await takePendingSketch(experiment.get('pendingSketch'));
+    let look=await takePendingSketch(experiment.get('lookFrom'));
     const fresh=experiment.has('newMap');
-    const restoring=pending??(!fresh?workingMap:null);
-    const source=fresh&&look?look:restoring;
-    const template=experiment.get('biome')||source?.biome||services.defaultWorld;
+    let restoring=pending??(!fresh?workingMap:null);
+    let source=fresh&&look?look:restoring;
     const response=await fetch('config/editor.json');
     if (!response.ok) throw Error('Could not load the editor settings.');
     editorConfig=await response.json();
-    config=hasMapBiome(source)?mapBiomeConfig(editorConfig,source):await readTemplate(template);
+    // The map's own biome, checked whole before anything uses it, or an older map's template. A map that cannot be opened (a damaged
+    // snapshot, an unreadable tool, a template this host lacks) is let go as bootMap lets a damaged map go: kept unchanged in Maps, and
+    // this tab opens the picker on the default world.
+    try {
+      if (hasMapBiome(source)) {
+        config=mapBiomeConfig(editorConfig,source);
+        copySavedWorld(mapOwnedKit(source,config).sketch.worldSettings,config);copyMapTools(source.tools);copyRocks(source.rocks);copyMaterials(source.materials);
+      } else config=await readTemplate(experiment.get('biome')||source?.biome||services.defaultWorld);
+    } catch (err) {
+      if (!source) throw err;
+      const name=String(source.mapData?.name||'Untitled map').slice(0,60);
+      if (source===workingMap) { mapsNote=shareError=`Your map “${name}” could not be opened: ${err.message} It is kept unchanged in Maps.`; tabMapId=null;releaseMap?.();releaseMap=null;workingMap=null; }
+      else if (source===look) shareError=`The look of “${name}” could not be read: ${err.message}`;
+      else shareError=`The map “${name}” could not be opened: ${err.message}`;
+      pending=look=restoring=source=null;experiment.delete('world');experiment.delete('biome');
+      config=await readTemplate(services.defaultWorld);
+    }
     if (look && !fresh && experiment.has('forkedFrom')) {
       config.biomeId=look.biome||config.biomeId;
       config.mapGame=look.worldSettings?.game??null;
