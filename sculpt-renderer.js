@@ -191,17 +191,13 @@ export class TerrainRenderer {
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST});
 
     // The engine's shaders (engine-frag / engine-bake / engine-common) draw every world.
-    // Every world's materials are numbers: the config names its table (config.materialTable).
-    const tableUrl = this.config.materialTable;
-    this.materialData = null;
-    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', tableUrl, 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl', 'engine-ground.wgsl', 'engine-ground-dither.wgsl', 'engine-output.wgsl'];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl', 'engine-ground.wgsl', 'engine-ground-dither.wgsl', 'engine-output.wgsl'];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch(name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
-    const modelTable = extra[0];
-    const palette = JSON.parse(extra[1]);
+    const palette = JSON.parse(extra[0]);
     this.paletteColours = palette.colours;
     this.paletteIndexed = palette.indexed;
     // Slots 0-9 and 246-254 of the game's palette are Windows' static system colours, which its map art does not draw with (255, white,
@@ -210,8 +206,8 @@ export class TerrainRenderer {
     this.paletteArt = palette.colours.map((_, i) => i).filter(i => art.has(String(palette.colours[i])));
     this.commonSource = common;
     this.outputSource = extra[extra.length - 1];
-    this.volumeSource = extra[2];
-    this.timeSources={erosion:this.preprocessShader(extra[3]),maps:this.preprocessShader(extra[4])};
+    this.volumeSource = extra[1];
+    this.timeSources={erosion:this.preprocessShader(extra[2]),maps:this.preprocessShader(extra[3])};
     this.layout = uniformLayout(preprocess(common, '', new Set()));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
@@ -294,10 +290,9 @@ export class TerrainRenderer {
     this.bindGroups = {};
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
-    this.materialData = JSON.parse(modelTable);
     // The startup generation: the materials (GPU) are started first and the noise (CPU) is made while they build.
     this.textures = {};
-    this.groundCache = new MaterialCache(this, preprocess(extra[5], common, new Set()), preprocess(extra[6], common, new Set()));
+    this.groundCache = new MaterialCache(this, preprocess(extra[4], common, new Set()), preprocess(extra[5], common, new Set()));
     const generation = performance.now();
     this.outputPaletteBuffer();
     this.textures.noise = this.noiseTexture();
@@ -352,10 +347,9 @@ export class TerrainRenderer {
     return {texture, view: texture.createView(), sampler: this.sampler({minFilter: 'linear', magFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat'})};
   }
 
-  // The output stage's palette (engine-output.wgsl): the colours map art draws with, or the ones the table's `palette.entries` pick, rgb in
-  // 0..255.
+  // The output stage's shared art palette (engine-output.wgsl), RGB in 0..255.
   outputPaletteBuffer() {
-    const colours = (this.materialData.palette?.entries ?? this.paletteArt).map(i => this.paletteColours[i]);
+    const colours = this.paletteArt.map(i => this.paletteColours[i]);
     if (this.outputPalette) { this.worldTextures.delete(this.outputPalette); this.outputPalette.destroy(); }
     this.outputPalette = this.worldResource(this.device.createBuffer({label: 'output palette', size: Math.max(16, colours.length * 16), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST}));
     this.device.queue.writeBuffer(this.outputPalette, 0, new Float32Array(colours.flatMap(c => [c[0], c[1], c[2], 0])));
@@ -1438,7 +1432,7 @@ export class TerrainRenderer {
   }
   // The palette entry nearest a color, '#rrggbb', by rgb distance (the output stage's pattern then mixes entries around it).
   paletteNearest(hex) {
-    const colours = (this.materialData.palette?.entries ?? this.paletteArt).map(i => this.paletteColours[i]);
+    const colours = this.paletteArt.map(i => this.paletteColours[i]);
     const cube = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
     let best = colours[0], nearest = Infinity;
     for (const c of colours) { const d = (c[0] - cube[0]) ** 2 + (c[1] - cube[1]) ** 2 + (c[2] - cube[2]) ** 2; if (d < nearest) { nearest = d; best = c; } }

@@ -97,14 +97,15 @@ Dates are when the owner made them.
 - A map holds its whole world: every setting, color, material, surface layer,
   rock type and tool. Retuning a built-in world never changes a saved map,
   and nothing about a world is kept in the browser apart from a map.
-- **Start a map** lists only the built-in worlds. Any other look starts from
-  a map file or link with **New map with this look**.
+- **Start a map** lists the built-in maps as templates. Creating a map copies
+  the template's look and brush cards. Files and links open with the data they
+  carry. **New map with this look** starts a blank map from an open map.
 - **Apply look from…** copies any of seven parts (Ground, Water, Rock types,
   Surface layers, Light & weather, Tools, Features) from another map.
 - World values carry no "changed" marks. Strokes keep their own `edited`
   lists.
-- Each world defines its own shape buttons. A shape that a world lacks becomes
-  a generic landform, since every world supports every landform feature.
+- Each map's saved brushes supply the Land and Water tool lists. A stroke
+  whose brush is removed keeps its settings and becomes a generic landform.
   Artists can save a new tool from the selected shape (2026-11-11).
 
 **Shapes**

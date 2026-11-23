@@ -35,6 +35,7 @@ type Site struct {
 	featureKinds map[string][]string
 	configs      map[string]object
 	catalog      object
+	editor       object
 }
 
 func decode(data []byte, target any) error {
@@ -377,6 +378,23 @@ func (s *Site) configure() error {
 		c["beachSources"] = clone(beaches)
 	}
 	s.catalog = object{"worlds": worlds}
+	// Keep the valid option names here, without picking a template's default values.
+	editorKnobs := object{}
+	for _, c := range s.configs {
+		for k := range obj(c["defaults"]) {
+			editorKnobs[k] = true
+		}
+		for k := range obj(c["engineDefaults"]) {
+			editorKnobs[k] = true
+		}
+	}
+	s.editor = object{
+		"knobs":  keys(editorKnobs),
+		"biomes": names, "biomeDescriptions": s.descriptions(), "worldShapes": shapes,
+		"beachSources": beaches, "featureCatalog": features,
+		"defaults": stringsOf(obj(s.defaults["knobs"])),
+		"material": object{"site": s.defaults["site"]},
+	}
 	return nil
 }
 
@@ -429,7 +447,10 @@ func (s *Site) Generated(mapsURL string) (map[string][]byte, error) {
 	if mapsURL != "" {
 		services["maps"] = object{"available": true, "url": mapsURL}
 	}
-	data := map[string]any{"services.json": services, "config/catalog.json": s.catalog}
+	data := map[string]any{
+		"services.json": services, "config/catalog.json": s.catalog,
+		"config/editor.json": s.pickerOrder(merge(s.editor), ""),
+	}
 	for _, w := range s.Worlds() {
 		data["config/"+w+".json"] = s.pickerOrder(merge(s.configs[w]), w)
 	}

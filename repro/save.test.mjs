@@ -67,7 +67,7 @@ test('Apply look: every setting, color and world material belongs to one card', 
 test('a map world includes defaults, edited controls, URL overrides, disabled colors and its custom identity',()=>{
   const own={name:'My world',colors:{slope:null},knobs:{rainErode:'.6'}},query=new URLSearchParams('rainErode=.8&beachFrom=archipelago&sunColor=ffaa22&materialFoot=2&map=private-id&pendingSketch=token&gpuMB=512');
   const value=savedWorld(config,query,own);
-  assert.equal(value.name,'My world');assert.equal(value.base,'green');assert.equal('variant' in value,false);
+  assert.equal(value.name,'My world');assert.equal('base' in value,false);assert.equal('variant' in value,false);
   assert.deepEqual(value.colors,{slope:null,sky:'#ffffff',sun:'#ffaa22'});
   assert.deepEqual(value.materials.map(m=>[m.source,m.worldGround,m.worldWater]),[['green-ground',true,false],['green-water',false,true]]);
   assert.equal(value.knobs.rainErode,'.8');assert.equal(value.knobs.faceWear,'0.2');assert.equal(value.knobs.groundFine,'1');assert.equal(value.knobs.beachFrom,'archipelago');assert.equal(value.knobs.materialFoot,undefined,'the removed preview footprint is not saved');
@@ -88,13 +88,13 @@ test('engine tables travel with the map; a key the world no longer has, or a val
   assert.deepEqual(nested.placement,{rock:{slope:.3,tap:.2},route:{from:4,to:5}},'a nested block keeps a key the data gained since');
 });
 
-test('the role map travels with the map: a role the world gains later reaches no saved map; a borrowed beach is not kept', async () => {
+test('the role map travels with the map: a role the world gains later reaches no saved map; a copied beach travels with the map', async () => {
   const {worldRoles,copyRoles,applyRoles} = await import('../sculpt-save.js');
   const roles={ground:'green-ground',water:'green-water',rock:'green-rock',extra:['green-groundgrain','no-such-material']};
   assert.deepEqual(copyRoles({...roles,high:'no-such-material'}),{...roles,extra:['green-groundgrain']},'unknown library keys are dropped');
   const live={materials:{...roles,high:'green-moss',beach:'green-sand'},layers:['slopeGrass','rock','beach']};
   applyRoles(live,copyRoles(roles));assert.equal(live.materials.high,undefined);assert.deepEqual(live.layers,['slopeGrass','rock']);
-  assert.equal(worldRoles({materials:{...roles,beach:'green-sand'},beachBorrowed:true}).beach,undefined);
+  assert.equal(worldRoles({materials:{...roles,beach:'green-sand'},beachBorrowed:true}).beach,'green-sand');
   assert.equal(worldRoles({materials:{...roles,beach:'green-sand'}}).beach,'green-sand');
 });
 

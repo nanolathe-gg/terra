@@ -76,7 +76,7 @@ export function hash32(a, b) {
 const unit = (a, b) => hash32(a, b) / 4294967296;
 
 export function worldKinds(config) {
-  return KINDS.filter(kind => GROUND_KINDS.includes(kind) || config?.features?.[kind]?.types?.length);
+  return KINDS.filter(kind => GROUND_KINDS.includes(kind) || config?.features?.[kind]?.types?.length || config?.featureSet?.[kind]?.recipes?.length);
 }
 // Deposits and vents are the same on every world but their look: a world's table may set their painter's params (the halo's tone).
 function kindData(kind, config) {
@@ -105,7 +105,7 @@ export function makeRecipe(kind, data, id = 0, name = LABELS[kind]) {
 }
 export function defaultSet(config) {
   return Object.fromEntries(worldKinds(config).map(kind => {
-    const recipe=makeRecipe(kind,kindData(kind,config),0,`${config.biome || 'Default'} ${LABELS[kind].toLowerCase()}`);
+    const recipe=makeRecipe(kind,kindData(kind,config)??config.featureSet[kind].recipes[0]?.data??{},0,`${config.biome || 'Default'} ${LABELS[kind].toLowerCase()}`);
     return [kind,{nextId:1,recipes:[normalizeRecipe(kind,recipe,config,recipe)]}];
   }));
 }

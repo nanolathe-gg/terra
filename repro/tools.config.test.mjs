@@ -8,11 +8,11 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {LANDFORM_SHAPES, toolDefaults, sceneNodes, pageSettings, strokeCard, strokeParams} from '../sculpt-scene.js';
 import {worldRocks, applyWorldRock} from '../sculpt-rock-presets.js';
-import {LANDFORM_TOOL, MAP_TOOLS_MAX, worldTools, toolShape, toolRockSlot, strokeTool, keepStrokeTools, inferStrokeTools, carryStrokes, markEdited, copyMapTools, addMapTool, deleteMapTool, nextMapToolId, CARD_KEYS} from '../sculpt-tools.js';
+import {LANDFORM_TOOL, MAP_TOOLS_MAX, worldTools, starterTools, toolShape, toolRockSlot, strokeTool, keepStrokeTools, inferStrokeTools, carryStrokes, markEdited, copyMapTools, addMapTool, deleteMapTool, nextMapToolId, CARD_KEYS} from '../sculpt-tools.js';
 
 const root = new URL('..', import.meta.url).pathname, dir = mkdtempSync(join(tmpdir(), 'tools-test-'));
 runSite(['--dump-configs', dir]);
-const files = readdirSync(join(dir, 'config')).filter(f => f !== 'catalog.json').sort();
+const files = readdirSync(join(dir, 'config')).filter(f => f !== 'catalog.json' && f !== 'editor.json').sort();
 const configs = Object.fromEntries(files.map(f => [f.replace(/\.json$/, ''), JSON.parse(readFileSync(join(dir, 'config', f), 'utf8'))]));
 const WORLDS = ['green', 'red', 'archipelago', 'moon', 'lush', 'lava', 'desert', 'crystal', 'ice'];
 const ENTRIES = [...Object.keys(LANDFORM_SHAPES).filter(k => k !== 'landform'), 'landform', 'fissure', 'smooth', 'erase', 'paint', 'sand', 'grass', 'move'];
@@ -42,6 +42,7 @@ test('every world\'s toolbar is valid, its rocks are presets it ships', () => {
   for (const [name, config] of Object.entries(configs)) {
     const tools = worldTools(config), rocks = worldRocks(applyWorldRock(structuredClone(config)));
     assert.ok(tools.length > 0, name);
+    assert.deepEqual(starterTools(config,rocks,[]).map(t=>t.id),tools.map(t=>t.id),name+': every starter brush fits in a map');
     for (const t of tools.filter(t => t.rock)) assert.ok(toolRockSlot(t, rocks, config.rock?.recipe) >= 0, `${name}: ${t.id} names ${t.rock}, which the world ships`);
     for (const t of tools.filter(t => t.material)) assert.ok([config.materials?.ground, config.materials?.high, ...(config.materials?.extra || [])].includes(t.material), `${name}: ${t.id} lays ${t.material}, which the world adds to a map`);
   }
@@ -112,7 +113,7 @@ test('a map\'s own tools: add, delete, ids never reused, checked before they tou
   assert.equal(nextMapToolId(deleteMapTool(tools, 'map-2'), [{kind: 'landform', tool: 'map-2'}]), 'map-3');
   assert.deepEqual(copyMapTools(JSON.parse(JSON.stringify(tools))), tools);
   assert.equal(copyMapTools(undefined), null);
-  for (const bad of [{}, [{...tools[0], id: 'hill'}], [tools[0], tools[0]], [{...tools[0], icon: 'star'}], [{...tools[0], extra: 1}], [{...tools[0], label: ' '}]])
+  for (const bad of [{}, [{...tools[0], id: 'fissure'}], [tools[0], tools[0]], [{...tools[0], icon: 'star'}], [{...tools[0], extra: 1}], [{...tools[0], label: ' '}]])
     assert.throws(() => copyMapTools(bad), undefined, JSON.stringify(bad).slice(0, 80));
   // A setting no card has any more (a removed option) is dropped (AGENTS.md rule 7); a card setting of the wrong kind leaves that one tool out, not the map.
   assert.deepEqual(copyMapTools([{...tools[0], card: {...tools[0].card, craterlets: 5}}]), [tools[0]]);
