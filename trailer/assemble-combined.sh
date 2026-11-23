@@ -10,7 +10,7 @@ set -euo pipefail
 C=${1:?cuts dir}/out
 T=${2:?take dir}
 # file:start:end (seconds; end empty for the whole clip)
-gameplay=("$T/film/terra-gameplay.mp4:0:4.2" "$T/film/terra-gameplay.mp4:35:41" "$T/film/terra-gameplay.mp4:46:53.5")
+gameplay=("$T/film/terra-gameplay.mp4:0.4:10.4" "$T/film/terra-gameplay.mp4:13.8:22.6")
 if [ "${3:-}" = cartoon ]; then
   segments=("$C/cartoon.mp4::" "$T/realtime-raw.mp4::" "$C/sections.mp4:21.5:26.04" "${gameplay[@]}" "$C/end.mp4::"); result=$T/terra-trailer-cartoon.mp4
 else

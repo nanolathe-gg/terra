@@ -13,7 +13,7 @@
  "shots": [
   {
    "name": "arrival",
-   "ticks": 1260,
+   "ticks": 360,
    "scene": {
     "kind": "skirmish",
     "map": "Terra Valley",
@@ -29,23 +29,23 @@
      "ease": "linear"
     },
     {
-     "tick": 200,
+     "tick": 60,
      "x": 0,
      "z": 0,
-     "zoom": 1.1,
+     "zoom": 1.3,
+     "ease": "linear"
+    },
+    {
+     "tick": 300,
+     "x": -30,
+     "z": 45,
+     "zoom": 1.05,
      "ease": "inout"
     },
     {
-     "tick": 1100,
-     "x": 808,
-     "z": 616,
-     "zoom": 1.1,
-     "ease": "inout"
-    },
-    {
-     "tick": 1260,
-     "x": 808,
-     "z": 616,
+     "tick": 360,
+     "x": -30,
+     "z": 45,
      "zoom": 1.0,
      "ease": "inout"
     }
@@ -64,8 +64,8 @@
      ]
     },
     {
-     "at": 1040,
-     "ticks": 140,
+     "at": 150,
+     "ticks": 150,
      "style": "caption",
      "anim": "fade",
      "in": 12,
