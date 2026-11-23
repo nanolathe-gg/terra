@@ -336,7 +336,7 @@ export async function mountMapFeatures(api) {
       const reason=controlRequirement(kind,k,first); input.disabled=Boolean(reason); input.title=reason;
       const note=row.querySelector('[data-requirement]'); if(note)note.textContent=reason;
       if(doc.activeElement!==input) {
-        const fallback = k==='trunkColor' ? first.trunk?.[Math.floor(first.trunk.length/2)] || '#3b3323' : k==='accentColor' ? '#b8c277' : FORMS[kind]?.[k]?.[2];
+        const fallback = k==='rimMode' ? 'flat' : k==='trunkColor' ? first.trunk?.[Math.floor(first.trunk.length/2)] || '#3b3323' : k==='accentColor' ? '#b8c277' : FORMS[kind]?.[k]?.[2];
         const value = ['species','canopyStyle'].includes(k) ? entry.params[k] ?? '' : entry.params[k] ?? (['height','width','reach','thick'].includes(k) ? nominal(k) : undefined) ?? first[k] ?? fallback;
         const inheritedVariation = k.endsWith('Variation') && entry.params[k] === undefined;
         if(input.type==='range'){input.dataset.unset=String(inheritedVariation);input.dataset.unsetLabel='Preset';}

@@ -117,11 +117,13 @@ const EXTRA_NUMBERS = {forks:[2,5],ash:[0,1],pieces:[1,8],lump:[0,1],cap:[0,1],s
 function cleanParams(value, config, kind, overrides = false) {
   const examples = [kindData(kind, config), ...featureCatalog(config, kind).map(p => p.data)].filter(Boolean);
   const allowed = new Set(['species','canopyStyle','cells','trunkColor','accentColor',...Object.keys(FORMS[kind] || {}), ...Object.keys(EXTRA_NUMBERS)]);
+  if (kind === 'deposit') allowed.add('rimMode');
   if (kind === 'vent') { allowed.add('holeAspect'); allowed.add('rimLayers'); }
   for (const d of examples) for (const t of d.types || [{params:d.params}]) for (const k of Object.keys(t.params || {})) allowed.add(k);
   const out = {};
   for (const [k, v] of Object.entries(value || {})) {
     if (!allowed.has(k)) continue;
+    if (k === 'rimMode') { if (v === 'flat' || v === 'relief') out[k] = v; continue; }
     if (k === 'canopyStyle') { if (['round','clustered','palm'].includes(v)) out[k]=v; continue; }
     if (k === 'trunkColor' || k === 'accentColor') { if(hex(v))out[k]=v.toLowerCase();continue; }
     if (k === 'species') { if (SPECIES.includes(v)) out[k] = v; continue; }
