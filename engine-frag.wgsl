@@ -28,28 +28,45 @@ fn baseBandMask(p: vec2f, hf: f32, slope: f32) -> f32 {
     return u.baseBand * inside * smoothstep(u.baseBandGaps, u.baseBandGaps + 0.12, gap);
 }
 
+// The cast shadow's near march (visibility and shadowBlocker read the same samples): from 24.4 px toward the sun every min(2, 6 / elevation)
+// px. One sample darkens 6 / elevation px of ground behind a crest (the smoothstep's 6 units over the sun's rise), so no step is longer than
+// that, and a crest wider than a step at the height a sample tests always meets one. The old samples (1.4 i^2 + 2 px, i = 4..12) stood up to
+// 33 px apart, and a tall narrow ridge under a low sun broke its shadow into blobs and fingers. 4 px steps cost half as much but drew a
+// spire's shadow as a comb (with the jitter below, as grain); 2 px with the jitter draws it whole. It reads the surface (with its baked
+// relief) out to 115.4 px and the authored height beyond, where the tile's fields stop (sculpt-chunk-renderer.js reaches); it ends at
+// 203.6 px, or runs on to the far march's start (238.6 px) when the sun is low enough for one (the grid's apron, `far`, then reaches past it).
+fn shadowNearStep(elevation: f32) -> f32 { return min(2.0, 6.0 / elevation); }
+// Each pixel starts its steps a fixed fraction of a step further out (a hash of its world pixel, so every tile and every run draws the same):
+// where a crest is thinner than a step, the shadow's edge blurs instead of breaking into a regular comb of teeth a step apart.
+fn shadowNearJitter(p: vec2f) -> f32 { return voxelHash(vec3f(floor(p), 11.0)); }
+fn shadowNearEnd(elevation: f32) -> f32 { return select(203.6, 238.5, 238.6 * elevation < 240.0); }
+fn shadowNear(p: vec2f, h: f32, toward: vec2f, elevation: f32, d: f32) -> f32 {
+    let q = p + toward * d;
+    if (q.x < 0.0 || q.y < 0.0 || q.x >= u.size || q.y >= u.size) { return 0.0; }
+    var at = 0.0;
+    if (d > 115.4) { at = baseHeight(q); } else { at = surfaceHeight(q); }
+    return smoothstep(-2.0, 4.0, at - h - d * elevation);
+}
+
 // The share of the sun that reaches the point past the relief toward it: 0 in a cast shadow, which takes the whole direct light (it took
 // 32% of it, which left a long shadow at a low sun too faint to read), 1 in the open.
 fn visibility(p: vec2f, h: f32) -> f32 {
     let toward = normalize(u.light.xy);
     let elevation = u.light.z / length(u.light.xy);
     var shadow = 0.0;
-    for (var i = 4; i <= 12; i++) {
-        let d = f32(i * i) * 1.4 + 2.0;
-        let q = p + toward * d;
-        if (q.x < 0.0 || q.y < 0.0 || q.x >= u.size || q.y >= u.size) { continue; }
-        // The last three samples (142 to 204 px out) read the authored height, as the far march does: the relief's few units barely move
-        // a shadow cast from that far, and the tile's fields then stop at 128 px (sculpt-chunk-renderer.js reaches).
-        var at = 0.0;
-        if (i >= 10) { at = baseHeight(q); } else { at = surfaceHeight(q); }
-        let blocker = at - h - d * elevation;
-        shadow = max(shadow, smoothstep(-2.0, 4.0, blocker));
+    let step = shadowNearStep(elevation);
+    let end = shadowNearEnd(elevation);
+    let jitter = shadowNearJitter(p);
+    for (var i = 0; i < 128; i++) {
+        let d = 24.4 + (f32(i) + jitter) * step;
+        if (d > end) { break; }
+        shadow = max(shadow, shadowNear(p, h, toward, elevation, d));
     }
-    // A lower sun casts longer shadows (a wall's is its height over the tangent of the sun's height). Past the twelfth sample the march goes
-    // on from 238.6 px (where a thirteenth would be) in steps that test 6 units higher each (the smoothstep's width, so a ragged crest leaves
+    // A lower sun casts longer shadows (a wall's is its height over the tangent of the sun's height). Past the near march the march goes
+    // on from 238.6 px in steps that test 6 units higher each (the smoothstep's width, so a ragged crest leaves
     // no gaps in its shadow), while a sample tests a height under 240 above the pixel, reading the authored height there: the relief's few
     // units do not move a shadow cast from that far. Each fades in as the height it tests falls from 240 to 200, so the shadow grows
-    // smoothly as Sun height goes down. At every world's own sun the first tests above 240 (Green's 240.3): the march is the one it was.
+    // smoothly as Sun height goes down. At every world's own sun the first tests above 240 (Green's 240.3), so there is no far march.
     // The chunk renderer's grid apron covers these samples (sculpt-chunk-renderer.js reaches, `far`).
     let farStep = 6.0 / elevation;
     for (var k = 0; k < 40; k++) {
@@ -70,13 +87,13 @@ fn shadowBlocker(p: vec2f, h: f32) -> vec3f {
     let toward = normalize(u.light.xy);
     let elevation = u.light.z / length(u.light.xy);
     var most = 0.0; var at = 0.0;
-    for (var i = 4; i <= 12; i++) {
-        let d = f32(i * i) * 1.4 + 2.0;
-        let q = p + toward * d;
-        if (q.x < 0.0 || q.y < 0.0 || q.x >= u.size || q.y >= u.size) { continue; }
-        var hq = 0.0;
-        if (i >= 10) { hq = baseHeight(q); } else { hq = surfaceHeight(q); }   // as visibility() reads them
-        let s = smoothstep(-2.0, 4.0, hq - h - d * elevation);
+    let step = shadowNearStep(elevation);
+    let end = shadowNearEnd(elevation);
+    let jitter = shadowNearJitter(p);
+    for (var i = 0; i < 128; i++) {
+        let d = 24.4 + (f32(i) + jitter) * step;
+        if (d > end) { break; }
+        let s = shadowNear(p, h, toward, elevation, d);   // as visibility() reads them
         if (s > most) { most = s; at = d; }
     }
     let farStep = 6.0 / elevation;

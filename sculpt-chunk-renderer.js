@@ -138,10 +138,10 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
   reaches(heightBounds=this.config.heightBounds??[-90,300]) {
     const n=(k,f)=>this.number(k,f),rock=(k,f)=>this.rockMax(k,n(k,f));   // rock: a recipe number's largest over the rocks in use
     // H1: the close shadow march (6 px) and the cavity rings (4 px) plus the gradient's 1.4 sit inside the far taps' reach.
-    // The shadow march (engine-frag.wgsl visibility) reads the surface out to its ninth sample (9^2 x 1.4 + 2 px), the authored height at its
-    // tenth to twelfth (out to 12^2 x 1.4 + 2 px) and, as the sun goes down, from 238.6 px on while a sample tests a height under 240 above the
-    // pixel: those far samples need only the height grid (`far` widens the grid's apron, not the fields'). At every world's own sun there are
-    // none of the last, and far is the twelfth sample's reach.
+    // The shadow march (engine-frag.wgsl visibility, shadowNear) reads the surface out to 115.4 px (9^2 x 1.4 + 2, where its ninth sample once
+    // stood), the authored height out to 203.6 px (12^2 x 1.4 + 2) and, as the sun goes down, on to 238.6 px and from there while a sample tests
+    // a height under 240 above the pixel: those samples past 115.4 px need only the height grid (`far` widens the grid's apron, not the fields').
+    // At every world's own sun there is no far march, and far is 203.6 px.
     const sun=this.sunVector(),rise=sun[2]/Math.hypot(sun[0],sun[1]),far=238.6*rise<240+1e-3?240/rise:12**2*1.4+2;
     const shadow=9**2*1.4+2,draw=Math.max(shadow,128,36,19,11,3,1.4,n('closeShadow',0)>0?6+1.4:0,60,n('cavity',0)>0?4+1.4:0);
     // P16: the largest class drawn has radius min(16, 3.3 x the median); a stone reaches 1.6 radii from its candidate (1.41 of a class radius at most) and a larger stone that suppresses it a little further, and the mask reads the heights 14 px out for a cliff's foot plus its gradient (5).
