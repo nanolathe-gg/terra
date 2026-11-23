@@ -7,6 +7,8 @@
 <canvas id="c" width="1280" height="720"></canvas>
 <script type="module">
 const W = 1280, H = 720, FPS = 30, CUT = new URLSearchParams(location.search).get('cut') || 'worlds';
+// The end card's logo: a picture from logo-from-save.mjs (the owner's trailer/logo-terra.json), fitted whole above the card's lines.
+const LOGO = new URLSearchParams(location.search).get('logo') || 'logo-terra/final.png';
 const ctx = document.getElementById('c').getContext('2d');
 const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const ease = t => { t = clamp(t); return t * t * (3 - 2 * t); };
@@ -50,7 +52,8 @@ function path(nodes, p, alpha = 1) {
 let logo;
 function endCard(t, a, b) {
   const al = fadeIO(t, a, b, .5); if (al <= 0) return;
-  ctx.save(); ctx.globalAlpha = al; ctx.drawImage(logo, 0, 60, W, H - 120, 160, 70, W - 320, (H - 120) * (W - 320) / W); ctx.restore();
+  const k = Math.min(1040 / logo.width, 470 / logo.height), w = logo.width * k, h = logo.height * k;
+  ctx.save(); ctx.globalAlpha = al; ctx.drawImage(logo, (W - w) / 2, 34 + (470 - h) / 2, w, h); ctx.restore();
   text('A map editor for Total Annihilation', al, {x: W / 2, y: 560, size: 34, align: 'center'});
   text('Exports .ufo maps that play in the game', al * .85, {x: W / 2, y: 604, size: 22, weight: 400, align: 'center'});
 }
@@ -242,7 +245,7 @@ async function cartoonCut() {
   }};
 }
 
-logo = await image('logo-green/final.png');
+logo = await image(LOGO);
 const endOnly = {DURATION: 5, frame: t => endCard(t, 0, 5)};
 const cut = CUT === 'sections' ? await sectionsCut() : CUT === 'end' ? endOnly : CUT === 'cartoon' ? await cartoonCut() : await worldsCut();
 window.frame = n => { ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); cut.frame(n / FPS); };
