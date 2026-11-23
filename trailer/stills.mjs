@@ -1,5 +1,7 @@
 // Engine stills for the trailer cuts, on Dawn (repro/headless.mjs): a scene's window as each stroke arrives, and optionally the export's art.
-//   node trailer/stills.mjs <scene.json> <out-dir> [--width 1280 --height 720] [--map 4x4] [--steps] [--tiles] [--cells]
+//   node trailer/stills.mjs <scene.json> <out-dir> [--width 1280 --height 720] [--map 4x4] [--steps] [--tiles] [--cells] [--vary <n>]
+// --vary <n> draws variant n of the scene: every stroke gets its own new seed, and its card's size, height, wander and width variation move
+// by up to a fifth either way (the same n gives the same variant).
 // Writes <out-dir>/final.png (all strokes, the Time pass run); with --steps also step-<i>.png for the first i+1 strokes; with --tiles
 // tiles.json: the export art of the whole map (exportArt, as the exporter bakes it) cut into 32 px tiles, how many are distinct, and
 // export.png (the window of that art); with --cells cells.json: the game's heights, one per 16 px cell corner over the window.
@@ -11,7 +13,7 @@ const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? args.splice(i, 2)[1] : fallback; };
 const flag = name => { const i = args.indexOf(name); if (i >= 0) args.splice(i, 1); return i >= 0; };
 const W = Number(opt('--width', 1280)), H = Number(opt('--height', 720)), [MAPX, MAPY] = opt('--map', '4x4').split('x').map(Number);
-const steps = flag('--steps'), tiles = flag('--tiles'), cells = flag('--cells'), clay = flag('--clay');
+const steps = flag('--steps'), tiles = flag('--tiles'), cells = flag('--cells'), clay = flag('--clay'), vary = opt('--vary', '');
 const [sceneFile, out] = args;
 if (!sceneFile || !out) { console.error('usage: node trailer/stills.mjs <scene.json> <out-dir> [--steps] [--tiles] [--cells]'); process.exit(2); }
 const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
@@ -26,6 +28,13 @@ const s = await headless.openScene({...scene, strokes: []}, search, {strokes: []
 const {LANDFORM_SHAPES, shapeFrom, toolDefaults} = await import('../sculpt-scene.js');
 scene.strokes = scene.strokes.map(([entry, points, options = {}]) => Object.hasOwn(LANDFORM_SHAPES, entry) || !s.config.worldShapes?.[scene.biome]?.[entry] ? [entry, points, options]
   : [shapeFrom(s.config, entry), points, {...options, card: {...toolDefaults(s.config, entry), ...(options.card || {})}}]);
+if (vary !== '') {
+  let h = (Number(vary) * 2654435761 + 1013904223) >>> 0;
+  const rand = () => { h ^= h << 13; h >>>= 0; h ^= h >>> 17; h ^= h << 5; h >>>= 0; return h / 4294967296; };
+  scene.strokes = scene.strokes.map(([entry, points, options = {}]) => { const card = {...(options.card || {})};
+    for (const key of ['diameter', 'elevation', 'wander', 'widthVary']) if (Number.isFinite(card[key])) card[key] = Math.round(card[key] * (0.8 + 0.4 * rand()));
+    return [entry, points, {...options, card, seed: Math.floor(rand() * 4294967296)}]; });
+}
 const shot = async (name, options = s.drawOptions({light: 'original'})) => writeFileSync(`${out}/${name}.png`, encodePng(W, H, await headless.renderWindow(s, {width: W, height: H, options})));
 if (steps) for (let i = 0; i < scene.strokes.length; i++) { await headless.scene(s, scene.strokes.slice(0, i + 1), {ground: scene.ground !== false}); await shot(`step-${i}`); }
 else await headless.scene(s, scene.strokes, {ground: scene.ground !== false});
