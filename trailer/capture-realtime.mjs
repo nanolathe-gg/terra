@@ -15,7 +15,7 @@ const server = opt('--server', '').replace(/\/+$/, ''), port = Number(opt('--por
 if (!server || !port || !out || /:8801\b/.test(server)) { console.error('usage: --server <your own editor> --port <cdp> --out <file.mp4> (never the owner\'s 8801)'); process.exit(2); }
 const VW = 1600, VH = 900, FPS = 30;
 // Where things go. At the take's view (zoom 0.75 on 900,760) a screen point is the map pixel ((x + 7) / 0.75, (y + 110) / 0.75).
-const START1 = '1130, 880', START2 = '1792, 1792', METAL = [[788, 602], [840, 622], [893, 602]], FAR_METAL = [[106, 106], [114, 103], [110, 113]];
+const START1 = '1130, 880', START2 = '1792, 1792', METAL = [[770, 600], [965, 480], [930, 620]], FAR_METAL = [[100, 107], [115, 99], [111, 117]];   // 200-330 px apart, as a game map spaces them
 const b = await browser({port, width: VW, height: VH, profile: join(dirname(out), `profile-rt-${Date.now()}`)});
 const frames = [];
 let px = 640, py = 450, down = false;
@@ -78,7 +78,7 @@ try {
   await drag(curve([[750, 355], [830, 340], [890, 350]]), 420); await settle();
   await tool('deep'); await drag(curve([[290, 610], [420, 570], [560, 615], [655, 598]]), 850); await settle();
   await tool('crater'); await drag([[1080, 500], [1130, 545]], 350); await settle();
-  await tool('knollField'); await click(880, 815, 300); await settle(150, 800);
+  await tool('knollField'); await click(870, 832, 300); await settle(150, 800);
   // Variation at work, once every shape is down (a new seed would give the shapes after it other seeds too): select the range, give it a
   // new seed, raise it, then let its route wander more.
   await clickOn('[data-tool="move"]'); await sleep(100); await click(640, 215, 280); await sleep(200);
