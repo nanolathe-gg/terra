@@ -2053,7 +2053,12 @@ function persistLater(delay=450) {
   },delay);
 }
 let keepSaved=false;   // set while this tab leaves for another map: leaving the page must not write the old one again
-addEventListener('pagehide',() => { worldInputQueue.flush();if (!stroke && !moving && !loading && !keepSaved) saveWorking(); });
+// A page the browser keeps for Back (persisted) is frozen as soon as pagehide returns, so a save started then never finishes: Safari 26.6 keeps
+// that write's hold on the map stores, and the next page in the tab waits at "Reading the world…" until it drops the kept page (measured: over a
+// minute, or 25 s). Edits are already saved as they are made (persistLater), so a kept page saves when it is shown again.
+const leaveSave=() => { if (!stroke && !moving && !loading && !keepSaved) saveWorking(); };
+addEventListener('pagehide',e => { worldInputQueue.flush();if (!e.persisted) leaveSave(); });
+addEventListener('pageshow',e => { if (e.persisted) leaveSave(); });
 // A save's strokes with their tools: one saved before strokes named their tool takes the one its section form belongs to, once (inferStrokeTools); a map carried
 // from another world goes through carryNodes, and a loaded one keeps the tools the toolbar has (any other shows as the generic landform). `own`: the map's tools.
 const savedStrokes=(list,carry,own,tables) => { const ids=toolIds(own),saved=inferStrokeTools(list,ids); return carry?carryNodes(saved,own,tables):keepStrokeTools(saved,ids); };
