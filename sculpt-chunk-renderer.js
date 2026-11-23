@@ -592,8 +592,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       if(this.canvas.width!==atlasWidth)this.canvas.width=atlasWidth;if(this.canvas.height!==height)this.canvas.height=height;
       if(this.outputCanvas.width!==outWidth)this.outputCanvas.width=outWidth;if(this.outputCanvas.height!==outHeight)this.outputCanvas.height=outHeight;
       this.outputBytes=atlasWidth*height*4+outWidth*outHeight*4;this.recordMemory();
-      await this.outputPipelines();
-      const encoder=this.device.createCommandEncoder({label:'cached tile colors'}),presentation=this.context.getCurrentTexture(),pipeline=this.genericPipelines[this.rockMask()].draw,regions=[];let x=0,outX=0,slot=0;
+      await this.outputPipelines();const pipeline=(await this.genericFor()).draw;   // before the canvas texture, which lasts only this task
+      const encoder=this.device.createCommandEncoder({label:'cached tile colors'}),presentation=this.context.getCurrentTexture(),regions=[];let x=0,outX=0,slot=0;
       this.outputSize(width,height);
       for(const tile of tiles){
         const scissor=colorScissor(tile,view),r=tile.rect;

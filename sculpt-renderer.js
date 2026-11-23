@@ -183,6 +183,7 @@ export class TerrainRenderer {
       if(typeof GPUOutOfMemoryError!=='undefined'&&event.error instanceof GPUOutOfMemoryError&&this.config.onMemoryPressure?.(event.error)){this.recovering=true;event.preventDefault();return;}
       this.reportError(event.error.message);
     });
+    this.config.onDevice?.(device);   // the page's start-up can ask for its own pipelines on this device while the renderer's shaders load
     this.format = navigator.gpu.getPreferredCanvasFormat();
     // A plain unorm canvas stores the shader's values as they are, as the
     // WebGL canvas did (no sRGB encoding); opaque, as WebGL's alpha: false.
@@ -263,8 +264,10 @@ export class TerrainRenderer {
     const bakeLayout = device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, fieldsLayout]});
     this.fieldsLayout = fieldsLayout;
     this.bakePipelineLayout = bakeLayout;
-    this.rockWeather = await RockWeather.create(this,preprocess);
-    this.voxel = await VoxelSurface.create(this,this.volumeSource,preprocess);
+    // Rock weather and the voxel solid start together; neither builds a rock mask's pipelines here (specialize builds the mask a draw needs).
+    // Their sources join the stage scan in a fixed order, whichever is ready first.
+    [this.rockWeather, this.voxel] = await Promise.all([RockWeather.create(this,preprocess), VoxelSurface.create(this,this.volumeSource,preprocess)]);
+    this.stageSources.push({source:this.rockWeather.code,stage:'C'},{source:this.voxel.source,stage:'D'});
     const timeModules=Object.values(this.timeSources).map(source=>({source,stage:'B'}));
     this.timeUniformFields=[...uniformStages(timeModules).keys()].sort();
     this.uniformStages=uniformStages([...this.stageSources,...timeModules]);this.stageSources=null;
@@ -275,7 +278,7 @@ export class TerrainRenderer {
     this.geometrySettings=device.createBuffer({label:'geometry frame',size:16,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});this.track(this.geometrySettings,'geometry frame',16,'shared');
     this.geometryPipelineLayout=device.createPipelineLayout({bindGroupLayouts:[this.commonLayout,this.materialLayout,this.voxel.drawLayout,this.geometryOutLayout]});
     this.drawPipelineLayout=device.createPipelineLayout({bindGroupLayouts:[this.commonLayout,this.materialLayout,device.createBindGroupLayout({entries:[]}),this.geometryInLayout]});
-    const genericReady=this.buildGeneric(compile,fragSource,bakeSource,geometrySource);
+    this.prepareGeneric(compile,fragSource,bakeSource,geometrySource);
     const mipModule = device.createShaderModule({label: 'mip levels', code: MIP_SHADER});
     this.mipPipeline = device.createRenderPipeline({label: 'mip levels', layout: 'auto',
       vertex: {module: mipModule, entryPoint: 'fullScreen'},
@@ -298,7 +301,7 @@ export class TerrainRenderer {
     const generation = performance.now();
     this.outputPaletteBuffer();
     this.textures.noise = this.noiseTexture();
-    await genericReady;
+    await this.genericModules;
     this.generationMs = performance.now() - generation;
     const variant = new URLSearchParams(location.search);
     // H4: the engine's own knob values go in first, over the world's, under the page's query.
@@ -412,28 +415,49 @@ export class TerrainRenderer {
     const parts = this.specParts, slots = this.rockSlots(), values = gateValues(parts.bake, this.uniformView, slots, this.groundSlots());
     return {key: gateKey(values, parts.keyOrder), values};
   }
-  // Original uniform comparisons, compiled before input is enabled. The draw
-  // is shared by every level; relief finals retain their specialized cache.
-  async buildGeneric(compile,fragSource,bakeSource,geometrySource) {
-    const start=performance.now(),device=this.device;
-    const [fragmentModule,bakeModule,geometryModule]=await Promise.all([compile('generic terrain',fragSource),compile('generic relief',bakeSource),compile('terrain geometry',geometrySource)]);
-    this.genericPipelines=Object.fromEntries(await Promise.all([0,15].map(async rockMask=>{
+  // Original uniform comparisons. The draw is shared by every level; relief finals retain their specialized cache. The modules compile at
+  // start-up; a rock mask's pipelines are built when a draw first needs that mask (specialize), and the other mask after the first picture
+  // (warmRockMasks), so start-up compiles one mask, not both.
+  prepareGeneric(compile,fragSource,bakeSource,geometrySource) {
+    this.genericPipelines={};this.genericBuilding=new Map();
+    this.specStats.genericBuilt=0;this.specStats.genericMs=0;this.specStats.genericUses=0;this.specStats.deferred=0;
+    this.genericModules=Promise.all([compile('generic terrain',fragSource),compile('generic relief',bakeSource),compile('terrain geometry',geometrySource)])
+      .then(([fragmentModule,bakeModule,geometryModule])=>({fragmentModule,bakeModule,geometryModule,fragSource,bakeSource,geometrySource}));
+  }
+  // The generic pipelines of one rock mask, or a specialization miss that builds them (inside withPipelines).
+  generic(mask=this.rockMask()) {
+    const built=this.genericPipelines[mask];
+    if(!built)throw new SpecializationMiss(this.specKey());
+    return built;
+  }
+  // Awaitable: the generic pipelines of one rock mask, built once.
+  async genericFor(mask=this.rockMask()) { await this.buildGenericMask(mask); return this.genericPipelines[mask]; }
+  // The voxel solid's, rock weather's and generic pipelines of every allowed rock mask (0: slot 0 only; 15: the recipe table), built in
+  // the background after the first picture so a first rock type added later does not wait for a compile.
+  warmRockMasks() { return Promise.all([0,15].map(mask=>Promise.all([this.buildGenericMask(mask),this.voxel.build(mask),this.rockWeather.build(mask)]))).catch(()=>{}); }
+  buildGenericMask(mask) {
+    if(this.genericPipelines[mask])return Promise.resolve();
+    if(!this.genericBuilding.has(mask))this.genericBuilding.set(mask,this.genericModules.then(async({fragmentModule,bakeModule,geometryModule,fragSource,bakeSource,geometrySource})=>{
+      const start=performance.now(),device=this.device,rockMask=mask;
       const constants={rockMask},compute=entryPoint=>({module:bakeModule,entryPoint,constants:entryConstants(bakeSource,entryPoint,constants)});
       const [draw,bake,loose,geometry]=await Promise.all([
         device.createRenderPipelineAsync({label:'generic terrain',layout:this.drawPipelineLayout,vertex:{module:this.specParts.vertModule,entryPoint:'vertexMain'},fragment:{module:fragmentModule,entryPoint:'fragmentMain',targets:[{format:this.format}],constants:entryConstants(fragSource,'fragmentMain',constants)},primitive:{topology:'triangle-list',cullMode:'none'}}),
         device.createComputePipelineAsync({label:'generic relief bake',layout:this.bakePipelineLayout,compute:compute('bakeMain')}),
         device.createComputePipelineAsync({label:'generic loose mask',layout:this.bakePipelineLayout,compute:compute('looseMain')}),
         device.createRenderPipelineAsync({label:'terrain geometry',layout:this.geometryPipelineLayout,vertex:{module:this.specParts.vertModule,entryPoint:'vertexMain'},fragment:{module:geometryModule,entryPoint:'geometryMain',targets:[{format:this.format}],constants:entryConstants(geometrySource,'geometryMain',constants)},primitive:{topology:'triangle-list',cullMode:'none'}})]);
-      return [rockMask,{draw,bake,loose,geometry}];
-    })));
-    this.specStats.genericBuilt=2;this.specStats.genericMs=performance.now()-start;this.specStats.genericUses=0;this.specStats.deferred=0;
+      this.genericPipelines[mask]={draw,bake,loose,geometry};
+      this.specStats.genericBuilt++;this.specStats.genericMs+=performance.now()-start;
+    }).finally(()=>this.genericBuilding.delete(mask)));
+    return this.genericBuilding.get(mask);
   }
   specialized(kind) {
     const state = this.specKey();
     const generic=this.pipelineMode==='generic';
     if(kind==='draw'||generic){
+      const built=this.genericPipelines[state.values.rockMask];
+      if(!built)throw new SpecializationMiss(state);
       this.specUsed.push(generic?'generic:'+state.values.rockMask:state.key);this.specStats.genericUses++;
-      return this.genericPipelines[state.values.rockMask][kind];
+      return built[kind];
     }
     const entry = this.specCache.get(state.key);
     if (!entry) throw new SpecializationMiss(state);
@@ -455,11 +479,17 @@ export class TerrainRenderer {
     if (!passes) throw new SpecializationMiss(this.specKey());
     return passes;
   }
-  async specialize({key, values}) {
+  // A rock mask's own pipelines: the generic draw, bake and geometry, the voxel solid's and rock weather's passes.
+  maskReady(mask) { return Boolean(this.genericPipelines[mask] && this.voxel.passesBy?.[mask] && this.rockWeather.pipelinesBy?.[mask]); }
+  buildMask(mask) {
     const rock = performance.now();
-    await Promise.all([this.voxel.build(values.rockMask), this.rockWeather.build(values.rockMask)]);
-    this.specStats.rockMs = (this.specStats.rockMs ?? 0) + performance.now() - rock;
-    if (this.specCache.has(key)) return;
+    return Promise.all([this.buildGenericMask(mask), this.voxel.build(mask), this.rockWeather.build(mask)])
+      .then(() => { this.specStats.rockMs = (this.specStats.rockMs ?? 0) + performance.now() - rock; }, error => this.pipelinesFailed(error));
+  }
+  // The mask's pipelines and this set of gates' bake, all asked for at once.
+  async specialize({key, values}) {
+    const mask = this.buildMask(values.rockMask);
+    if (this.specCache.has(key)) return mask;
     if (!this.specBuilding.has(key)) {
       const {bakeModule,bakeSource,bake} = this.specParts, device = this.device, start = performance.now();
       const pick = gates => Object.fromEntries([...gates.keys()].map(id => [id, values[id]]));
@@ -472,11 +502,14 @@ export class TerrainRenderer {
         this.specStats.built++; this.specStats.ms += performance.now() - start;
       }).finally(() => this.specBuilding.delete(key)));
     }
-    await this.specBuilding.get(key);
+    await Promise.all([mask, this.specBuilding.get(key).catch(error => this.pipelinesFailed(error))]);
   }
-  // A preview miss retries with uniform gates and never starts a compile.
-  // A view final yields the renderer while its specialized set builds; direct
-  // readers and export await specialization as before.
+  // A pipeline that does not build (a shader the browser rejects) fails the same way each time: the first failure is kept, and every later
+  // draw throws it instead of waiting again, so the page shows the error once rather than retrying every frame.
+  pipelinesFailed(error) { this.pipelineFailure ??= error; throw error; }
+  // A preview miss retries with uniform gates and starts no specialized compile; only a rock mask with no pipelines yet (start-up, or the
+  // first rock type) builds that mask's own. A view final yields the renderer while its specialized set builds; direct readers and export
+  // await specialization as before.
   async withPipelines(work,{preview=false,defer=false}={}) {
     const previous=this.pipelineMode;this.pipelineMode='specialized';
     try{for(let attempt=0;;attempt++){
@@ -484,8 +517,10 @@ export class TerrainRenderer {
       try{return await work();}
       catch(error){
         if(!(error instanceof SpecializationMiss)||attempt>=4)throw error;
-        if(preview){this.pipelineMode='generic';continue;}
-        const ready=this.specialize(error.state);
+        if(this.pipelineFailure)throw this.pipelineFailure;
+        const mask=preview?error.state?.values?.rockMask??this.rockMask():null;
+        if(preview&&this.maskReady(mask)){this.pipelineMode='generic';continue;}
+        const ready=preview?this.buildMask(mask):this.specialize(error.state);
         if(defer){this.specStats.deferred++;throw new PipelinesPending(error.state,ready);}
         await ready;
       }
@@ -629,7 +664,12 @@ export class TerrainRenderer {
   // The palette's candidate table is built here, in its own submission: the queue runs in order, so every output pass encoded after this
   // call reads the finished table.
   async outputPipelines() {
-    if (!this.outputPipeline) {
+    await this.buildOutputPipelines();
+    if (!this.outputTableBuilt) this.buildOutputTable();
+  }
+  // The output stage's pipelines, built once; a start-up warm-up and the first draw share the one build.
+  buildOutputPipelines() {
+    return this.outputBuilding ??= (async () => {
       const device = this.device, module = device.createShaderModule({label: 'engine-output.wgsl', code: this.outputSource});
       const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
       if (errors.length) throw new Error('nanolathe: engine-output.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
@@ -638,8 +678,7 @@ export class TerrainRenderer {
         device.createRenderPipelineAsync({label: 'output blit', layout: 'auto', vertex: {module, entryPoint: 'blitVertex'}, fragment: {module, entryPoint: 'blitFragment', targets: [{format: this.format}]}, primitive: {topology: 'triangle-list'}}),
         device.createComputePipelineAsync({label: 'output palette table', layout: 'auto', compute: {module, entryPoint: 'buildTable'}})]);
       this.outputTableBuild = build; this.outputBlit = blit; this.outputPipeline = pipeline;
-    }
-    if (!this.outputTableBuilt) this.buildOutputTable();
+    })().catch(error => { this.outputBuilding = null; throw error; });
   }
   buildOutputTable() {
     const device = this.device, count = this.outputPaletteCount;
@@ -699,7 +738,7 @@ export class TerrainRenderer {
       const delta=worldUniformDelta(this.geometryUniformSnapshot,this.uniformData,this.layout,this.uniformStages);
       if(delta.stage&&delta.stage<'F')throw Error('The edit requires '+delta.stage+', not only color.');
       this.flushUniforms();const encoder=this.device.createCommandEncoder({label:'cached terrain color'}),timer=this.timer();
-      this.encodeColor(encoder,this.genericPipelines[this.rockMask()].draw,[0,0,this.canvas.width,this.canvas.height],true,timer);
+      this.encodeColor(encoder,(await this.genericFor()).draw,[0,0,this.canvas.width,this.canvas.height],true,timer);
       await this.outputPipelines();this.encodeOutput(encoder,this.voxelColor,this.context.getCurrentTexture());this.device.queue.submit([encoder.finish()]);this.previousChunk=this.device.queue.onSubmittedWorkDone();await this.previousChunk;
       return {milliseconds:performance.now()-start,gpuMilliseconds:timer?await timer.result():null,recordBytes:this.geometryRecord.size};
     } finally { this._busy=false; }
@@ -753,7 +792,7 @@ export class TerrainRenderer {
       if(clearGeometry){commands.clearBuffer(this.geometryRecord);clearGeometry=false;}
       const timer=this.timer();if(timer)timers.push(timer);
       const pass=commands.beginRenderPass({label:'terrain geometry',colorAttachments:[{view:this.geometryTarget.createView(),clearValue:{r:0,g:0,b:0,a:0},loadOp:first?'clear':'load',storeOp:'store'}],timestampWrites:timer?.timestampWrites});
-      const [x,y,w,h]=rect.map(Math.round);pass.setPipeline(this.genericPipelines[this.rockMask()].geometry);pass.setScissorRect(x,y,w+2,h+2);
+      const [x,y,w,h]=rect.map(Math.round);pass.setPipeline(this.generic().geometry);pass.setScissorRect(x,y,w+2,h+2);
       pass.setBindGroup(0,this.commonBindGroup('draw'));pass.setBindGroup(1,this.materialBindGroup());pass.setBindGroup(2,volume);pass.setBindGroup(3,this.geometryBinding(this.geometryOutLayout));pass.draw(3);pass.end();timer?.encode(commands);
     },current,Boolean(this.uncheckedPreview));
     // E is complete for every piece. F has no solid dependency, so its

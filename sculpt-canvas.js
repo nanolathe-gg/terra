@@ -8,6 +8,8 @@ import {mountMapExport} from './sculpt-export.js';
 import {mountMapFeatures} from './sculpt-features.js';
 import {mountPassability} from './sculpt-passability-view.js';
 import {pagedBudget,VIEW_CANVASES} from './sculpt-scene.js';
+import {warmShapePipelines,feedPasses} from './sculpt-gpu-fields.js';
+import {erosionOf} from './sculpt-erosion.js';
 const $=id=>document.getElementById(id),MB=1024*1024;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const tick=()=>new Promise(resolve=>requestAnimationFrame(resolve));
@@ -36,7 +38,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   };
   config.onDeviceLost=info=>restartForMemory('a lost GPU device',()=>terrainBudget.lost('a lost GPU device',{memory:/out of memory|\boom\b/i.test(info?.message??'')}));
   config.onMemoryPressure=()=>restartForMemory('a GPU allocation failure');
+  // Start-up asks for every pipeline the first picture needs at once: the shape engines' and the feed's as soon as the device exists (while
+  // the renderer's shaders load), the Time pass's and the output stage's once the renderer is made, the rock mask's at the first draw
+  // (renderer.specialize). Each later request shares the build already under way.
+  config.onDevice=device=>{warmShapePipelines(device);feedPasses(device).catch(()=>{});};
   const output=document.createElement('canvas'),renderer=await TerrainRenderer.createChunked(output,config);
+  renderer.buildOutputPipelines().catch(()=>{});erosionOf(renderer).then(erosion=>erosion.mapsPipeline()).catch(()=>{});
   renderer.drawWhileCompiling=true;   // the view keeps a material's last picture while its new pipeline compiles (sculpt-material-cache.js)
   const g=canvas.getContext('2d'),ink=overlay.getContext('2d'),cache=new Map();
   const previewFields=createPreviewFields(renderer.device,api.previewScene);
@@ -75,7 +82,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const interacting=()=>Boolean(gesture||api.previewActive?.());
   const pipelineWaits=new Map();
   let cacheBytes=0,peakGPU=0,peakHeap=0,peakAccountedHeap=0,evictions=0,bakes=0,reused=0,hits=0,rebakes=0,scale=1,overview=true,pending=false,drawing=false,rerun=false,serial=0,viewEpoch=0,busy=false,features,metadata,passability,canonicalSize=512,displaySize=256;
-  let paintedView=-1,navigationTimer=null,activeBake=null;
+  let paintedView=-1,navigationTimer=null,activeBake=null,masksWarmed=false;
   // Only optional background work and hover detail wait for navigation to
   // settle. Visible terrain starts immediately, including during a held pan.
   const navigationDelay=180;
@@ -508,6 +515,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   function presented(fresh=true) {
     api.presented?.(fresh);   // fresh: a newly drawn tile or block is on screen, not only retained ones repainted
+    if(fresh&&!masksWarmed){masksWarmed=true;renderer.warmRockMasks();}   // the other rock mask's pipelines, after the first picture
     const now=performance.now();if(lastPresented&&now-lastScroll<300&&now-lastPresented<3000){frameTimes.push(now-lastPresented);if(frameTimes.length>1024)frameTimes.shift();}lastPresented=now;
     // Exercise the refinement working sets before clearing the crash note.
     if(fresh&&!foregroundPending()&&(!api.canExport||api.canExport()))terrainBudget.settled();
