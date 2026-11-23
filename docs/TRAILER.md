@@ -109,18 +109,24 @@ which stay for comparison.
 
 ## Music (2026-11-23)
 
-`trailer/music.mjs` synthesizes an original score (oscillators, plucked
-strings, filtered noise and a small reverb; no samples, no dependencies,
-the same bytes every run), and `assemble-combined.sh` makes it to the cut:
-each segment passes its style and length, so every section starts on its
-cut. D minor at 100 beats a minute. The cartoon gets pizzicato with a thud
-on each stamp, a deflating trombone on "exactly the same", a riser and a
-boom on the match cut, and a pluck on every hill swap; the take builds from
-pad and arpeggio to drums; the world montage has a hit on each world; the
-gameplay and the battle each open on a hit with full drums; the end card
-lands on a hit, then Bb opening into D major. Measured: −15.7 LUFS
-integrated, peaks at −1 dBFS. Checked by its spectrogram and levels only;
-nobody has listened to it yet.
+`trailer/music.mjs` synthesizes an original upbeat electro-pop score
+(owner: modern, exciting, pop-like; a fun tool with endless possibilities)
+from oscillators, plucked strings, filtered noise, a sidechain pump, a
+ping-pong delay and a small reverb: no samples, no dependencies, the same
+bytes every run. `assemble-combined.sh` makes it to the cut: each segment
+passes its style and length, so every section starts on its cut. A major at
+120 beats a minute on I-V-vi-IV, with a lead hook. The cartoon keeps its
+gags (pizzicato, a thud on each stamp, a deflating trombone on "exactly the
+same"), then the match cut opens a filtered chord, the hill swaps sparkle
+and a snare roll leads into the take. The take starts with two bars of
+intro and builds (four on the floor, offbeat hats, pumping bass, chord
+stabs, an arpeggio, the hook from the seventh bar) into a roll; the world
+montage hits every world over a rising chord; the gameplay and the battle
+are the drops (wide pumping chords, claps, the hook, an octave up the second
+time); the end card is one big A major hit ringing out with a last sparkle.
+Measured: −12.2 LUFS integrated for the cartoon version, −12.8 for the
+other, peaks at −1 dBFS; about −20 dB RMS in the cartoon, −15 in the take
+and −12 in the drops. Checked by spectrogram and levels only, not by ear.
 
 ## Combined cut (2026-11-21)
 
