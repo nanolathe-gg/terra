@@ -17,7 +17,7 @@ import {strokeKind,shapeFrom,savedToolCard,MASK_KEYS,SHAPE_FIELDS,isCover,stroke
 import {createGpuFields,createPagedFields,createShapeEngine,TIME_APRON,comparePlanes,readBuffer,setFailureHandler,LAYER_MEANDER,lfcWidth,heightsBounds} from './sculpt-gpu-fields.js';
 
 import {shapePaths,clonePaths,pathsWithin,simplifyPath,validatePaths,appendPath,extendPoint,insertPoint,removePoint,removePath} from './sculpt-paths.js';
-import {selectionTransform,toggleSelection} from './sculpt-selection.js';
+import {selectionTransform,toggleSelection,shapeGroups,joinedGeometry} from './sculpt-selection.js';
 import {shareText,gzipText,shareUrl,mapIdFromHash,mapsService,postMap,getMap} from './sculpt-share.js';
 import {openMapStore,importLegacyMaps,mapMeta,mapToReopen,byRecent,mapsInUse,holdMap,newMapId,readTab,writeTab,cleanAddress,startsMap,LEGACY_KEYS} from './sculpt-maps.js';
 import {isRiver,pointsSignature,movedRiver,seedRiverLine} from './sculpt-river.js';
@@ -275,7 +275,7 @@ function heightControlRange(p={}) { const [lo,hi]=elevationRange(p); $('lf-eleva
 // The setting that sets a shape's height, which Shift + drag and PageUp / PageDown change: a landform's Elevation, the Height of the other kinds (a fissure's
 // Depth, a brush's strength), each in its slider's range and steps. Reset ground has none (null).
 function heightControl(n) {
-  if (!n?.params || !n.points || n.kind==='erase') return null;
+  if (!n?.params || !n.points || n.joined || n.kind==='erase') return null;
   const [lo,hi]=n.kind==='landform'?elevationRange(n.params):amountRange(n.kind),key=n.kind==='landform'?'elevation':'amount',value=Number(n.params[key]??worldDefault(key));
   return {key,lo,hi,value:Number.isFinite(value)?value:lo,set:v => clamp(Math.round(v),lo,hi)};
 }
@@ -307,10 +307,10 @@ function updateControls() {
   $('feature-tool').setAttribute('aria-pressed',String(featureActive&&mapFeatures.mode!=='starts'));$('starts-tool').setAttribute('aria-pressed',String(featureActive&&mapFeatures.mode==='starts'));
   $('feature-tool-host').hidden=!featureActive;
   // Pick shows no tool's settings, only a selected shape's card (its Shape settings door).
-  $('brush-panel').hidden=featureActive||(tool==='move'&&!nodes[selected]?.params)||(picking&&!nodes[selected]?.params);
+  $('brush-panel').hidden=featureActive||(tool==='move'&&(!nodes[selected]?.params||nodes[selected]?.joined))||(picking&&!nodes[selected]?.params);
   $('edit-path').setAttribute('aria-pressed',String(pathEditing));
   $('transform-mode').setAttribute('aria-pressed',String(!pathEditing&&drawMode!=='add'));
-  const selectedNode=nodes[selected],hasSelection=Boolean(selectedNode?.points?.length),selectionActive=hasSelection&&tool==='move'&&!featureActive;
+  const selectedNode=selectionNode(selected),hasSelection=Boolean(selectedNode?.points?.length),selectionActive=hasSelection&&tool==='move'&&!featureActive;
   // Generated features share the Select tool (sculpt-features.js): their values replace the shape's transform rows while any is selected.
   const featureSelection=!featureActive&&tool==='move'&&(mapFeatures?.selectionCount||0)>0;
   // The side panel's Selection block is the Select tool with no shape selected: its hint, or the selected features' values. A selected
@@ -323,7 +323,7 @@ function updateControls() {
   $('transform-controls').hidden=pathEditing||!hasSelection||drawMode==='add';
   $('selection-hud').hidden=!selectionActive||featureSelection;   // selecting a feature deselects shapes (sculpt-features.js) and a shape clears the features: one or the other
   $('selection-hud').classList.toggle('path-mode',pathEditing);
-  $('selection-mode').textContent=selectionActive?`${drawMode==='add'?'Add path · ':pathAdding?'Extend / branch · ':''}${shapeName(selected)}${selectedShapes().length>1?` + ${selectedShapes().length-1} more`:''}`:'';
+  $('selection-mode').textContent=selectionActive?`${drawMode==='add'?'Add path · ':pathAdding?'Extend / branch · ':''}${shapeName(selected)}${selectedRoots().length>1?` + ${selectedRoots().length-1} more`:''}`:'';
   for(const id of ['selection-delete','transform-mode','canvas-deselect'])$(id).disabled=!hasSelection||loading||Boolean(stroke||moving);
   for(const id of ['toggle-tools','toggle-inspector','focus-canvas'])$(id).disabled=loading||Boolean(stroke||moving);
   const transform=hasSelection?selectionTransform(selectedNode).values:null;
@@ -339,9 +339,13 @@ function updateControls() {
   $('seed-help').textContent=editingSeed?'Controls this shape’s outline and generated details. All its paths share this seed.':varySeed?'Used for the next shape, then a fresh seed is chosen.':'Reuses this seed for each new shape. Randomize chooses another variation.';
   $('draw-new').disabled=locked||!ready;
   $('simplify-strokes').disabled=locked;
-  $('draw-add').disabled=locked||!hasSelection||selectedNode?.hidden;
+  $('draw-add').disabled=locked||!hasSelection||selectedNode?.hidden||Boolean(selectedNode?.joined);
   $('draw-add').setAttribute('aria-pressed',String(drawMode==='add'));
-  $('edit-path').disabled=!hasSelection||locked;
+  $('edit-path').disabled=!hasSelection||locked||Boolean(selectedNode?.joined);
+  for(const id of ['edit-path','draw-add']){
+    const button=$(id);button.dataset.originalTitle??=button.title;
+    button.title=selectedNode?.joined?'Separate the joined shape to edit individual paths':button.dataset.originalTitle;
+  }
   $('path-add').disabled=!pathEditing||pointAt<0||pointAt===activePath.length-1||locked;
   $('path-delete').disabled=!pathEditing||pathPoint<0||(selectedNode?.points?.length??0)<=1||locked;
   $('path-extend').disabled=!pathEditing||pathPoint<0||locked;
@@ -759,7 +763,35 @@ let nodes=[], selected=-1, moving=null, pendingEval=-1, pendingRect=null;
 // alsoSelected holds the others, and a drag or an arrow nudge moves them all. Indices go stale when the list changes, so every
 // reorder, delete, undo, load and new stroke clears it.
 let alsoSelected=[];
-const selectedShapes=() => selected<0||!nodes[selected]?.points?[]:[selected,...alsoSelected.filter(i => nodes[i]?.points&&i!==selected)].sort((a,b) => a-b);
+function shapeMembers(index) {
+  const name=nodes[index]?.joined;
+  return name?nodes.flatMap((n,i)=>n.joined===name?[i]:[]):[index];
+}
+const shapeRoot=i=>shapeMembers(i)[0];
+const selectedRoots=()=>[...new Set([selected,...alsoSelected].filter(i=>nodes[i]?.points).map(shapeRoot))];
+const selectedShapes=()=>selectedRoots().flatMap(shapeMembers).sort((a,b)=>a-b);
+const selectionNode=i=>nodes[i]?.joined?joinedGeometry(nodes,shapeMembers(i)):nodes[i];
+function freeGroupName(base,used) {
+  let name=base, suffix=2;
+  while(used.has(name))name=base+' '+suffix++;
+  used.add(name);
+  return name;
+}
+function joinSelection() {
+  if (loading||stroke||moving||!ready) return;
+  const roots=selectedRoots(),members=selectedShapes();
+  if (!roots.length) return;
+  if (roots.length===1&&!nodes[selected]?.joined) return;
+  const join=roots.length>1;
+  const name=join?freeGroupName('Joined shape',new Set(nodes.map(n=>n.joined))):null;
+  for (const i of members) {
+    if (join) nodes[i].joined=name;
+    else delete nodes[i].joined;
+  }
+  pathEditing=false;
+  selectNode(members[0]);
+  checkpoint(false,join?'joining shapes':'separating a shape');
+}
 // The material editor at Full size covers the map, which then waits (canvas suspended, shape and Time work deferred) until it is uncovered;
 // docked beside the map, the editor leaves it live.
 let materialCovers=false,materialTerrainDirty=false;
@@ -767,7 +799,7 @@ const NODE_NAMES={landform:'Landform',sand:'Sand',paint:'Surface paint',grass:'V
 // A shape's name, the same on its card, the bar on the map, the Shapes list, the map's own label and the status line: its tool's name
 // (a stroke whose tool the world lacks shows as Landform) and its place in the list, as in "Plateau 3".
 const shapeLabel=n => n?.kind==='landform'?toolLabel(strokeTool(n,toolIds()))||NODE_NAMES.landform:NODE_NAMES[n?.kind]||n?.kind||'';
-const shapeName=i => nodes[i]?`${shapeLabel(nodes[i])} ${i+1}`:'';
+const shapeName=i => nodes[i]?.joined || (nodes[i]?`${shapeLabel(nodes[i])} ${i+1}`:'');
 // The Facet shape a landform draws: its own, or angular facets where it digs (prepareNode).
 const facetShape=q => landformDigs(q)?0:clamp(Math.round(q.facetForm||0),0,2);
 function addNode(n) {
@@ -1299,25 +1331,29 @@ function beginRegionalMove(index=selected) {
   if (stroke || moving || !nodes[index]?.points) return false;
   cancelWeather();
   // Pressing any shape of a multi-selection moves them all and keeps the primary; another shape collapses the selection to it.
-  const group=selectedShapes(); if (!group.includes(index) || group.length<2) selectNode(index);
+  if (!selectedShapes().includes(index)) selectNode(index);
+  const group=selectedShapes();
   const original=cloneNodes([nodes[index]])[0];
   const members=group.length>1&&group.includes(index)?group.map(i => { const o=cloneNodes([nodes[i]])[0]; return {index:i,original:o,state:nodeState(o)}; }):null;
   moving={regional:true,index,original,state:nodeState(original),selectionBefore:selected,changed:false,members};
   updateControls(); return index;
 }
-// Only a plain drag moves the group; rotate, scale, height and point edits stay on the shape they started on.
+// A drag translates the whole selection. Rotate and scale act on the picked shape, including every joined path.
 const groupTranslation=edit => edit && typeof edit==='object' && !Array.isArray(edit) && !edit.matrix && !edit.point && !edit.params && !Number.isFinite(edit.height);
 // Transforms and parameter edits are relative to the gesture's first node,
 // regardless of pointer cadence. A release is one undoable history entry.
 function previewRegionalMove(edit) {
   if (!moving?.regional) return false;
-  if (moving.members && groupTranslation(edit)) {
-    let m=[1,0,0,1,edit.dx??0,edit.dy??0];
-    if (m.some(v => !Number.isFinite(v))) throw new Error('Invalid terrain transform.');
-    m=fitToMap(moving.members.flatMap(g => g.state.points),m); if (!m) return moving.index;   // the group stops at the edge together
-    for (const g of moving.members) {
+  const joined=nodes[moving.index].joined;
+  const matrix=Array.isArray(edit)?edit:edit?.matrix;
+  if (moving.members && (groupTranslation(edit) || joined && matrix)) {
+    const members=matrix?moving.members.filter(g=>g.original.joined===joined):moving.members;
+    let m=matrix??[1,0,0,1,edit.dx??0,edit.dy??0];
+    if (!Array.isArray(m) || m.length!==6 || m.some(v => !Number.isFinite(v)) || Math.abs(m[0]*m[3]-m[1]*m[2])<1e-8) throw new Error('Invalid terrain transform.');
+    m=fitToMap(members.flatMap(g => g.state.points),m); if (!m) return moving.index;   // the group stops at the edge together
+    for (const g of members) {
       const before=nodeBounds(nodes[g.index]),node=cloneNodes([g.original])[0];
-      transformNode(node,g.state,m); nodes[g.index]=node;
+      transformNode(node,g.state,m,true); nodes[g.index]=node;
       evaluate(g.index,unionRect(before,nodeBounds(node)));
     }
     moving.changed=true; schedule(); return moving.index;
@@ -1536,7 +1572,7 @@ const sculptRegion={
   // hit-tests) and does nothing else; any other click closes the card.
   pickHere:(event,art,ground)=>{if(!picking&&!event.altKey){pickCard?.close();return false;}if(!stroke&&!moving)pickCard?.pick(art,ground);return true;},picking:()=>picking,
   heightOf:i => heightControl(nodes[i])?.value??null,
-  select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,selectedShapes,toggleShape,pickAt:pickNode,selectionLabel:shapeName,
+  select:selectNode,selectAt:p => { const i=pickNode(p); selectNode(i); return i; },selection:() => selected,selectedShapes:selectedRoots,selectionNode,toggleShape,pickAt:pickNode,selectionLabel:shapeName,
   editNode:(i,edit) => { selectNode(i); changeSelected(edit); },moveNode:(i,dx,dy) => { selectNode(i); transformSelected(() => [1,0,0,1,dx,dy]); },
   pendingInputs:()=>worldInputQueue.pending,drawOptions:currentDrawOptions,mapData,restoreMapData,mapChanged,checkpoint,ready:() => ready&&!loading,canExport,
   setBusy:setMapBusy,registerFeatures:handle => { mapFeatures=handle; },registerMetadata:handle => { mapMetadata=handle; },renderProgress,presented:fresh=>{drawShapePreview();if(fresh)loadingDone();},onUpdate:fn => { mapUpdate=fn; }
@@ -1559,20 +1595,27 @@ function nodeState(n) { return {params:n.params?{...n.params}:undefined,points:n
 // A transform kept on the map: the shape moves whole, never squashed onto the edge. The matrix gains the translation that brings the transformed points'
 // box inside the map (a drag past the edge stops there; a turn or scale by the edge is pushed back in). Null where the box is larger than the map.
 function fitToMap(points,m) {
-  const w=(config.map?.width??size)-1,h=(config.map?.height??size)-1;let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
-  for (const q of points) { const r=applyFrame(m,q.x,q.y); ax=Math.min(ax,r.x); ay=Math.min(ay,r.y); bx=Math.max(bx,r.x); by=Math.max(by,r.y); }
+  // An island can already extend past the map boundary. Preserve that overhang during a drag.
+  let x0=0,y0=0,w=(config.map?.width??size)-1,h=(config.map?.height??size)-1;
+  let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
+  for (const q of points) {
+    x0=Math.min(x0,q.x);y0=Math.min(y0,q.y);w=Math.max(w,q.x);h=Math.max(h,q.y);
+    const r=applyFrame(m,q.x,q.y);
+    ax=Math.min(ax,r.x);ay=Math.min(ay,r.y);bx=Math.max(bx,r.x);by=Math.max(by,r.y);
+  }
   if (!points.length) return m;
-  if (bx-ax>w+1e-9 || by-ay>h+1e-9) return null;
-  const dx=ax<0?-ax:bx>w?w-bx:0,dy=ay<0?-ay:by>h?h-by:0;
+  if (bx-ax>w-x0+1e-9 || by-ay>h-y0+1e-9) return null;
+  const dx=ax<x0?x0-ax:bx>w?w-bx:0,dy=ay<y0?y0-ay:by>h?h-by:0;
   return dx||dy?[m[0],m[1],m[2],m[3],m[4]+dx,m[5]+dy]:m;
 }
 // Moving, turning or scaling a shape: its path, frame, radius and a river's drawn line take one matrix, fitted to the map. Answers false, leaving the
 // node as it was, where the shape would not fit on the map.
-function transformNode(n,start,m) {
-  m=fitToMap(start.points,m); if (!m) return false;
+function transformNode(n,start,m,fitted=false) {
+  if (!fitted) m=fitToMap(start.points,m);
+  if (!m) return false;
   n.points=start.points.map(q => applyFrame(m,q.x,q.y));
   n.frame=compose(m,start.frame);
-  if (n.params && start.radius) n.params={...n.params,radius:clamp(start.radius*Math.hypot(m[0],m[1]),4,600)};
+  if (n.params && start.radius && Math.abs(Math.hypot(m[0],m[1])-1)>1e-9) n.params={...n.params,radius:clamp(start.radius*Math.hypot(m[0],m[1]),4,600)};
   // A river's drawn line moves with it; one still as migrated stays so, one edited by hand stays edited (sculpt-river.js movedRiver).
   if (start.params?.river&&n.params) n.params={...n.params,river:movedRiver(start.params.river,{points:start.points,params:start.params,seed:n.seed},{points:n.points,params:n.params,seed:n.seed},q => applyFrame(m,q.x,q.y))};
   return true;
@@ -1580,10 +1623,10 @@ function transformNode(n,start,m) {
 // A transform of the selected shape from the card, the bar or the keys: one undo step, or none (and a note) where it would leave the map or change nothing.
 function transformSelected(matrixOf) {
   const n=nodes[selected]; if (!n?.points || stroke || moving || loading || !ready) return;
-  const m=fitToMap(n.points,matrixOf(n));
+  const shape=selectionNode(selected),m=fitToMap(shape.points,matrixOf(shape));
   if (!m) { status('The shape would not fit on the map.'); return; }
   if (isIdentity(m)) return;
-  changeSelected(node => { transformNode(node,nodeState(node),m); });
+  transformMembers(shapeMembers(selected),m);
 }
 function nodePivot(n) {
   let ax=Infinity,ay=Infinity,bx=-Infinity,by=-Infinity;
@@ -1601,8 +1644,11 @@ function moveSelectedShapes(dx,dy) {
   const group=selectedShapes(); if (!group.length || stroke || moving || loading || !ready) return;
   // The group stops at the edge together, keeping its layout.
   const m=fitToMap(group.flatMap(i => nodes[i].points),[1,0,0,1,dx,dy]); if (!m || isIdentity(m)) return;
-  mapCanvas?.holdShapes?.(group); cancelWeather();
-  for (const i of group) { const n=nodes[i],before=nodeBounds(n); transformNode(n,nodeState(n),m); pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); }
+  transformMembers(group,m);
+}
+function transformMembers(group,m) {
+  mapCanvas?.holdShapes?.([...new Set(group.map(shapeRoot))]); cancelWeather();
+  for (const i of group) { const n=nodes[i],before=nodeBounds(n); transformNode(n,nodeState(n),m,true); pendingRect=unionRect(pendingRect,unionRect(before,nodeBounds(n))); }
   pendingEval=pendingEval<0?group[0]:Math.min(pendingEval,group[0]);
   flushEval(); checkpoint(); queueWeather();const adding=pathAdding,mode=drawMode;selectNode(selected,true);pathAdding=adding;drawMode=mode;updateControls();schedule();
 }
@@ -1616,7 +1662,8 @@ function copyShapes() {
   // A copy's rock type and material are remembered by identity, not slot: a slot freed by a delete (or an undo) may hold another by paste time.
   const refs=group.map(i => { const p=nodes[i].params??{},rock=Math.round(p.rockPreset??-1),ground=p.groundPreset; return {rock:rock>0?rockRef(mapRocks,rock):undefined,ground:Number.isInteger(ground)&&ground>0?materialRef(mapMaterials,ground):undefined}; });
   shapeClipboard={nodes:cloneNodes(group.map(i => nodes[i])),refs,pastes:0};
-  status(group.length>1?`Copied ${group.length} shapes.`:`Copied ${shapeName(group[0])}.`); return true;
+  const count=selectedRoots().length;
+  status(count>1?`Copied ${count} shapes.`:`Copied ${shapeName(group[0])}.`); return true;
 }
 function pasteShapes(verb='Pasted') {
   if (!shapeClipboard || stroke || moving || loading || !ready) return false;
@@ -1625,20 +1672,30 @@ function pasteShapes(verb='Pasted') {
   const m=fitToMap(copies.flatMap(n => n.points),[1,0,0,1,step,step]);
   if (!m) { status('The copied shapes do not fit on this map.'); return true; }
   shapeClipboard.pastes++; cancelWeather();
-  for (const n of copies) transformNode(n,nodeState(n),m);
+  const names=new Map(),used=new Set(nodes.map(n=>n.joined));
+  for (const n of copies) {
+    if(n.joined){
+      if(!names.has(n.joined))names.set(n.joined,freeGroupName(n.joined+' copy',used));
+      n.joined=names.get(n.joined);
+    }
+    transformNode(n,nodeState(n),m,true);
+  }
   const first=nodes.length; nodes.push(...copies);
   evaluate(first,copies.reduce((r,n) => unionRect(r,nodeBounds(n)),null));
-  checkpoint(); pathEditing=false; alsoSelected=copies.slice(1).map((_,k) => first+1+k); selectNode(first,true);
-  status(copies.length>1?`${verb} ${copies.length} shapes.`:`${verb} ${shapeName(first)}.`);
+  checkpoint(); pathEditing=false; alsoSelected=shapeGroups(copies).slice(1).map(g=>first+g[0]); selectNode(first,true);
+  const count=selectedRoots().length;
+  status(count>1?`${verb} ${count} shapes.`:`${verb} ${shapeName(first)}.`);
   renderLayers(); updateControls(); schedule(); queueWeather(); return true;
 }
 function duplicateShapes() { return copyShapes() && pasteShapes('Duplicated'); }
 function pickNode(p) {
   let best=-1,bestScore=Infinity;
   nodes.forEach((n,i) => { const d=nodeDistance(n,p),reach=Math.max(24,(n.params?.radius||40)); if (d<reach && d/reach<=bestScore) { bestScore=d/reach; best=i; } });
-  return best;
+  return shapeRoot(best);
 }
 function selectNode(i,keepOthers=false) {
+  i=shapeRoot(i);
+  if(nodes[i]?.joined)pathEditing=false;
   if(!keepOthers)alsoSelected=[];
   const another=selected!==i;
   if(another){pathPoint=-1;pathIndex=0;}
@@ -1656,11 +1713,12 @@ function selectNode(i,keepOthers=false) {
   }
   renderLayers(); updateControls(); schedule(false);
   if (another && n?.kind==='landform' && n.params) followCardRock();
-  if (n) status(alsoSelected.length?`${selectedShapes().length} shapes selected. Drag one to move them together; Shift-click adds or removes.`:`Selected ${shapeName(i)}. Drag to transform or edit its settings.`);
+  if (n) status(alsoSelected.length?`${selectedRoots().length} shapes selected. Drag one to move them together; Shift-click adds or removes.`:`Selected ${shapeName(i)}. Drag to transform or edit its settings.`);
   else if (/^Selected |^\d+ shapes selected\. /.test($('status').textContent)) status('');   // the selection message goes with the selection
 }
 // Shift-click on the map or in the Shapes list. Answers whether the shape is now selected.
 function toggleShape(i) {
+  i=shapeRoot(i);
   if (i<0 || !nodes[i] || stroke || moving || loading) return false;
   // Only shapes with a path move as a group; a pathless row (Ground undulation) is selected alone.
   if (pathEditing || drawMode==='add' || !nodes[i].points || (selected>=0 && !nodes[selected]?.points)) { selectNode(i); return true; }
@@ -1689,18 +1747,27 @@ function editSelectedFromControls(overrides={},only=null) {
 }
 function reorderLayer(from,to) {
   if(!ready||loading||stroke||moving||mapFeatures?.busy||from===to||!nodes[from]||!nodes[to])return;
-  cancelWeather();const [node]=nodes.splice(from,1);nodes.splice(to,0,node);selected=to;pathPoint=-1;
-  evaluate(Math.min(from,to));checkpoint();selectNode(to);schedule();queueWeather();
+  const source=shapeMembers(from),target=shapeMembers(to);
+  if(source[0]===target[0])return;
+  const moved=source.map(i=>nodes[i]),anchor=nodes[target[0]];
+  cancelWeather();
+  const movingIndices=new Set(source);
+  nodes=nodes.filter((_,i)=>!movingIndices.has(i));
+  const at=nodes.indexOf(anchor)+(from<to?1:0);
+  nodes.splice(at,0,...moved);pathPoint=-1;
+  evaluate(Math.min(source[0],at));checkpoint();selectNode(at);schedule();queueWeather();
 }
 function renderLayers() {
   const list=$('layers'); if (!list) return;
-  $('layer-count').textContent=nodes.length;
-  list.replaceChildren(...nodes.map((n,i) => {
+  const groups=shapeGroups(nodes),row=groups.findIndex(g=>g.includes(selected));
+  $('layer-count').textContent=groups.length;
+  list.replaceChildren(...groups.map((members,order) => {
+    const i=members[0],n=nodes[i];
     const item=document.createElement('li');item.draggable=true;item.dataset.index=i;
     const chosen=i===selected||alsoSelected.includes(i);item.className=(chosen?'selected ':'')+(n.hidden?'is-hidden':'');
     const grip=document.createElement('span');grip.className='layer-grip';grip.textContent='⠿';grip.setAttribute('aria-hidden','true');
-    const name=document.createElement('button');name.className='layer-name';name.textContent=shapeLabel(n);name.dataset.help='Select this shape to edit it. Shift-click adds it to the selection.';const count=document.createElement('span');count.className='path-count';const pc=shapePaths(n).length;count.textContent=pc?`${pc} path${pc===1?'':'s'}`:'';name.setAttribute('aria-pressed',String(chosen));name.onclick=e=>{if(e.shiftKey)toggleShape(i);else selectNode(i===selected&&!alsoSelected.length?-1:i);};
-    const number=document.createElement('span');number.className='layer-index';number.textContent=String(i+1).padStart(2,'0');
+    const name=document.createElement('button');name.className='layer-name';name.textContent=n.joined||shapeLabel(n);name.dataset.help='Select this shape to edit it. Shift-click adds it to the selection.';const count=document.createElement('span');count.className='path-count';const pc=members.reduce((sum,j)=>sum+shapePaths(nodes[j]).length,0);count.textContent=pc?`${pc} path${pc===1?'':'s'}`:'';name.setAttribute('aria-pressed',String(chosen));name.onclick=e=>{if(e.shiftKey)toggleShape(i);else selectNode(i===selected&&!alsoSelected.length?-1:i);};
+    const number=document.createElement('span');number.className='layer-index';number.textContent=String(order+1).padStart(2,'0');
     const visibility=document.createElement('button');visibility.className='layer-visibility';visibility.textContent=n.hidden?'○':'◉';visibility.title=visibility.ariaLabel=`${n.hidden?'Show':'Hide'} ${name.textContent}`;visibility.setAttribute('aria-pressed',String(!n.hidden));visibility.onclick=()=>{selected=i;nodeAction('hide');};
     name.disabled=visibility.disabled=loading||Boolean(stroke||moving);
     item.append(grip,number,name,count,visibility);
@@ -1714,7 +1781,11 @@ function renderLayers() {
   if(!nodes.length){const empty=document.createElement('p');empty.className='empty';empty.textContent='Draw a path to create a shape.';list.append(empty);}
   for (const id of ['node-seed','node-delete','node-up','node-down','node-hide']) $(id).disabled=selected<0||loading||Boolean(stroke||moving);
   $('shape-duplicate').disabled=!selectedShapes().length||loading||Boolean(stroke||moving);
-  $('node-up').disabled||=selected>=nodes.length-1;$('node-down').disabled||=selected<=0;
+  $('node-up').disabled||=row>=groups.length-1;$('node-down').disabled||=row<=0;
+  const roots=selectedRoots(),join=$('shape-join'),separate=roots.length===1&&Boolean(nodes[selected]?.joined);
+  join.textContent=separate?'Separate':'Join';
+  join.disabled=loading||Boolean(stroke||moving)||(roots.length<2&&!separate);
+  join.title=separate?'Separate the paths to edit their individual settings':roots.length>1?'Join the selected shapes so their paths move together':'Shift-click two or more shapes to join them';
   $('node-seed').disabled||=nodes[selected]?.seed===undefined;
   $('node-hide').textContent=nodes[selected]?.hidden?'Show':'Hide';
   // A disabled list action says why (rule 9); a load, stroke or drag under way passes in a moment and needs no reason.
@@ -1727,11 +1798,11 @@ function renderLayers() {
 }
 function nodeAction(kind) {
   const i=selected; if (i<0 || stroke || moving || loading || !ready) return;
-  if(kind==='up'||kind==='down'){reorderLayer(i,i+(kind==='up'?1:-1));return;}
+  if(kind==='up'||kind==='down'){const groups=shapeGroups(nodes),row=groups.findIndex(g=>g.includes(i));const target=groups[row+(kind==='up'?1:-1)];if(target)reorderLayer(i,target[0]);return;}
   cancelWeather();
   if (kind==='delete') { const group=selectedShapes().length>1?selectedShapes():[i]; for (const j of [...group].reverse()) nodes.splice(j,1); selected=-1;alsoSelected=[]; evaluate(group[0]); }
-  else if (kind==='hide') { nodes[i].hidden=!nodes[i].hidden; evaluate(i); }
-  else if (kind==='seed') { if (nodes[i].seed===undefined) return; nodes[i].seed=randomSeed(nodes[i].seed); migrateRiverNode(nodes[i]); evaluate(i); }
+  else if (kind==='hide') { const hidden=!nodes[i].hidden;for(const j of shapeMembers(i))nodes[j].hidden=hidden;evaluate(i); }
+  else if (kind==='seed') { if (nodes[i].seed===undefined) return; for(const j of shapeMembers(i)){if(nodes[j].seed!==undefined)nodes[j].seed=randomSeed(nodes[j].seed);migrateRiverNode(nodes[j]);} evaluate(i); }
   checkpoint(); selectNode(selected); schedule(); queueWeather();
 }
 // Apply a pending node edit now, so history and refinement see it.
@@ -1746,11 +1817,12 @@ function flushEval() {
 function changeName(prev,next,act='') {
   if (!prev) return '';
   const same=k => JSON.stringify(prev[k])===JSON.stringify(next[k]),acts=[],changes=[];
-  const named=(list,i) => list[i]?`${shapeLabel(list[i])} ${i+1}`:'';
+  const named=(list,i) => list[i]?.joined || (list[i]?`${shapeLabel(list[i])} ${i+1}`:'');
   if (!same('nodes')) {
     const a=prev.nodes,b=next.nodes,i=b.findIndex((n,j) => JSON.stringify(n)!==JSON.stringify(a[j]));
     if (b.length<a.length) acts.push(a.length-b.length>1?`deleting ${a.length-b.length} shapes`:`deleting ${named(a,i<0?b.length:i)||'a shape'}`);
     else if (b.length>a.length) acts.push(b.length-a.length>1?`adding ${b.length-a.length} shapes`:`adding ${named(b,i<0?a.length:i)||'a shape'}`);
+    else if (act) acts.push(act);
     else changes.push(i>=0?named(b,i):'the shapes');
   }
   if (!same('world')||!same('surface')||!same('rock')) changes.push('the world settings');
@@ -2183,7 +2255,7 @@ function deserializeNodes(list) {
   return list.filter(n=>n&&NODE_NAMES[n.kind]).map(n=>{
     if(n.kind==='heights')return checkedHeights(n,list.indexOf(n));
     validatePaths(n);
-    return {kind:n.kind,...(n.kind==='landform'?{tool:n.tool,...(n.kept?{kept:true}:{})}:{}),hidden:Boolean(n.hidden),amplitude:n.amplitude,wavelength:n.wavelength,coverage:n.coverage,art:n.art,seed:n.seed,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:Array.isArray(n.frame)&&n.frame.length===6&&n.frame.every(Number.isFinite)?n.frame.slice():undefined};
+    return {kind:n.kind,...(n.points&&typeof n.joined==='string'&&n.joined.trim()?{joined:n.joined.trim()}:{}),...(n.kind==='landform'?{tool:n.tool,...(n.kept?{kept:true}:{})}:{}),hidden:Boolean(n.hidden),amplitude:n.amplitude,wavelength:n.wavelength,coverage:n.coverage,art:n.art,seed:n.seed,params:n.params?{...n.params}:undefined,points:n.points?.map(p=>({...p})),paths:clonePaths(n),frame:Array.isArray(n.frame)&&n.frame.length===6&&n.frame.every(Number.isFinite)?n.frame.slice():undefined};
   });
 }
 function download(blob,name) { const url=URL.createObjectURL(blob),a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }
@@ -2199,11 +2271,12 @@ document.querySelector('.tool-groups').addEventListener('click',event => {
 for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('input',() => { rememberTool(true); updateControls(); schedule(); persistLater(); if (selected>=0) editSelectedFromControls({},[id]); });
 for (const id of ['diameter','amount','roughness','softness','cracks']) $(id).addEventListener('change',commitCard);
 for (const [id,kind] of [['node-seed','seed'],['node-delete','delete'],['node-up','up'],['node-down','down'],['node-hide','hide']]) $(id).addEventListener('click',() => nodeAction(kind));
+$('shape-join').addEventListener('click',joinSelection);
 $('shape-duplicate').addEventListener('click',duplicateShapes);
 // Features and Starts are two entries on the rail for the one tool (sculpt-features.js): Features opens it to place, Starts in its starts mode.
 const openFeatures=mode=>{if(stroke||moving)return;leavePick();selected=-1;alsoSelected=[];pathAdding=false;drawMode='select';mapFeatures?.activate(mode);renderLayers();updateControls();};
 $('feature-tool').onclick=()=>openFeatures('deposit');$('starts-tool').onclick=()=>openFeatures('starts');
-function setPathMode(on){if(stroke||moving||loading)return;if(on)alsoSelected=[];pathEditing=on;pathPoint=-1;pathAdding=false;drawMode='select';updateControls();schedule();}
+function setPathMode(on){if(stroke||moving||loading||(on&&nodes[selected]?.joined))return;if(on)alsoSelected=[];pathEditing=on;pathPoint=-1;pathAdding=false;drawMode='select';updateControls();schedule();}
 $('edit-path').onclick=()=>setPathMode(!pathEditing);$('transform-mode').onclick=()=>setPathMode(false);
 $('canvas-deselect').onclick=()=>selectNode(-1);
 $('selection-delete').onclick=()=>nodeAction('delete');
@@ -2211,12 +2284,12 @@ for(const key of ['x','y','rotation','scale']){
   const input=$('selection-'+key);
   input.addEventListener('change',()=>{
     if(!input.reportValidity()||input.value.trim()===''){input.blur();updateControls();return;}
-    const value=Number(input.value),n=nodes[selected];if(!n?.points||!Number.isFinite(value))return;
+    const value=Number(input.value),n=selectionNode(selected);if(!n?.points||!Number.isFinite(value))return;
     if(Math.abs(value-selectionTransform(n).values[key])<.051){input.blur();updateControls();return;}
     const matrix=selectionTransform(n,{[key]:value}).matrix;
     transformSelected(() => matrix);input.blur();updateControls();
   });
-  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur();}if(e.key==='Escape'){e.preventDefault();e.stopPropagation();input.value=String(Math.round(selectionTransform(nodes[selected]).values[key]*10)/10);input.blur();}});
+  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur();}if(e.key==='Escape'){e.preventDefault();e.stopPropagation();input.value=String(Math.round(selectionTransform(selectionNode(selected)).values[key]*10)/10);input.blur();}});
 }
 $('path-add').onclick=()=>changeSelected(n=>{const added=insertPoint(n,pathIndex,pathPoint);if(added>=0)pathPoint=added;});
 $('path-delete').onclick=()=>{if(pathPoint<0)return;changeSelected(n=>{if(removePoint(n,pathPoint)){pathPoint=-1;pathIndex=Math.min(pathIndex,shapePaths(n).length-1);pathAdding=false;}});};
@@ -2484,7 +2557,7 @@ window.addEventListener('keydown',event => {
     event.preventDefault();const step=event.shiftKey?10:1,dx=arrow[0]*step,dy=arrow[1]*step;
     if(pathEditing&&pathPoint>=0)changeSelected(n=>{const p=n.points[pathPoint];p.x=clamp(p.x+dx,0,config.map.width-1);p.y=clamp(p.y+dy,0,config.map.height-1);});else moveSelectedShapes(dx,dy);return;
   }
-  if ((event.key==='Delete' || event.key==='Backspace') && selected>=0 && !stroke && !moving) { event.preventDefault(); const count=Math.max(1,selectedShapes().length); nodeAction('delete'); status(count>1?`Deleted ${count} shapes.`:'Deleted the selected shape.'); }
+  if ((event.key==='Delete' || event.key==='Backspace') && selected>=0 && !stroke && !moving) { event.preventDefault(); const count=Math.max(1,selectedRoots().length); nodeAction('delete'); status(count>1?`Deleted ${count} shapes.`:'Deleted the selected shape.'); }
   // Rotate , . (15°), scale [ ] (10%), height PageUp / PageDown (5).
   const turn={',':-Math.PI/12,'.':Math.PI/12}[event.key],grow={'[':1/1.1,']':1.1}[event.key],lift={PageUp:5,PageDown:-5}[event.key];
   if (selected>=0 && nodes[selected]?.points && (turn || grow || lift) && !event.metaKey && !event.ctrlKey) {

@@ -77,3 +77,34 @@ export function drawSelection(ctx,g,{label='',pathMode=false,point=-1,activePath
   }
   ctx.restore();
 }
+
+// Joining paths is an editing operation. Their individual strokes keep their
+// profiles, seeds and positions in the terrain replay order.
+export function shapeGroups(nodes) {
+  const groups = [], named = new Map();
+  nodes.forEach((node, index) => {
+    const name = node.points && node.joined;
+    let members = name && named.get(name);
+    if (!members) {
+      members = [];
+      groups.push(members);
+      if (name) named.set(name, members);
+    }
+    members.push(index);
+  });
+  return groups;
+}
+
+export function joinedGeometry(nodes, members) {
+  const first = nodes[members[0]];
+  if (members.length === 1) return first;
+  const points = [], paths = [];
+  let radius = 0;
+  for (const i of members) {
+    const node = nodes[i], offset = points.length;
+    for (const path of shapePaths(node)) paths.push(path.map(j => j + offset));
+    for (const point of node.points) points.push(point);
+    radius = Math.max(radius, node.params?.radius ?? 0);
+  }
+  return {...first, points, paths, params: {...first.params, radius}};
+}
