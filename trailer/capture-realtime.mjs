@@ -50,19 +50,19 @@ try {
   await b.send('Page.startScreencast', {format: 'jpeg', quality: 85, maxWidth: VW, maxHeight: VH, everyNthFrame: 1});
   const wall0 = Date.now();
   await sleep(600);
-  // A mountain range, dragged along a gentle curve
-  await tool('mountain'); await drag(curve([[360, 290], [520, 240], [690, 270], [860, 220]]), 1300); await sleep(1500);
-  // A crater: the drag sets its impact direction
-  await tool('crater'); await drag([[1020, 470], [1090, 530]], 500); await sleep(1500);
-  // A lake: Deep water dragged along the low ground
-  await tool('deep'); await drag(curve([[300, 640], [440, 600], [580, 660], [720, 630]]), 1200); await sleep(1500);
-  // Rolling hills along the front
-  await tool('hill'); await drag(curve([[820, 720], [940, 690], [1080, 730], [1200, 700]]), 1000); await sleep(1300);
-  // Metal deposits, then trees by the lake
+  // A map laid out as land is: a mountain range arching across the back, foothills at its foot, a lake winding through the low ground, a
+  // crater alone on the open plain (nothing within reach of its craterlets), knolls at the front, metal on flat ground, trees on the shores.
+  await tool('mountain'); await drag(curve([[320, 255], [470, 210], [650, 240], [830, 205], [970, 245]]), 1500); await sleep(1400);
+  await tool('hill'); await drag(curve([[400, 370], [490, 350], [560, 365]]), 600); await sleep(900);
+  await drag(curve([[750, 355], [830, 340], [890, 350]]), 600); await sleep(1200);
+  await tool('deep'); await drag(curve([[290, 610], [420, 570], [560, 615], [690, 595]]), 1200); await sleep(1400);
+  await tool('crater'); await drag([[1080, 500], [1130, 545]], 450); await sleep(1400);
+  await tool('knollField'); await click(860, 735, 400); await sleep(1000);
+  // Metal on the flat ground between the lake and the crater, then trees along the lake's shores
   await press('#feature-tool'); await sleep(250); await press('[data-feature-kind="deposit"]');
-  for (const [x, y] of [[560, 450], [620, 470], [680, 445]]) { await click(x, y, 220); await sleep(80); }
+  for (const [x, y] of [[790, 545], [840, 570], [890, 540]]) { await click(x, y, 220); await sleep(80); }
   await press('[data-feature-kind="tree"]');
-  for (const [x, y] of [[260, 570], [300, 550], [345, 565], [760, 580], [800, 560], [840, 585], [230, 610]]) { await click(x, y, 140); await sleep(40); }
+  for (const [x, y] of [[290, 515], [335, 500], [380, 512], [610, 525], [655, 512], [460, 690], [510, 700], [240, 560]]) { await click(x, y, 140); await sleep(40); }
   await sleep(900);
   // Build the game map
   await clickOn('#open-export'); await sleep(700);
