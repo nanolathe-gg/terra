@@ -20,12 +20,22 @@ test('the root is the editor with a versioned asset base and no navigation redir
   assert.equal(root.replace(/<base href="[^"]+">/,''),read('index.html'));
 });
 
+test('the start-up preload hints name only files in the build, the entry module first', () => {
+  const page=read('index.html'),hints=[...page.matchAll(/<link rel="(modulepreload|preload)" href="([^"]+)"( as="fetch" crossorigin)?>/g)];
+  assert.ok(hints.length>20,'the page lists its start-up modules and shaders');
+  assert.equal(hints[0][2],'sculpt.js');
+  for(const [,rel,href,fetchMode] of hints){
+    assert.ok(existsSync(join(folder,href)),`${href} is in the build`);
+    if(rel==='preload')assert.ok(fetchMode,`${href}: a fetch preload matches the page's cors fetch only with crossorigin`);
+  }
+  assert.ok(hints.some(([,,href])=>href==='engine-shape.wgsl'),'the late-read shaders are hinted');
+});
+
 test('every world has a config file, and the services are declared', () => {
   const services = JSON.parse(read('services.json'));
   for (const world of services.worlds) {
     const config = JSON.parse(read(`config/${world}.json`));
     assert.equal(config.biomeId, world);
-    assert.ok(existsSync(join(folder, config.materialTable)), `${world}: table ${config.materialTable} is in the build`);
     assert.ok(!('variants' in config), `${world}: no variants`);
   }
   const catalog = JSON.parse(read('config/catalog.json'));

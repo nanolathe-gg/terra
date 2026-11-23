@@ -1118,8 +1118,39 @@ export function stonePixelsFor(metal) {
 // (pale lilac-white/pink-lilac next to steel blue/gray) in a tight dark moss halo; the halos merge into one patch.
 export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
   const P = { ...DEPOSIT_DEFAULTS, ...params };
-  if (P.style === 'pebbles') return paintDepositPebbles(ground, cx, cy, P, seed, ctx);
-  if (P.underwater) return paintDepositAqua(ground, cx, cy, P, seed, ctx);
+  const painter = P.style === 'pebbles' ? paintDepositPebbles : P.underwater ? paintDepositAqua : paintDepositStone;
+  if (P.rimMode !== 'relief') return painter(ground, cx, cy, P, seed, ctx, setGround);
+
+  // The recessed bed follows the actual ore fragments. Its depth is art-pixel relief only.
+  const size = 128, ox = Math.round(cx) - size / 2, oy = Math.round(cy) - size / 2;
+  const mask = new Float32Array(size * size);
+  const result = painter(ground, cx, cy, P, seed, ctx, (g, x, y, rgb) => {
+    const u = x - ox, v = y - oy;
+    if (u >= 0 && u < size && v >= 0 && v < size) mask[v * size + u] = 1;
+    setGround(g, x, y, rgb);
+  });
+  // Smooth the silhouette into a shallow floor and sloping walls. The derivative
+  // faces the near wall away from the sun and the far wall toward it.
+  const kernel = [1, 2, 3, 4, 5, 4, 3, 2, 1], temp = new Float32Array(mask.length), bed = new Float32Array(mask.length);
+  for (let y = 0; y < size; y++) for (let x = 4; x < size - 4; x++) {
+    const i = y * size + x;
+    for (let j = -4; j <= 4; j++) temp[i] += kernel[j + 4] * mask[i + j] / 25;
+  }
+  for (let y = 4; y < size - 4; y++) for (let x = 0; x < size; x++) {
+    const i = y * size + x;
+    for (let j = -4; j <= 4; j++) bed[i] -= 4 * kernel[j + 4] * temp[i + j * size] / 25;
+  }
+  const {v: sun} = lightOf(ctx), quantize = paletteSearch(ctx.palette);
+  for (let y = 1; y < size - 1; y++) for (let x = 1; x < size - 1; x++) {
+    const i = y * size + x, dx = (bed[i + 1] - bed[i - 1]) * .5, dy = (bed[i + size] - bed[i - size]) * .5;
+    if (dx === 0 && dy === 0) continue;
+    const light = clamp(1 - (dx * sun[0] + dy * sun[1]) * .9, .42, 1.54);
+    const rgb = getGround(ground, ox + x, oy + y).map(c => clamp(c * light, 0, 255));
+    setGround(ground, ox + x, oy + y, ctx.palette[quantize(...rgb)]);
+  }
+  return result;
+}
+function paintDepositStone(ground, cx, cy, P, seed, ctx, paintOre) {
   const palette = ctx.palette, q = paletteSearch(palette), lit = groundLight(ctx);
   const r = rng(seed), rn = rng(mix32(seed, 2));
   const rd = clamp(P.round, 0, 1);
@@ -1217,7 +1248,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
     for (const [x, y] of stonePts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
     const dx = Math.round(cx - (x0 + x1 + 1) / 2), dy = Math.round(cy - (y0 + y1 + 1) / 2);
     for (const p of stonePts) { p[0] += dx; p[1] += dy; }
-    for (const [x, y, rgb] of stones) setGround(ground, x + dx, y + dy, rgb);
+    for (const [x, y, rgb] of stones) paintOre(ground, x + dx, y + dy, rgb);
     chunks.forEach((pts, ci) => { for (const [x, y] of pts) {
       const bx = x - ox, by = y - oy;
       if (bx >= 0 && by >= 0 && bx < bw && by < bh) chunkId[by * bw + bx] = ci;
@@ -1260,7 +1291,7 @@ export function paintDeposit(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
 // a mid-blue body (51,75,215) flecked with lighter blues and a few teal and dark specks. Its area follows metal (GreenAquaOre1-3: 116 -> 1084,
 // 187 -> 1216, 250 -> 1867 px). Painted over the ground as opaque palette pixels, so it is the stamp itself.
 const AQUA_AREA = [[86, 950], [116, 1084], [187, 1216], [250, 1867]];
-function paintDepositAqua(ground, cx, cy, P, seed, ctx) {
+function paintDepositAqua(ground, cx, cy, P, seed, ctx, paintOre) {
   const palette = ctx.palette, r = rng(seed), rn = rng(mix32(seed, 2));
   const m = clamp(P.metal, AQUA_AREA[0][0], 250);
   let i = 0; while (i < 2 && m > AQUA_AREA[i + 1][0]) i++;
@@ -1288,13 +1319,13 @@ function paintDepositAqua(ground, cx, cy, P, seed, ctx) {
     else if (q > 0.985) col = W;
     else if (q > 0.95) col = q > 0.97 ? D : DD;
     else col = q < 0.12 ? M : q < 0.2 ? L : O;
-    setGround(ground, X, Y, palette[col]);
+    paintOre(ground, X, Y, palette[col]);
   }
   return { cx, cy, metal: P.metal, look: 'aqua', chunks: 1, stonePx: pts.length, dominant: 1, rect: [ox, oy, bw, bh], gameplay: { metal: P.metal, indestructible: true, footprint: [3, 3] } };
 }
 // Round 1's round-pebble deposit, kept as an artist option (style 'pebbles').
 
-function paintDepositPebbles(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
+function paintDepositPebbles(ground, cx, cy, params, seed, ctx, paintOre) {
   const P = { ...DEPOSIT_DEFAULTS, ...params }, palette = ctx.palette, q = paletteSearch(palette), L = lightOf(ctx), glit = groundLight(ctx);
   const r = rng(seed), rn = rng(mix32(seed, 2));
   const mt = clamp((P.metal - 86) / (223 - 86), 0, 1);
@@ -1344,7 +1375,7 @@ function paintDepositPebbles(ground, cx, cy, params = {}, seed = 1, ctx = {}) {
       let idx2 = idx;
       // a dark edge facet on the lower right
       if (rx * L.x + ry * L.y > 0.55 && rn() < 0.5) idx2 = pick(rn, [68, 67, 115, 116]);
-      setGround(ground, X, Y, glit ? palette[q(...glit(palette[idx2]))] : palette[idx2]);
+      paintOre(ground, X, Y, glit ? palette[q(...glit(palette[idx2]))] : palette[idx2]);
       continue;
     }
     const f = halo[k];

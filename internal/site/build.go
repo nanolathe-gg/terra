@@ -174,6 +174,11 @@ func (s *Site) Build(out, mapsURL string) (string, error) {
 		names = append(names, name)
 	}
 	sort.Strings(names)
+	if index, ok := files["index.html"]; ok {
+		if files["index.html"], err = withPreloads(index, names, func(n string) ([]byte, error) { return files[n], nil }); err != nil {
+			return "", err
+		}
+	}
 	h := sha256.New()
 	for _, name := range names {
 		sum := sha256.Sum256(files[name])

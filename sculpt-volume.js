@@ -1,4 +1,5 @@
 import {terrainAllocation} from './sculpt-memory.js';
+import {entryConstants} from './sculpt-gates.js';
 // A bounded, transient voxel solid for the editor's existing chunk stream.
 // Only allocation counts return to JS; shape, rock, wear, and rendering stay on GPU.
 const STORAGE=()=>GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST;
@@ -16,29 +17,32 @@ export class VoxelSurface {
   static async create(renderer,source,preprocess){
     const self=new VoxelSurface(renderer);const d=renderer.device;
     const code=preprocess('/*COMMON*/\n'+source,renderer.commonSource,new Set(['VOLUME_COMPUTE']));
-    renderer.stageSources?.push({source:code,stage:'D'});
     const module=d.createShaderModule({label:'voxel solid',code});
     const errors=(await module.getCompilationInfo()).messages.filter(m=>m.type==='error');
     if(errors.length)throw Error(errors.map(m=>`${m.lineNum}: ${m.message}`).join('\n'));
     const input=b=>b===0?{binding:b,visibility:GPUShaderStage.COMPUTE|GPUShaderStage.FRAGMENT,buffer:{type:'uniform'}}:[3,4,6].includes(b)?{binding:b,visibility:GPUShaderStage.COMPUTE|GPUShaderStage.FRAGMENT,texture:{sampleType:'unfilterable-float'}}:{binding:b,visibility:GPUShaderStage.COMPUTE|GPUShaderStage.FRAGMENT,buffer:{type:'read-only-storage'}};
     const output=b=>b<2||b===6?{binding:b,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:'write-only',format:'rgba32float'}}:{binding:b,visibility:GPUShaderStage.COMPUTE,buffer:{type:'storage'}};
-    const empty=d.createBindGroupLayout({entries:[]});self.module=module;self.layouts={};self.built=new Map();
+    const empty=d.createBindGroupLayout({entries:[]});self.module=module;self.source=code;self.layouts={};self.built=new Map();
     for(const [entryPoint,[reads,writes]]of Object.entries(ENTRIES)){
       const a=d.createBindGroupLayout({entries:reads.map(input)}),b=d.createBindGroupLayout({entries:writes.map(output)});
       self.layouts[entryPoint]={layout:d.createPipelineLayout({bindGroupLayouts:[renderer.commonLayout,empty,a,b]}),reads,writes,a,b};
     }
-    await Promise.all([self.build(0),self.build(15)]);
     self.drawLayout=d.createBindGroupLayout({entries:[0,1,2,3,4,5,7,8].map(input)});
     self.uniform=d.createBuffer({label:'voxel region settings',size:4*256,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
-    self.readback=d.createBuffer({label:'voxel allocation count readback',size:32,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
-    renderer.track(self.uniform,'voxel settings',4*256,'shared');renderer.track(self.readback,'voxel count readback',32,'shared');
+    renderer.track(self.uniform,'voxel settings',4*256,'shared');self.readbacks.push(self.countReadback());
     return self;
   }
   constructor(renderer){this.renderer=renderer;this.device=renderer.device;this.owned=[];this.made=new WeakSet();   // made: every working resource own() made, for the input checksum's guard
-    this.previewCounts=new Map();this.finalCounts=new Map();this.predictionStats={predicted:0,seeds:0,overflows:0,budgetFallbacks:0,preDrawWaitMs:0,postDrawWaitMs:0};this.finalStats={predicted:0,seeds:0,overflows:0};this.stats={pieces:0,bricks:0,candidateBricks:0,peakBytes:0,allocationMs:0};}
-  // Both allowed rock masks are ready at startup: fixed slot 0, and the recipe table.
+    // readbacks: idle count readback buffers. A drag preview's count is still mapping while the next preview starts, so each piece takes its own.
+    // late: after render(), a promise that a drag preview drawn before its count was checked turns out wrong (an overflow), or null.
+    this.readbacks=[];this.all=[];this.late=null;this.lateError=null;
+    this.previewCounts=new Map();this.finalCounts=new Map();this.predictionStats={predicted:0,seeds:0,scaled:0,overflows:0,unchecked:0,budgetFallbacks:0,preDrawWaitMs:0,postDrawWaitMs:0};this.finalStats={predicted:0,seeds:0,overflows:0};this.stats={pieces:0,bricks:0,candidateBricks:0,peakBytes:0,allocationMs:0};}
+  countReadback(){const b=this.device.createBuffer({label:'voxel allocation count readback',size:32,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});this.all.push(b);this.renderer.track(b,'voxel count readback',32,'shared');return b;}
+  // The four counts a piece copied into buffer (repro/preview-pools.mjs delays them). The buffer goes back to the pool once read.
+  mapCounts(buffer){return buffer.mapAsync(GPUMapMode.READ).then(()=>{const values=new Uint32Array(buffer.getMappedRange().slice(0));buffer.unmap();this.readbacks.push(buffer);return values;});}
+  // A rock mask's passes (0: fixed slot 0; 15: the recipe table), built once: the first draw with the mask asks (renderer.specialize).
   build(mask){
-    if(!this.built.has(mask))this.built.set(mask,Promise.all(Object.entries(this.layouts).map(async([entryPoint,l])=>[entryPoint,{...l,pipeline:await this.device.createComputePipelineAsync({label:entryPoint,layout:l.layout,compute:{module:this.module,entryPoint,constants:{rockMask:mask}}})}]))
+    if(!this.built.has(mask))this.built.set(mask,Promise.all(Object.entries(this.layouts).map(async([entryPoint,l])=>[entryPoint,{...l,pipeline:await this.device.createComputePipelineAsync({label:entryPoint,layout:l.layout,compute:{module:this.module,entryPoint,constants:entryConstants(this.source,entryPoint,{rockMask:mask})}})}]))
       .then(list=>{this.passesBy??={};this.passesBy[mask]=Object.fromEntries(list);}));
     return this.built.get(mask);
   }
@@ -91,7 +95,11 @@ export class VoxelSurface {
     const capacity=columnsX*columnsY*(Math.ceil((high+apron)/unit)-Math.floor((low-apron)/unit)+1);
     return {origin:[x0,y0],step,width,height,columnsX,columnsY,capacity,low,high,top,screenLow:rect.y,screenHigh:rect.y+rect.height};
   }
-  async render(draw,current=()=>{}){
+  // unchecked: a gesture's own preview (renderChunk's preview), which may be shown before its count arrives (below).
+  async render(draw,current=()=>{},unchecked=false){
+    // A failed check of an earlier unchecked preview is this render's error: the preview it drew was already shown.
+    if(this.lateError){const error=this.lateError;this.lateError=null;throw error;}
+    const lates=[];this.late=null;
     this.passes=this.renderer.rockPasses(this.passesBy);   // this rockMask's passes, or a specialization miss that builds them
     const r=this.renderer,region=r.activeRegion,scale=r.uniformView.getFloat32(r.layout.fields.get('chunkScale').offset,true);
     const origin=region.screenOrigin,width=r.canvas.width*scale,height=r.canvas.height*scale;
@@ -141,10 +149,11 @@ export class VoxelSurface {
       // Indirect arguments cannot alias a writable binding in the select pass.
       countEncoder.copyBufferToBuffer(this.counter,16,this.indirect,0,12);
       this.encode('voxelSelect',countEncoder,null,input,output);
-      countEncoder.copyBufferToBuffer(this.counter,0,this.readback,0,32);this.device.queue.submit([countEncoder.finish()]);
+      const readback=this.readbacks.pop()??this.countReadback();
+      countEncoder.copyBufferToBuffer(this.counter,0,readback,0,32);this.device.queue.submit([countEncoder.finish()]);
       // Start the small count read now. A warmed preview can allocate and
       // submit its solid/draw without waiting for the CPU to receive it.
-      const pending=this.readback.mapAsync(GPUMapMode.READ).then(()=>{const values=new Uint32Array(this.readback.getMappedRange().slice(0));this.readback.unmap();return values;});
+      const pending=this.mapCounts(readback);let detached=false;
       pending.catch(()=>{}); // allocation failure may unwind before validation
       try{
       // The solid's buffers are sized from a predicted brick count, so the build is submitted without waiting for the count read: a
@@ -152,15 +161,24 @@ export class VoxelSurface {
       // rectangle). A final piece's draw waits for the count, which arrives while the build and wear run; a piece that overflowed builds
       // again at its count, so the picture is the same.
       const preview=r.voxelScale>1,key=preview?[step,s.columnsX,s.columnsY].join(','):[step,...s.origin,s.columnsX,s.columnsY].join(','),counted=preview?this.previewCounts:this.finalCounts;
-      const last=counted.get(key),ps=this.predictionStats,fs=this.finalStats;
+      // A gesture's preview region grows by a column or two every few pictures, and each new size missed its count and waited for it
+      // before drawing (measured in Firefox: 11 of 27 paint-drag pictures, 100 ms each). A missing size takes the count of the nearest
+      // size at the same step, within half again its area either way, scaled by the area; the headroom and the overflow check below cover it.
+      const area=s.columnsX*s.columnsY,near=()=>{let best;for(const [k,v] of counted){const [st,cx,cy]=k.split(',').map(Number),ratio=area/(cx*cy);
+        if(st===step&&ratio<=1.5&&ratio>=1/1.5&&(!best||Math.abs(Math.log(ratio))<Math.abs(Math.log(best.ratio))))best={ratio,count:v*ratio};}return best?.count;};
+      let last=counted.get(key);const ps=this.predictionStats,fs=this.finalStats;
+      if(last===undefined&&preview){last=near();if(last!==undefined)ps.scaled++;}
       let counts=null,capacity=last!==undefined?Math.min(s.capacity,Math.ceil(last*1.5)+64):null;
-      const readCounts=async afterDraw=>{const t=preview?performance.now():0,values=await pending;
-        if(preview)ps[afterDraw?'postDrawWaitMs':'preDrawWaitMs']+=performance.now()-t;
+      const check=values=>{
         if(values[1])throw Error('Terrain extends beyond the voxel projection bounds.');
         if(values[0]>s.capacity)throw Error('The voxel brick count exceeds its conservative allocation bound.');
         if(values[2]>values[0])throw Error('The compact voxel count exceeds its candidates.');
         counted.delete(key);counted.set(key,values[2]);if(counted.size>(preview?16:1024))counted.delete(counted.keys().next().value);
-        current();return values;
+        return values;
+      };
+      const readCounts=async afterDraw=>{const t=preview?performance.now():0,values=await pending;
+        if(preview)ps[afterDraw?'postDrawWaitMs':'preDrawWaitMs']+=performance.now()-t;
+        check(values);current();return values;
       };
       const fits=count=>count*1024<=this.device.limits.maxStorageBufferBindingSize&&r.makeWorkingRoom(Math.max(16,count*1024)*2);
       if(capacity===null||!fits(capacity)){
@@ -171,7 +189,9 @@ export class VoxelSurface {
       // with a long geometry draw. Drain the solid and let input cancel
       // before queuing the draw. Coarse 4+ sources are already short;
       // those and native 256px tiles stay one submission.
-      const drains=r.voxelScale<4&&rect.width*rect.height/(scale*scale)>128*1024;
+      // Where a wait costs far more than the work (slowCompletion: Firefox's 100 ms), the drains would add two of them to every large tile
+      // (measured: 14 tiles, 1.4 s after one stroke), so the solid and the draw go as one submission there.
+      const drains=!r.slowCompletion&&r.voxelScale<4&&rect.width*rect.height/(scale*scale)>128*1024;
       let marchReads=null;
       const marchPool=encoder=>{
         const bind=this.device.createBindGroup({layout:this.drawLayout,entries:[0,1,2,3,4,5,7,8].map(binding=>({binding,resource:marchReads[binding]}))});
@@ -203,6 +223,19 @@ export class VoxelSurface {
       };
       const later=!counts&&!preview;   // a predicted final piece: its draw is submitted once the count checks
       if(!await drawPool(capacity,!later)){await split();return;}
+      // A gesture's own preview is shown without waiting for its count. Where a GPU wait costs 100 ms (Firefox), the wait after the draw held
+      // every drag picture behind it: 24-28 pictures for 120 moves, against 114-117 shown unchecked (measured). It is checked when the count
+      // arrives. A count over the capacity leaves the solid's bricks unwritten (engine-volume.wgsl voxelBuild returns), so the shown picture
+      // lacks its rock or shows an earlier one: late then says so, and the canvas draws that preview again at the counted size (0-1 of ~115
+      // drag pictures, all at a new size). Final tiles and other renders still wait, so no kept picture is ever unchecked.
+      // A failed check is raised by the next render (lateError); a read that failed (a lost device, reported by the renderer) asks for nothing.
+      if(!counts&&unchecked&&preview){
+        detached=true;ps.unchecked++;const at=capacity;counts=[at,0,at];
+        lates.push(pending.then(values=>{
+          try{check(values);}catch(error){this.lateError??=error;return true;}
+          if(values[2]<=at)return false;ps.overflows++;return true;
+        },()=>false));
+      }
       if(!counts){
         counts=await readCounts(true);
         if(counts[2]>capacity){
@@ -218,11 +251,12 @@ export class VoxelSurface {
         const encoder=this.device.createCommandEncoder({label:'voxel terrain draw'});marchPool(encoder);this.device.queue.submit([encoder.finish()]);
       }
       first=false;this.stats.pieces++;this.stats.bricks+=counts[2];this.stats.candidateBricks+=counts[0];
-      }finally{await pending.catch(()=>{});}
+      }finally{if(!detached)await pending.catch(()=>{});}
     };
     try{await piece({x:origin[0],y:origin[1],width,height});}
     catch(error){this.clear();throw error;}
+    if(lates.length)this.late=Promise.all(lates).then(list=>list.some(Boolean));
     this.stats.allocationMs=performance.now()-start;
   }
-  destroy(){this.release();this.uniform.destroy();this.readback.destroy();}
+  destroy(){this.release();this.uniform.destroy();for(const b of this.all)b.destroy();}
 }

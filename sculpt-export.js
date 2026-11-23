@@ -31,7 +31,7 @@ export const DEFAULT_DESCRIPTION='Terrain editor prototype';
 // The exporter's start message (export/README.md --stream): the map's metadata, the catalog and the map's feature pack (null without features).
 export function exportStart({job,config,map,catalogue,palette,name,description,settings,heights,placements=[],starts,pack=null}) {
   return {op:'start',job,metadata:{name,description,world:config.biomeId,unitsX:map.unitsX,unitsY:map.unitsY,seaLevel:config.seaLevel,heights:Array.from(heights),settings,features:placements,starts},
-    catalog:{worlds:catalogue.worlds,palette,installedNames:[]},features:pack,budgetMB:64};
+    catalog:{worlds:config.mapGame?{...catalogue.worlds,[config.biomeId]:config.mapGame}:catalogue.worlds,palette,installedNames:[]},features:pack,budgetMB:64};
 }
 
 // Format encoding and round-trip checks live in Go. The terrain canvas stays
@@ -47,7 +47,8 @@ export function mountMapExport(api) {
   $('map-export-host').innerHTML='<button id="map-export" style="width:100%;margin-top:9px" disabled>Build game map (.ufo)</button><p id="map-export-state" class="small" role="status">Reading installed maps and climate…</p><button id="map-cancel" hidden style="width:100%;margin-top:9px">Cancel export</button><div id="map-download"></div>';
   $('map-geometry').textContent=map?`${map.widthCells} × ${map.heightCells} cells · ${map.width} × ${map.height} px · play ${map.playRight} × ${map.playBottom} px`:'This is a 1024 px study. Create a map canvas to include every engine cell.';
   let catalogue=null,busy=false,loadedSettings=false,abort=null,job=null;
-  const defaults=() => catalogue?.worlds?.[config.biomeId]?.climate||config.exportCatalog?.worlds?.[config.biomeId]?.climate;
+  const game=() => config.mapGame??catalogue?.worlds?.[config.biomeId]??config.exportCatalog?.worlds?.[config.biomeId];
+  const defaults=() => game()?.climate;
   function setSettings(data) { if (!data) return; for (const [key] of SETTINGS) if (Number.isFinite(data[key])) $('map-'+key).value=data[key]; else if (Object.hasOwn(data,key) && (data[key]===null || Number.isNaN(data[key]))) $('map-'+key).value=''; if (typeof data.lava==='boolean') $('map-lava').checked=data.lava; }
   function serialize() { return {name:$('map-name').value.trim(),description:$('map-description').value,settings:{...Object.fromEntries(SETTINGS.map(([key]) => [key,$('map-'+key).valueAsNumber])),lava:$('map-lava').checked}}; }
   const syncMapTitle=()=>{const name=$('map-name').value.trim()||'Untitled map',size=map?`${map.unitsX} × ${map.unitsY}`:'Study';$('tab-map').textContent=`${name} · ${size} ▾`;$('tab-map').title=`Map: ${name} · ${size} — save as link, maps, open or download a file, name, size, sea level and game settings`;};
@@ -59,10 +60,10 @@ export function mountMapExport(api) {
   // A disabled export says why (rule 9), in its tooltip: the panel's state line keeps the map's own text.
   let exportTitle;
   const update=() => { const b=$('map-export');exportTitle??=b.title;
-    const why=UNSUPPORTED || (busy?'An export is already running.':!map?'Open or create a map to export it.':!catalogue?'Loading the world catalog…':!catalogue.worlds?.[config.biomeId]?.climate?'This world has no export settings yet.':!api.ready()?'Waiting for the terrain to finish updating…':api.materialsCompiling?.()?'Waiting for a material to compile…':'');
+    const why=UNSUPPORTED || (busy?'An export is already running.':!map?'Open or create a map to export it.':!catalogue?'Loading the world catalog…':!game()?.climate?'This world has no export settings yet.':!api.ready()?'Waiting for the terrain to finish updating…':api.materialsCompiling?.()?'Waiting for a material to compile…':'');
     b.disabled=Boolean(why); b.title=why||exportTitle; };
   const readCatalogue=config.exportCatalog?Promise.resolve(config.exportCatalog):fetch('config/catalog.json').then(async r => { const data=await r.json(); if (!r.ok) throw new Error(data.error||'Catalog unavailable'); return data; });
-  readCatalogue.then(data => { catalogue=data; if (UNSUPPORTED) { $('map-export-state').textContent=UNSUPPORTED; return update(); } const w=data.worlds[config.biomeId]; if (!map && Number.isInteger(w?.defaultSeaLevel)) $('map-sea').value=w.defaultSeaLevel; if (!loadedSettings) setSettings(w?.climate); $('map-export-state').textContent=w?.climate?`OTA planet: ${w.planet}. Climate: medians from its installed maps.${tileNote()}`:'Export disabled: '+(w?.disabledReason||'this world has no game planet yet.'); update(); }).catch(err => { $('map-export-state').textContent=err.message; });
+  readCatalogue.then(data => { catalogue=data; if (UNSUPPORTED) { $('map-export-state').textContent=UNSUPPORTED; return update(); } const w=game(); if (!map && Number.isInteger(w?.defaultSeaLevel)) $('map-sea').value=w.defaultSeaLevel; if (!loadedSettings) setSettings(w?.climate); $('map-export-state').textContent=w?.climate?`OTA planet: ${w.planet}. Climate defaults saved with the map.${tileNote()}`:'Export disabled: '+(w?.disabledReason||'this world has no game planet yet.'); update(); }).catch(err => { $('map-export-state').textContent=err.message; });
   setSettings(defaults());
   for (const id of ['map-name','map-description','map-lava',...SETTINGS.map(([key]) => 'map-'+key)]) $(id).addEventListener('change',() => { loadedSettings=true; api.change?.(); });
   $('map-defaults').onclick=() => { setSettings(defaults()); loadedSettings=false; api.change?.(); };
@@ -112,7 +113,7 @@ export function mountMapExport(api) {
   }
   async function exportMap(name=$('map-name').value.trim(),description=$('map-description').value) {
     if (UNSUPPORTED) throw new Error(UNSUPPORTED);
-    if (!map || !catalogue?.worlds?.[config.biomeId]?.climate) throw new Error('Export is unavailable for this canvas or world.');
+    if (!map || !game()?.climate) throw new Error('Export is unavailable for this canvas or world.');
     if (busy || !api.ready()) throw new Error('Wait for the finished terrain before exporting.');
     const {settings}=serialize(),placements=api.mapData?.()||{};
     // The OTA settings are refused in the Export pane too: the button's handler drops the rejection.

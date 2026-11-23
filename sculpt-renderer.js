@@ -13,7 +13,7 @@ import {requestAdapter, WEBGPU_NEEDS as NO_WEBGPU} from './sculpt-webgpu.js';
 import {RockWeather} from './sculpt-rock-weather.js';
 import {VoxelSurface} from './sculpt-volume.js';
 import {terrainAllocation} from './sculpt-memory.js';
-import {extractGates, gateValues, gateKey, uniformStages, worldUniformDelta, PER_CHUNK_UNIFORMS} from './sculpt-gates.js';
+import {extractGates, gateValues, gateKey, uniformStages, worldUniformDelta, entryConstants, PER_CHUNK_UNIFORMS} from './sculpt-gates.js';
 import {digestGuardRequested, installDigestGuard} from './sculpt-digest-guard.js';
 // The textures a chunk's feed fills, which the input checksum hashes texel by texel (inputDigest).
 export const SURFACE_RECORD_BYTES = 32; // PackedSurfaceRecord in engine-frag.wgsl
@@ -168,6 +168,11 @@ export class TerrainRenderer {
     const requiredLimits = {maxBufferSize: adapter.limits.maxBufferSize, maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize};
     const device = this.device = await adapter.requestDevice({requiredFeatures: features, requiredLimits});
     if (digestGuardRequested()) this.guard = installDigestGuard(device);   // tests and debug runs only: before any resource is made
+    // The round trip of an empty submission (slowCompletion), measured while start-up goes on: Firefox 160 on a Mac answers every completion
+    // on a 100 ms timer (measured; Chrome 0.1 ms), so a wait that only orders work costs it a tenth of a second. The first of four waits can
+    // land anywhere in that timer's period, and any can queue behind start-up work or meet an early poll, so the median of the last three is kept.
+    this.completionMs = null;
+    (async () => { const t = []; for (let i = 0; i < 4; i++) { const s = performance.now(); device.queue.submit([]); await device.queue.onSubmittedWorkDone(); t.push(performance.now() - s); } this.completionMs = t.slice(1).sort((a, b) => a - b)[1]; })().catch(() => {});
     device.lost.then(info => {
       if(info.reason==='destroyed'||this.recovering)return;
       if(this.config.onDeviceLost?.(info)){this.recovering=true;return;}
@@ -178,6 +183,7 @@ export class TerrainRenderer {
       if(typeof GPUOutOfMemoryError!=='undefined'&&event.error instanceof GPUOutOfMemoryError&&this.config.onMemoryPressure?.(event.error)){this.recovering=true;event.preventDefault();return;}
       this.reportError(event.error.message);
     });
+    this.config.onDevice?.(device);   // the page's start-up can ask for its own pipelines on this device while the renderer's shaders load
     this.format = navigator.gpu.getPreferredCanvasFormat();
     // A plain unorm canvas stores the shader's values as they are, as the
     // WebGL canvas did (no sRGB encoding); opaque, as WebGL's alpha: false.
@@ -185,17 +191,13 @@ export class TerrainRenderer {
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST});
 
     // The engine's shaders (engine-frag / engine-bake / engine-common) draw every world.
-    // Every world's materials are numbers: the config names its table (config.materialTable).
-    const tableUrl = this.config.materialTable;
-    this.materialData = null;
-    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', tableUrl, 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl', 'engine-ground.wgsl', 'engine-ground-dither.wgsl', 'engine-output.wgsl'];
+    const names = ['sculpt-vert.wgsl', 'engine-frag.wgsl', 'engine-common.wgsl', 'engine-bake.wgsl', 'materials/palette.json', 'engine-volume.wgsl', 'engine-erosion.wgsl', 'engine-weather.wgsl', 'engine-ground.wgsl', 'engine-ground-dither.wgsl', 'engine-output.wgsl'];
     const [vert, frag, common, bake, ...extra] = await Promise.all(names.map(async name => {
       const r = await fetch(name);
       if (!r.ok) throw new Error(`Cannot load ${name}`);
       return r.text();
     }));
-    const modelTable = extra[0];
-    const palette = JSON.parse(extra[1]);
+    const palette = JSON.parse(extra[0]);
     this.paletteColours = palette.colours;
     this.paletteIndexed = palette.indexed;
     // Slots 0-9 and 246-254 of the game's palette are Windows' static system colours, which its map art does not draw with (255, white,
@@ -204,8 +206,8 @@ export class TerrainRenderer {
     this.paletteArt = palette.colours.map((_, i) => i).filter(i => art.has(String(palette.colours[i])));
     this.commonSource = common;
     this.outputSource = extra[extra.length - 1];
-    this.volumeSource = extra[2];
-    this.timeSources={erosion:this.preprocessShader(extra[3]),maps:this.preprocessShader(extra[4])};
+    this.volumeSource = extra[1];
+    this.timeSources={erosion:this.preprocessShader(extra[2]),maps:this.preprocessShader(extra[3])};
     this.layout = uniformLayout(preprocess(common, '', new Set()));
     this.uniformData = new ArrayBuffer(this.layout.size);
     this.uniformView = new DataView(this.uniformData);
@@ -232,7 +234,7 @@ export class TerrainRenderer {
       compile('engine-bake.wgsl', bakeGates.source)]);
     // One uniform-gated fragment pipeline per rock mask. Color/light changes
     // no longer compile a new ray marcher; only relief gates specialize.
-    this.specParts = {vertModule,bakeModule,bake:bakeGates.gates,keyOrder:[...bakeGates.gates.keys()]};
+    this.specParts = {vertModule,bakeModule,bakeSource:bakeGates.source,bake:bakeGates.gates,keyOrder:[...bakeGates.gates.keys()]};
     this.specCache = new Map();
     this.specBuilding = new Map();
     this.specUsed = [];
@@ -258,8 +260,10 @@ export class TerrainRenderer {
     const bakeLayout = device.createPipelineLayout({bindGroupLayouts: [this.commonLayout, fieldsLayout]});
     this.fieldsLayout = fieldsLayout;
     this.bakePipelineLayout = bakeLayout;
-    this.rockWeather = await RockWeather.create(this,preprocess);
-    this.voxel = await VoxelSurface.create(this,this.volumeSource,preprocess);
+    // Rock weather and the voxel solid start together; neither builds a rock mask's pipelines here (specialize builds the mask a draw needs).
+    // Their sources join the stage scan in a fixed order, whichever is ready first.
+    [this.rockWeather, this.voxel] = await Promise.all([RockWeather.create(this,preprocess), VoxelSurface.create(this,this.volumeSource,preprocess)]);
+    this.stageSources.push({source:this.rockWeather.code,stage:'C'},{source:this.voxel.source,stage:'D'});
     const timeModules=Object.values(this.timeSources).map(source=>({source,stage:'B'}));
     this.timeUniformFields=[...uniformStages(timeModules).keys()].sort();
     this.uniformStages=uniformStages([...this.stageSources,...timeModules]);this.stageSources=null;
@@ -270,7 +274,7 @@ export class TerrainRenderer {
     this.geometrySettings=device.createBuffer({label:'geometry frame',size:16,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});this.track(this.geometrySettings,'geometry frame',16,'shared');
     this.geometryPipelineLayout=device.createPipelineLayout({bindGroupLayouts:[this.commonLayout,this.materialLayout,this.voxel.drawLayout,this.geometryOutLayout]});
     this.drawPipelineLayout=device.createPipelineLayout({bindGroupLayouts:[this.commonLayout,this.materialLayout,device.createBindGroupLayout({entries:[]}),this.geometryInLayout]});
-    const genericReady=this.buildGeneric(compile,fragSource,bakeSource,geometrySource);
+    this.prepareGeneric(compile,fragSource,bakeSource,geometrySource);
     const mipModule = device.createShaderModule({label: 'mip levels', code: MIP_SHADER});
     this.mipPipeline = device.createRenderPipeline({label: 'mip levels', layout: 'auto',
       vertex: {module: mipModule, entryPoint: 'fullScreen'},
@@ -286,14 +290,13 @@ export class TerrainRenderer {
     this.bindGroups = {};
     this.fieldsDirty = true;
     this.uniform = this.layout.fields;
-    this.materialData = JSON.parse(modelTable);
     // The startup generation: the materials (GPU) are started first and the noise (CPU) is made while they build.
     this.textures = {};
-    this.groundCache = new MaterialCache(this, preprocess(extra[5], common, new Set()), preprocess(extra[6], common, new Set()));
+    this.groundCache = new MaterialCache(this, preprocess(extra[4], common, new Set()), preprocess(extra[5], common, new Set()));
     const generation = performance.now();
     this.outputPaletteBuffer();
     this.textures.noise = this.noiseTexture();
-    await genericReady;
+    await this.genericModules;
     this.generationMs = performance.now() - generation;
     const variant = new URLSearchParams(location.search);
     // H4: the engine's own knob values go in first, over the world's, under the page's query.
@@ -344,10 +347,9 @@ export class TerrainRenderer {
     return {texture, view: texture.createView(), sampler: this.sampler({minFilter: 'linear', magFilter: 'linear', addressModeU: 'repeat', addressModeV: 'repeat'})};
   }
 
-  // The output stage's palette (engine-output.wgsl): the colours map art draws with, or the ones the table's `palette.entries` pick, rgb in
-  // 0..255.
+  // The output stage's shared art palette (engine-output.wgsl), RGB in 0..255.
   outputPaletteBuffer() {
-    const colours = (this.materialData.palette?.entries ?? this.paletteArt).map(i => this.paletteColours[i]);
+    const colours = this.paletteArt.map(i => this.paletteColours[i]);
     if (this.outputPalette) { this.worldTextures.delete(this.outputPalette); this.outputPalette.destroy(); }
     this.outputPalette = this.worldResource(this.device.createBuffer({label: 'output palette', size: Math.max(16, colours.length * 16), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST}));
     this.device.queue.writeBuffer(this.outputPalette, 0, new Float32Array(colours.flatMap(c => [c[0], c[1], c[2], 0])));
@@ -407,28 +409,49 @@ export class TerrainRenderer {
     const parts = this.specParts, slots = this.rockSlots(), values = gateValues(parts.bake, this.uniformView, slots, this.groundSlots());
     return {key: gateKey(values, parts.keyOrder), values};
   }
-  // Original uniform comparisons, compiled before input is enabled. The draw
-  // is shared by every level; relief finals retain their specialized cache.
-  async buildGeneric(compile,fragSource,bakeSource,geometrySource) {
-    const start=performance.now(),device=this.device;
-    const [fragmentModule,bakeModule,geometryModule]=await Promise.all([compile('generic terrain',fragSource),compile('generic relief',bakeSource),compile('terrain geometry',geometrySource)]);
-    this.genericPipelines=Object.fromEntries(await Promise.all([0,15].map(async rockMask=>{
-      const constants={rockMask},compute=entryPoint=>({module:bakeModule,entryPoint,constants});
+  // Original uniform comparisons. The draw is shared by every level; relief finals retain their specialized cache. The modules compile at
+  // start-up; a rock mask's pipelines are built when a draw first needs that mask (specialize), and the other mask after the first picture
+  // (warmRockMasks), so start-up compiles one mask, not both.
+  prepareGeneric(compile,fragSource,bakeSource,geometrySource) {
+    this.genericPipelines={};this.genericBuilding=new Map();
+    this.specStats.genericBuilt=0;this.specStats.genericMs=0;this.specStats.genericUses=0;this.specStats.deferred=0;
+    this.genericModules=Promise.all([compile('generic terrain',fragSource),compile('generic relief',bakeSource),compile('terrain geometry',geometrySource)])
+      .then(([fragmentModule,bakeModule,geometryModule])=>({fragmentModule,bakeModule,geometryModule,fragSource,bakeSource,geometrySource}));
+  }
+  // The generic pipelines of one rock mask, or a specialization miss that builds them (inside withPipelines).
+  generic(mask=this.rockMask()) {
+    const built=this.genericPipelines[mask];
+    if(!built)throw new SpecializationMiss(this.specKey());
+    return built;
+  }
+  // Awaitable: the generic pipelines of one rock mask, built once.
+  async genericFor(mask=this.rockMask()) { await this.buildGenericMask(mask); return this.genericPipelines[mask]; }
+  // The voxel solid's, rock weather's and generic pipelines of every allowed rock mask (0: slot 0 only; 15: the recipe table), built in
+  // the background after the first picture so a first rock type added later does not wait for a compile.
+  warmRockMasks() { return Promise.all([0,15].map(mask=>Promise.all([this.buildGenericMask(mask),this.voxel.build(mask),this.rockWeather.build(mask)]))).catch(()=>{}); }
+  buildGenericMask(mask) {
+    if(this.genericPipelines[mask])return Promise.resolve();
+    if(!this.genericBuilding.has(mask))this.genericBuilding.set(mask,this.genericModules.then(async({fragmentModule,bakeModule,geometryModule,fragSource,bakeSource,geometrySource})=>{
+      const start=performance.now(),device=this.device,rockMask=mask;
+      const constants={rockMask},compute=entryPoint=>({module:bakeModule,entryPoint,constants:entryConstants(bakeSource,entryPoint,constants)});
       const [draw,bake,loose,geometry]=await Promise.all([
-        device.createRenderPipelineAsync({label:'generic terrain',layout:this.drawPipelineLayout,vertex:{module:this.specParts.vertModule,entryPoint:'vertexMain'},fragment:{module:fragmentModule,entryPoint:'fragmentMain',targets:[{format:this.format}],constants},primitive:{topology:'triangle-list',cullMode:'none'}}),
+        device.createRenderPipelineAsync({label:'generic terrain',layout:this.drawPipelineLayout,vertex:{module:this.specParts.vertModule,entryPoint:'vertexMain'},fragment:{module:fragmentModule,entryPoint:'fragmentMain',targets:[{format:this.format}],constants:entryConstants(fragSource,'fragmentMain',constants)},primitive:{topology:'triangle-list',cullMode:'none'}}),
         device.createComputePipelineAsync({label:'generic relief bake',layout:this.bakePipelineLayout,compute:compute('bakeMain')}),
         device.createComputePipelineAsync({label:'generic loose mask',layout:this.bakePipelineLayout,compute:compute('looseMain')}),
-        device.createRenderPipelineAsync({label:'terrain geometry',layout:this.geometryPipelineLayout,vertex:{module:this.specParts.vertModule,entryPoint:'vertexMain'},fragment:{module:geometryModule,entryPoint:'geometryMain',targets:[{format:this.format}],constants},primitive:{topology:'triangle-list',cullMode:'none'}})]);
-      return [rockMask,{draw,bake,loose,geometry}];
-    })));
-    this.specStats.genericBuilt=2;this.specStats.genericMs=performance.now()-start;this.specStats.genericUses=0;this.specStats.deferred=0;
+        device.createRenderPipelineAsync({label:'terrain geometry',layout:this.geometryPipelineLayout,vertex:{module:this.specParts.vertModule,entryPoint:'vertexMain'},fragment:{module:geometryModule,entryPoint:'geometryMain',targets:[{format:this.format}],constants:entryConstants(geometrySource,'geometryMain',constants)},primitive:{topology:'triangle-list',cullMode:'none'}})]);
+      this.genericPipelines[mask]={draw,bake,loose,geometry};
+      this.specStats.genericBuilt++;this.specStats.genericMs+=performance.now()-start;
+    }).finally(()=>this.genericBuilding.delete(mask)));
+    return this.genericBuilding.get(mask);
   }
   specialized(kind) {
     const state = this.specKey();
     const generic=this.pipelineMode==='generic';
     if(kind==='draw'||generic){
+      const built=this.genericPipelines[state.values.rockMask];
+      if(!built)throw new SpecializationMiss(state);
       this.specUsed.push(generic?'generic:'+state.values.rockMask:state.key);this.specStats.genericUses++;
-      return this.genericPipelines[state.values.rockMask][kind];
+      return built[kind];
     }
     const entry = this.specCache.get(state.key);
     if (!entry) throw new SpecializationMiss(state);
@@ -450,15 +473,21 @@ export class TerrainRenderer {
     if (!passes) throw new SpecializationMiss(this.specKey());
     return passes;
   }
-  async specialize({key, values}) {
+  // A rock mask's own pipelines: the generic draw, bake and geometry, the voxel solid's and rock weather's passes.
+  maskReady(mask) { return Boolean(this.genericPipelines[mask] && this.voxel.passesBy?.[mask] && this.rockWeather.pipelinesBy?.[mask]); }
+  buildMask(mask) {
     const rock = performance.now();
-    await Promise.all([this.voxel.build(values.rockMask), this.rockWeather.build(values.rockMask)]);
-    this.specStats.rockMs = (this.specStats.rockMs ?? 0) + performance.now() - rock;
-    if (this.specCache.has(key)) return;
+    return Promise.all([this.buildGenericMask(mask), this.voxel.build(mask), this.rockWeather.build(mask)])
+      .then(() => { this.specStats.rockMs = (this.specStats.rockMs ?? 0) + performance.now() - rock; }, error => this.pipelinesFailed(error));
+  }
+  // The mask's pipelines and this set of gates' bake, all asked for at once.
+  async specialize({key, values}) {
+    const mask = this.buildMask(values.rockMask);
+    if (this.specCache.has(key)) return mask;
     if (!this.specBuilding.has(key)) {
-      const {bakeModule,bake} = this.specParts, device = this.device, start = performance.now();
+      const {bakeModule,bakeSource,bake} = this.specParts, device = this.device, start = performance.now();
       const pick = gates => Object.fromEntries([...gates.keys()].map(id => [id, values[id]]));
-      const compute = entryPoint => ({module: bakeModule, entryPoint, constants: pick(bake)});
+      const compute = entryPoint => ({module: bakeModule, entryPoint, constants: entryConstants(bakeSource, entryPoint, pick(bake))});
       this.specBuilding.set(key, Promise.all([
         device.createComputePipelineAsync({label: 'relief bake', layout: this.bakePipelineLayout, compute: compute('bakeMain')}),
         device.createComputePipelineAsync({label: 'loose mask', layout: this.bakePipelineLayout, compute: compute('looseMain')})]).then(([bake, loose]) => {
@@ -467,11 +496,14 @@ export class TerrainRenderer {
         this.specStats.built++; this.specStats.ms += performance.now() - start;
       }).finally(() => this.specBuilding.delete(key)));
     }
-    await this.specBuilding.get(key);
+    await Promise.all([mask, this.specBuilding.get(key).catch(error => this.pipelinesFailed(error))]);
   }
-  // A preview miss retries with uniform gates and never starts a compile.
-  // A view final yields the renderer while its specialized set builds; direct
-  // readers and export await specialization as before.
+  // A pipeline that does not build (a shader the browser rejects) fails the same way each time: the first failure is kept, and every later
+  // draw throws it instead of waiting again, so the page shows the error once rather than retrying every frame.
+  pipelinesFailed(error) { this.pipelineFailure ??= error; throw error; }
+  // A preview miss retries with uniform gates and starts no specialized compile; only a rock mask with no pipelines yet (start-up, or the
+  // first rock type) builds that mask's own. A view final yields the renderer while its specialized set builds; direct readers and export
+  // await specialization as before.
   async withPipelines(work,{preview=false,defer=false}={}) {
     const previous=this.pipelineMode;this.pipelineMode='specialized';
     try{for(let attempt=0;;attempt++){
@@ -479,8 +511,10 @@ export class TerrainRenderer {
       try{return await work();}
       catch(error){
         if(!(error instanceof SpecializationMiss)||attempt>=4)throw error;
-        if(preview){this.pipelineMode='generic';continue;}
-        const ready=this.specialize(error.state);
+        if(this.pipelineFailure)throw this.pipelineFailure;
+        const mask=preview?error.state?.values?.rockMask??this.rockMask():null;
+        if(preview&&this.maskReady(mask)){this.pipelineMode='generic';continue;}
+        const ready=preview?this.buildMask(mask):this.specialize(error.state);
         if(defer){this.specStats.deferred++;throw new PipelinesPending(error.state,ready);}
         await ready;
       }
@@ -543,6 +577,8 @@ export class TerrainRenderer {
 
 
   // What the startup generation took, in ms: the noise (CPU), the palette lookup and the materials (GPU), and the wall time of all three.
+  // True where waiting for the GPU costs far more than the work waited for (completionMs); null (not measured yet) counts as fast.
+  get slowCompletion() { return this.completionMs > 30; }
   get startupParts() { return {noise: this.noiseMs, total: this.generationMs}; }
 
   // GPU time of one pass from timestamp queries, read back without
@@ -622,7 +658,12 @@ export class TerrainRenderer {
   // The palette's candidate table is built here, in its own submission: the queue runs in order, so every output pass encoded after this
   // call reads the finished table.
   async outputPipelines() {
-    if (!this.outputPipeline) {
+    await this.buildOutputPipelines();
+    if (!this.outputTableBuilt) this.buildOutputTable();
+  }
+  // The output stage's pipelines, built once; a start-up warm-up and the first draw share the one build.
+  buildOutputPipelines() {
+    return this.outputBuilding ??= (async () => {
       const device = this.device, module = device.createShaderModule({label: 'engine-output.wgsl', code: this.outputSource});
       const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
       if (errors.length) throw new Error('nanolathe: engine-output.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
@@ -631,8 +672,7 @@ export class TerrainRenderer {
         device.createRenderPipelineAsync({label: 'output blit', layout: 'auto', vertex: {module, entryPoint: 'blitVertex'}, fragment: {module, entryPoint: 'blitFragment', targets: [{format: this.format}]}, primitive: {topology: 'triangle-list'}}),
         device.createComputePipelineAsync({label: 'output palette table', layout: 'auto', compute: {module, entryPoint: 'buildTable'}})]);
       this.outputTableBuild = build; this.outputBlit = blit; this.outputPipeline = pipeline;
-    }
-    if (!this.outputTableBuilt) this.buildOutputTable();
+    })().catch(error => { this.outputBuilding = null; throw error; });
   }
   buildOutputTable() {
     const device = this.device, count = this.outputPaletteCount;
@@ -692,7 +732,7 @@ export class TerrainRenderer {
       const delta=worldUniformDelta(this.geometryUniformSnapshot,this.uniformData,this.layout,this.uniformStages);
       if(delta.stage&&delta.stage<'F')throw Error('The edit requires '+delta.stage+', not only color.');
       this.flushUniforms();const encoder=this.device.createCommandEncoder({label:'cached terrain color'}),timer=this.timer();
-      this.encodeColor(encoder,this.genericPipelines[this.rockMask()].draw,[0,0,this.canvas.width,this.canvas.height],true,timer);
+      this.encodeColor(encoder,(await this.genericFor()).draw,[0,0,this.canvas.width,this.canvas.height],true,timer);
       await this.outputPipelines();this.encodeOutput(encoder,this.voxelColor,this.context.getCurrentTexture());this.device.queue.submit([encoder.finish()]);this.previousChunk=this.device.queue.onSubmittedWorkDone();await this.previousChunk;
       return {milliseconds:performance.now()-start,gpuMilliseconds:timer?await timer.result():null,recordBytes:this.geometryRecord.size};
     } finally { this._busy=false; }
@@ -746,9 +786,9 @@ export class TerrainRenderer {
       if(clearGeometry){commands.clearBuffer(this.geometryRecord);clearGeometry=false;}
       const timer=this.timer();if(timer)timers.push(timer);
       const pass=commands.beginRenderPass({label:'terrain geometry',colorAttachments:[{view:this.geometryTarget.createView(),clearValue:{r:0,g:0,b:0,a:0},loadOp:first?'clear':'load',storeOp:'store'}],timestampWrites:timer?.timestampWrites});
-      const [x,y,w,h]=rect.map(Math.round);pass.setPipeline(this.genericPipelines[this.rockMask()].geometry);pass.setScissorRect(x,y,w+2,h+2);
+      const [x,y,w,h]=rect.map(Math.round);pass.setPipeline(this.generic().geometry);pass.setScissorRect(x,y,w+2,h+2);
       pass.setBindGroup(0,this.commonBindGroup('draw'));pass.setBindGroup(1,this.materialBindGroup());pass.setBindGroup(2,volume);pass.setBindGroup(3,this.geometryBinding(this.geometryOutLayout));pass.draw(3);pass.end();timer?.encode(commands);
-    },current);
+    },current,Boolean(this.uncheckedPreview));
     // E is complete for every piece. F has no solid dependency, so its
     // bounded mask staging replaces D instead of adding to the terrain peak.
     this.voxel.clear();current();await this.outputPipelines();current();
@@ -761,7 +801,7 @@ export class TerrainRenderer {
     this.encodeOutput(color,this.voxelColor,this.context.getCurrentTexture());device.queue.submit([color.finish()]);
     this.gpuResult=Promise.all(timers.map(t=>t.result())).then(values=>{const ms=values.reduce((a,b)=>a+(b??0),0);this.lastGPU=ms;return ms;});
     if (this.guard && !await this.guard.check(this, await inputDigest)) inputDigest = null;   // after a violation, no tile is kept
-    return {milliseconds:performance.now()-start,gpuMilliseconds:this.lastGPU,pipelineKey,digest:inputDigest};
+    return {milliseconds:performance.now()-start,gpuMilliseconds:this.lastGPU,pipelineKey,digest:inputDigest,late:this.voxel.late};   // late: VoxelSurface render
   }
   // A checksum of a draw's inputs: every texel of the input textures (INPUT_TEXTURES; textureSums), the settings uniform's bytes but the
   // per-chunk ones, the shader specialization, the canvas and texture sizes, and the world version (worldResource). Null when an input
@@ -920,6 +960,7 @@ export class TerrainRenderer {
     this.f('uSandLight', variant.has('sandLight') ? Number(variant.get('sandLight')) : 0.25);
     this.f('uBeachWidth', variant.has('beachWidth') ? Number(variant.get('beachWidth')) : 1.0);
     this.f('uFaceFill', variant.has('faceFill') ? Number(variant.get('faceFill')) : 0);
+    this.f('uFillFollow', variant.has('fillFollow') ? Number(variant.get('fillFollow')) : 0);
     this.f('uRockCrown', variant.has('rockCrown') ? Number(variant.get('rockCrown')) : 0);
     for (const [u, k, d] of [['uHighland', 'highland', 0], ['uHighFrom', 'highFrom', 8], ['uHighReach', 'highReach', 10]]) this.f(u, variant.has(k) ? Number(variant.get(k)) : d);
     this.f('uStrata', variant.has('strata') ? Number(variant.get('strata')) : 0);
@@ -1059,9 +1100,9 @@ export class TerrainRenderer {
     set('uReliefWarp', number('reliefWarp', 10));
     set('uReliefPatchy', number('reliefPatchy', 1));
     set('uFaceStreak', number('faceStreak', 0));
-    for (const [key, fallback] of [['rockFace', 0], ['rockFaceFrom', 0.6], ['faceBed', 5.5], ['faceLedge', 2.2], ['faceRun', 90], ['faceLean', 28], ['faceScratch', 2.5],
-      ['faceScratchSize', 7], ['faceBlock', 3], ['faceBlockSize', 11], ['faceGrass', 0.8], ['faceRock', 0.9], ['faceCrease', 2.5], ['faceCreaseSize', 6],
-      ['faceShade', 0.85], ['faceWear', 0.35], ['faceLayers', 0], ['faceMass', 1], ['faceTone', 0.12], ['faceStrata', 0], ['faceWet', 0], ['shoreRock',0],['shoreShelf',0],['runoff',0],['runoffScale',24],['runoffConcentration',.65],['runoffCut',2],['runoffStain',.5],['debrisAmount',0],['debrisReach',56],['debrisDepth',4],['rimReach',0], ['faceJointTilt',0],['faceSlopeAlign',0],['faceScaleVary',0],['faceFold',0],['faceBedVary',1],['bedCycleVary',0],['faceBreak',0],['faceSpall',0],['faceClast',0],['faceClastSize',12],['faceMineral',0],['faceJointWidth',1],['faceSecondary',.35],['faceContinuity',1],['faceDetailPatch',0],['faceWhole',0],['faceWholeLarge',0],['faceRegular',0],['sandLee',0],['groundPatch',0],['groundPatchSize',200],['faceFresh',0],['faceRind',0],['faceRindDepth',6],['faceRindTone',-.22],['faceRindWarmth',.35],['faceRindRough',.65], ['faceStretch', 1], ['faceBlockHeight', 1], ['faceRound', 0], ['faceJoint', 0.35], ['faceExtrude', 0], ['faceLamina', 0], ['faceLaminaSize', 6], ['faceScratchLength', 50], ['faceScratchAngle', 0], ['absorbDepth', 0], ['shadowTint', 0]])
+    for (const [key, fallback] of [['rockFace', 0], ['rockFaceFrom', 0.6], ['faceBed', 5.5], ['faceLedge', 2.2], ['faceRun', 90], ['faceLean', 28],
+      ['faceBlock', 3], ['faceBlockSize', 11], ['faceGrass', 0.8], ['faceRock', 0.9],
+      ['faceShade', 0.85], ['faceWear', 0.35], ['faceLayers', 0], ['faceMass', 1], ['faceTone', 0.12], ['faceStrata', 0], ['faceWet', 0], ['shoreRock',0],['shoreShelf',0],['runoff',0],['runoffScale',24],['runoffConcentration',.65],['runoffCut',2],['runoffStain',.5],['debrisAmount',0],['debrisReach',56],['debrisDepth',4],['rimReach',0], ['faceJointTilt',0],['faceSlopeAlign',0],['faceScaleVary',0],['faceFold',0],['faceBedVary',1],['bedCycleVary',0],['faceBreak',0],['faceSpall',0],['faceClast',0],['faceClastSize',12],['faceMineral',0],['faceJointWidth',1],['faceSecondary',.35],['faceContinuity',1],['faceWhole',0],['faceWholeLarge',0],['faceRegular',0],['sandLee',0],['groundPatch',0],['groundPatchSize',200],['faceFresh',0],['faceRind',0],['faceRindDepth',6],['faceRindTone',-.22],['faceRindWarmth',.35],['faceRindRough',.65], ['faceStretch', 1], ['faceBlockHeight', 1], ['faceRound', 0], ['faceJoint', 0.35], ['faceExtrude', 0], ['faceLamina', 0], ['faceLaminaSize', 6], ['absorbDepth', 0], ['shadowTint', 0]])
       set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
     set('uFaceStreakFrom', number('faceStreakFrom', 0.3));
     set('uGentleRelief', number('gentleRelief', 0.6));
@@ -1087,6 +1128,7 @@ export class TerrainRenderer {
     set('uBanding', number('banding', 0));
     set('uApron', number('apron', 0));
     set('uWorms', number('worms', 0));
+    for (const [key, fallback] of [['fineRelief', 0], ['fineLevel', 0], ['fineLevelGrain', 0], ['fineSize', 8], ['fineGrain', 0], ['finePits', 0]]) set('u' + key[0].toUpperCase() + key.slice(1), number(key, fallback));
     set('uLooseSupply', number('looseSupply', 0));
     set('uBoulders', number('boulders', 0));
     set('uSoilRim', number('soilRim', 0));
@@ -1260,6 +1302,7 @@ export class TerrainRenderer {
     this.f('uRunoffAny', max('runoff'));
     this.f('uDebrisReachMax', max('debrisReach'));
     this.f('uShadowTintAny', max('shadowTint'));
+    this.f('uFineAny', Math.max(max('fineRelief'), max('finePits')));
     // Shine is drawn where any rock in use has gloss, roughness or wetness (applyKnobs decides it for slot 0 and the other materials).
     if (slots.some(k => k && (this.rockValue(k, 'faceWet') > 0 || Math.max(...[0, 2].map(c => this.uniformView.getFloat32(table.offset + k * table.stride + table.members.get('shineRock').offset + c * 4, true))) > 0))) this.i('uShineOn', 1);
     this.uniformsDirty = true;
@@ -1389,7 +1432,7 @@ export class TerrainRenderer {
   }
   // The palette entry nearest a color, '#rrggbb', by rgb distance (the output stage's pattern then mixes entries around it).
   paletteNearest(hex) {
-    const colours = (this.materialData.palette?.entries ?? this.paletteArt).map(i => this.paletteColours[i]);
+    const colours = this.paletteArt.map(i => this.paletteColours[i]);
     const cube = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
     let best = colours[0], nearest = Infinity;
     for (const c of colours) { const d = (c[0] - cube[0]) ** 2 + (c[1] - cube[1]) ** 2 + (c[2] - cube[2]) ** 2; if (d < nearest) { nearest = d; best = c; } }

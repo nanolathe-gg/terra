@@ -100,3 +100,19 @@ test('feature sets are fixed points before and after save/load', () => {
     assert.deepEqual(normalizeSet(JSON.parse(JSON.stringify(edited)),config),edited,world+' edited');
   }
 });
+
+test('named starter styles become independent recipes and a saved set keeps its own styles', () => {
+  const config = {features: {deposit: {params: {rimMode: 'relief'}, types: [
+    {name: 'Thin seam', params: {look: 'blades', blades: 1}, share: 1},
+    {name: 'Broad outcrop', params: {look: 'cluster'}, share: 1},
+  ]}}};
+  const set = defaultSet(config);
+  assert.deepEqual(set.deposit.recipes.map(r => [r.id, r.name]), [[0, 'Thin seam'], [1, 'Broad outcrop']]);
+  assert.equal(set.deposit.nextId, 2);
+  set.deposit.recipes[1].metal = 85;
+  assert.equal(set.deposit.recipes[0].metal, 127);
+  assert.deepEqual(variants('deposit', normalizeSet(set, config), config), variants('deposit', set, config));
+  const old = defaultSet({});
+  const restored = normalizeSet(old, config);
+  assert.deepEqual(restored.deposit, old.deposit);
+});

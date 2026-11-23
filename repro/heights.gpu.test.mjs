@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {HEIGHTS_REACH, HEIGHTS_LIMIT} from '../sculpt-gpu-fields.js';
-import {cellHeights, mapGeometry} from '../sculpt-map.js';
+import {cellHeights, mapGeometry, sampleField, footprintApron} from '../sculpt-map.js';
 import {encodeSamples, bumps, hashBytes, fixtureScene} from './heights-fixture.mjs';
 import {heightsNode} from '../sculpt-scene.js';
 
@@ -11,9 +11,27 @@ const open = async (strokes, query = '', map = '4x4') => {
   const headless = await import('./headless.mjs'), [mapX, mapY] = map.split('x');
   return headless.openScene({biome: 'green', ground: false, strokes}, `biome=green&mapX=${mapX}&mapY=${mapY}&scratch=1&gpuMB=512&heapMB=1536${query}`);
 };
-// The export's corner heights (sculpt-map.js cellHeights, which the page's export and the headless one call) over the fields as the export reads
-// them: no Time pass has run, so the read is the authored surface.
-const exported = async s => (await cellHeights(s.config.map, async request => { if (s.paged) return s.fields.readAsync(request); await s.fields.ready(); return s.fields.read(request); })).heights;
+// The fields as the export reads them: no Time pass has run, so the read is the authored surface.
+const readFor = s => async request => { if (s.paged) return s.fields.readAsync(request); await s.fields.ready(); return s.fields.read(request); };
+// The authored surface at each cell corner (the field there, point-sampled): where a height image draws its samples.
+const fieldCorners = async s => (await cellHeights(s.config.map, readFor(s), {footprint: {kind: 'point'}})).heights;
+// The export's promise (sculpt-map.js cornerHeight): each corner byte is the surface's mean over the corner's 16 px square (1 px taps over
+// +-8 px, the end taps at half weight), rounded and clamped. Checked against the export (cellHeights) by brute force over point samples of one
+// read of the whole map; a corner whose mean lies within 1e-6 of a half may round either way (the two sums differ in their last bits).
+async function exportIsFootprintMean(s, label) {
+  const map = s.config.map, got = (await cellHeights(map, readFor(s))).heights;
+  const r = await readFor(s)({x: 0, y: 0, width: (map.widthCells - 1) * 16, height: (map.heightCells - 1) * 16, apron: footprintApron()});
+  const wt = t => (Math.abs(t) === 8 ? .5 : 1) / 16;
+  let wrong = 0, first = '';
+  for (let z = 0; z < map.heightCells; z++) for (let x = 0; x < map.widthCells; x++) {
+    let mean = 0;
+    for (let v = -8; v <= 8; v++) { let row = 0; for (let t = -8; t <= 8; t++) row += wt(t) * sampleField(r, x * 16 + t, z * 16 + v); mean += wt(v) * row; }
+    const want = Math.round(Math.max(0, Math.min(255, mean))), k = z * map.widthCells + x;
+    if (got[k] !== want && Math.abs(mean - Math.floor(mean) - .5) > 1e-6) { wrong++; first ||= `corner ${x},${z}: ${got[k]} for a mean of ${mean}`; }
+  }
+  assert.equal(wrong, 0, `${label}: ${wrong} corners are not their footprint mean (${first})`);
+  return got;
+}
 // A paged map copies its pages to the CPU in the background; letting the scene go while a copy is being read aborts the read, so wait for them.
 async function pagesIdle(s) {
   await s.fields.coarseSettled();
@@ -31,17 +49,21 @@ function hardBytes(width, height) {
   return out;
 }
 
-test('a map holding only a height image of bytes exports those bytes at every corner', async () => {
-  // The whole map's height bytes: sample (i, j) at pixel (16 i, 16 j), the corner the export reads. On the whole-map engine and in pages, and on the
+test('a map holding only a height image of bytes draws those bytes at every corner and exports their footprint means', async () => {
+  // The whole map's height bytes: sample (i, j) at pixel (16 i, 16 j), a cell corner. The surface passes through every sample there, and the export
+  // takes each corner's 16 px mean of that surface (a hashed block does not survive it, a smooth image nearly does). On the whole-map engine and in pages, and on the
   // smallest map, whose lattice is the coarsest (2.0025 px a cell against 2.0009).
   for (const [map, query] of [['4x4', ''], ['4x4', '&gpuPages=force'], ['1x1', '']]) {
     const {widthCells: w, heightCells: h} = mapGeometry(...map.split('x').map(Number)), bytes = hardBytes(w, h);
     const s = await open([['heights', [], {image: encodeSamples(bytes), width: w, height: h}]], query, map);
     try {
-      const got = await exported(s);
+      const got = await fieldCorners(s);
       assert.equal(got.length, w * h);
       let wrong = 0; for (let k = 0; k < w * h; k++) if (got[k] !== bytes[k]) wrong++;
       assert.equal(wrong, 0, `${wrong} of ${w * h} corners differ on ${map}${query && ' in pages'}`);
+      const sent = await exportIsFootprintMean(s, `${map}${query && ' in pages'}`);
+      let moved = 0; for (let k = 0; k < w * h; k++) if (sent[k] !== bytes[k]) moved++;
+      assert.ok(moved > 0, 'the hashed block and the spike do not survive the footprint (the check has teeth)');
       assert.deepEqual([...got.subarray((h - 1) * w)], bytes.slice((h - 1) * w));   // the last row
       assert.deepEqual(Array.from({length: h}, (_, j) => got[j * w + w - 1]), Array.from({length: h}, (_, j) => bytes[j * w + w - 1]));   // the last column
       if (s.paged) await pagesIdle(s);
@@ -50,33 +72,35 @@ test('a map holding only a height image of bytes exports those bytes at every co
   }
 });
 
-test('an image placed on the 16 px grid exports its bytes where it lies, in every mode that sets the ground to it', async () => {
+test('an image placed on the 16 px grid draws its bytes where it lies, in every mode that sets the ground to it, and exports their footprint means', async () => {
   const w = 64, h = 48, bytes = hardBytes(w, h), at = {x: 320, y: 208}, image = encodeSamples(bytes);
   const s = await open([['heights', [], {image, width: w, height: h, ...at}]]);
   try {
     const mw = s.config.map.widthCells, inside = heights => { let wrong = 0; for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (heights[(at.y / 16 + j) * mw + at.x / 16 + i] !== bytes[j * w + i]) wrong++; return wrong; };
-    const replaced = await exported(s);
+    const replaced = await fieldCorners(s);
     assert.equal(inside(replaced), 0);
+    await exportIsFootprintMean(s, 'replace');
     // Past the margin (two samples round the image) the plain is untouched; the row of corners just past the samples holds the repeated edge.
     const base = Math.round(s.config.baseHeight), row = at.y / 16, col = at.x / 16;
     assert.equal(replaced[(row - 3) * mw + col + 5], base); assert.equal(replaced[(row + h + 2) * mw + col + 5], base); assert.equal(replaced[(row + 5) * mw + col - 3], base); assert.equal(replaced[(row + 5) * mw + col + w + 2], base);
     assert.equal(replaced[(row - 1) * mw + col + 5], bytes[5]); assert.equal(replaced[(row + h) * mw + col + 5], bytes[(h - 1) * w + 5]);
     // Flatten is the image on its samples and eases into the plain across the margin; raise and cut keep the higher and the lower of image and plain.
     s.play([['heights', [], {image, width: w, height: h, ...at, mode: 'flatten'}]], {ground: false});
-    const flat = await exported(s);
+    const flat = await fieldCorners(s);
     assert.equal(inside(flat), 0);
     const edge = bytes[20 * w], between = flat[(row + 20) * mw + col - 1];
     assert.ok(Math.min(edge, base) <= between && between <= Math.max(edge, base) && flat[(row + 20) * mw + col - 2] === base, 'the margin lies between the edge sample and the plain');
     // (Where a sample is within a cell's slope of the plain the two cross between lattice cells, and the corner is a mix of both: those are left out.)
     for (const [mode, pick] of [['raise', Math.max], ['cut', Math.min]]) {
       s.play([['heights', [], {image, width: w, height: h, ...at, mode}]], {ground: false});
-      const got = await exported(s); let wrong = 0, checked = 0;
+      const got = await fieldCorners(s); let wrong = 0, checked = 0;
       for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (Math.abs(bytes[j * w + i] - base) > 40) { checked++; if (got[(row + j) * mw + col + i] !== pick(base, bytes[j * w + i])) wrong++; }
       assert.ok(checked > 600 && wrong === 0, `${mode}: ${wrong} of ${checked}`);
     }
     // 16-bit samples with a scale: 256 steps a height unit.
     s.play([['heights', [], {image: encodeSamples(bytes.map(v => v * 256), 16), bits: 16, width: w, height: h, ...at, scale: 1 / 256}]], {ground: false});
-    assert.equal(inside(await exported(s)), 0);
+    assert.equal(inside(await fieldCorners(s)), 0);
+    await exportIsFootprintMean(s, '16-bit');
     assert.deepEqual(s.errors, []);
   } finally { s.dispose(); }
 });

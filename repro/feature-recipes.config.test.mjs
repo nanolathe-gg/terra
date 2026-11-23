@@ -94,7 +94,7 @@ test('variance keeps source range centers and preserves the other inherited dime
 
 test('two-color surfaces keep geometry, shadows and burnt successors; preview matches export',()=>{
  const set=defaultSet(green),r=recipe('tree','red-tree-0',0);
- r.params={arms:12,reach:54,thick:3,curl:.7,reachVariation:.3,thickVariation:.25};set.tree.recipes=[r];
+ r.params={arms:12,reach:54,thick:3,curl:.7,reachVariation:.3,thickVariation:.25,accentAmount:0};set.tree.recipes=[r];
  const first=variants('tree',normalizeSet(set,green),green)[0],ctx={palette},base=generateFeature('tree',first.params,first.seed,ctx);
  const params={...first.params,accentAmount:.55,accentColor:'#b8c277',patternScale:8},colored=generateFeature('tree',params,first.seed,ctx),preview=generateFeature('tree',params,first.seed,{...ctx,bodyOnly:true});
  assert.deepEqual(preview.body,colored.body);assert.deepEqual(preview.shadow,colored.shadow);
@@ -132,5 +132,14 @@ test('rock dimension variation preserves footprints, seeds, and preview/export p
  assert.deepEqual(one,two);assert.deepEqual(one.footprint,v.footprint);
  for(const key of ['heightVariation','widthVariation']){
   const changed=generateFeature('rock',{...v.params,[key]:0},v.seed,ctx);assert.notDeepEqual(one.body,changed.body);assert.deepEqual(one.footprint,changed.footprint);
+ }
+});
+
+test('an explicit empty world feature stays out of the starters and the preset catalog', () => {
+ const redTable=JSON.parse(readFileSync(root+'materials/red.json'));
+ for(const [kind,value] of Object.entries(redTable.features)){
+  if(value!==null)continue;
+  assert.equal(defaultSet(red)[kind],undefined);
+  assert.ok(!green.featureCatalog.some(p=>p.id.startsWith('red-'+kind+'-')));
  }
 });

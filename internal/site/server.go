@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"unicode/utf8"
 )
@@ -220,6 +221,36 @@ func (s *Site) Handler(assetsRoot string) (http.Handler, error) {
 			if err != nil {
 				http.NotFound(w, r)
 				return
+			}
+			if name == "index.html" { // the same start-up hints as the built page (preload.go), generated files included
+				full, err := Load(s.Root)
+				if err != nil {
+					refusal(w, 503, err.Error())
+					return
+				}
+				generated, err := full.Generated("api/maps")
+				if err != nil {
+					refusal(w, 503, err.Error())
+					return
+				}
+				names := make([]string, 0, len(sources)+len(generated))
+				for n := range sources {
+					names = append(names, n)
+				}
+				for n := range generated {
+					names = append(names, n)
+				}
+				sort.Strings(names)
+				read := func(n string) ([]byte, error) {
+					if g, ok := generated[n]; ok {
+						return g, nil
+					}
+					return os.ReadFile(sources[n])
+				}
+				if data, err = withPreloads(data, names, read); err != nil {
+					refusal(w, 503, err.Error())
+					return
+				}
 			}
 			serveBytes(w, r, name, data)
 			return

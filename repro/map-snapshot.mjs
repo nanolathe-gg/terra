@@ -6,8 +6,7 @@
 // `git checkout materials/` before anything else. Prints one JSON line: for each retune whether the save and the pixels stayed the same.
 // Then it pulls a retune in on purpose (Apply look from the map's own world, its default) and checks the result draws as its reload does.
 // A retune marked `snapshot: false` (a part the map does not keep) is reported, not failed; a kept part that changes exits 1.
-// Built from data and not kept: the toolbar's built-in buttons and their presets (new shapes only), rock recipes and material starting
-// points (adding only), the feature generator's tables (new features only).
+// A saved map also opens when the browser cannot fetch its starter template.
 import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import {cdpPortFree} from './cdp-port.mjs';
 import {spawn} from 'node:child_process';
@@ -37,6 +36,7 @@ const RETUNES = [
   {name: 'placement table', file: 'green.json', snapshot: true, edit: g => { g.placement.rock.slope = .3; }},
   {name: 'water table', file: 'green.json', snapshot: true, edit: g => { g.water.shallowRGB = [200, 40, 40]; }},
   {name: 'rock type recipe', file: 'green.json', snapshot: true, edit: g => { Object.assign(g.world.rock.recipes.evad.knobs, {rockFace: 3, faceRock: 1, faceGrass: 0}); }},
+  {name: 'template brushes', file: 'green.json', snapshot: true, edit: g => { g.world.tools.find(t=>t.id==='hill').label='Retuned hill'; }},
   {name: 'added highland role', file: 'green.json', snapshot: true, edit: g => { g.world.materials.high = 'green-moss'; }},
 ];
 // A retune that changes no fresh map tests nothing: each must change a new map drawn the same way (`fresh`), or it is reported as vacuous.
@@ -71,7 +71,7 @@ try {
     await ev(`sessionStorage.setItem('terraform-tab-v1',${JSON.stringify(tab)}),true`);
     return result;
   };
-  const differs = (a, b) => !Buffer.from(a.pixels).equals(Buffer.from(b.pixels)) || !isDeepStrictEqual(a.save.worldSettings, b.save.worldSettings) || !isDeepStrictEqual(a.save.rocks, b.save.rocks) || !isDeepStrictEqual(a.save.materials, b.save.materials) || !isDeepStrictEqual(a.save.column, b.save.column);
+  const differs = (a, b) => !Buffer.from(a.pixels).equals(Buffer.from(b.pixels)) || !isDeepStrictEqual(a.save.worldSettings, b.save.worldSettings) || !isDeepStrictEqual(a.save.rocks, b.save.rocks) || !isDeepStrictEqual(a.save.materials, b.save.materials) || !isDeepStrictEqual(a.save.column, b.save.column) || !isDeepStrictEqual(a.save.tools,b.save.tools);
   const freshBase = await fresh(), base = await reopen(), results = {};
   for (const r of RETUNES) {
     const path = file(r.file); if (!originals.has(path)) originals.set(path, readFileSync(path, 'utf8'));
@@ -81,6 +81,14 @@ try {
       results[r.name] = {snapshot: r.snapshot, saveSame: !changed.length, ...(changed.length ? {changed, world: Object.keys({...base.save.worldSettings, ...now.save.worldSettings}).filter(k => !isDeepStrictEqual(base.save.worldSettings?.[k], now.save.worldSettings?.[k])).map(k => k === 'colors' || k === 'knobs' ? k + ':' + Object.keys({...base.save.worldSettings[k], ...now.save.worldSettings[k]}).filter(j => !isDeepStrictEqual(base.save.worldSettings[k]?.[j], now.save.worldSettings[k]?.[j])).join('|') : k)} : {}), pixelsSame: Buffer.from(base.pixels).equals(Buffer.from(now.pixels)), fresh: differs(freshBase, freshNow)};
     } finally { writeFileSync(path, originals.get(path)); }
   }
+  await send('Network.enable');
+  await send('Network.setBlockedURLs',{urls:['*config/green.json','*materials/green.json']});
+  try {
+    const standalone=await reopen();
+    results['template unavailable']={snapshot:true,saveSame:isDeepStrictEqual(standalone.save,base.save),
+      pixelsSame:Buffer.from(base.pixels).equals(Buffer.from(standalone.pixels))};
+  } finally { await send('Network.setBlockedURLs',{urls:[]}); }
+
   // Pulling a retune in on purpose: with Green's material table and a row retuned, Apply look from Green (every card) draws exactly what a
   // reload of the map then draws (the in-place apply and the load agree), and differs from the map as first saved. The second run opens the
   // dialog on its defaults (this world's own, every card: what Reset was) on the map the first left.

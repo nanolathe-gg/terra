@@ -25,6 +25,7 @@ export function mapMeta(id, s, updated = Date.now()) {
   return {
     id, updated,
     name: String(s?.mapData?.name || '').trim().slice(0, 128) || 'Untitled map',
+    ...(s?.worldSettings?.name?{worldName:String(s.worldSettings.name).slice(0,120)}:{}),
     biome: typeof s?.biome === 'string' ? s.biome : '',
     world: typeof s?.world === 'string' ? s.world : (typeof s?.biome === 'string' ? s.biome : ''),
     unitsX: count(s?.map?.unitsX), unitsY: count(s?.map?.unitsY),

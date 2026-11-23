@@ -3,11 +3,13 @@ import {createPreviewFields,createPreviewLattice,planPreviewBlocks,previewQualit
 import {selectionGeometry,selectionTransform,hitSelection,drawSelection} from './sculpt-selection.js';
 import {landformElevation,landformGround} from './sculpt-shape-presets.js';
 import {TerrainRenderer} from './sculpt-renderer.js';
-import {drawMapBounds,sampleField,cellHeights,cellHeightTiles} from './sculpt-map.js';
+import {drawMapBounds,sampleField,cornerHeight,footprintApron,cellHeights,cellHeightTiles} from './sculpt-map.js';
 import {mountMapExport} from './sculpt-export.js';
 import {mountMapFeatures} from './sculpt-features.js';
 import {mountPassability} from './sculpt-passability-view.js';
 import {pagedBudget,VIEW_CANVASES} from './sculpt-scene.js';
+import {warmShapePipelines,feedPasses} from './sculpt-gpu-fields.js';
+import {erosionOf} from './sculpt-erosion.js';
 const $=id=>document.getElementById(id),MB=1024*1024;
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const tick=()=>new Promise(resolve=>requestAnimationFrame(resolve));
@@ -36,7 +38,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   };
   config.onDeviceLost=info=>restartForMemory('a lost GPU device',()=>terrainBudget.lost('a lost GPU device',{memory:/out of memory|\boom\b/i.test(info?.message??'')}));
   config.onMemoryPressure=()=>restartForMemory('a GPU allocation failure');
+  // Start-up asks for every pipeline the first picture needs at once: the shape engines' and the feed's as soon as the device exists (while
+  // the renderer's shaders load), the Time pass's and the output stage's once the renderer is made, the rock mask's at the first draw
+  // (renderer.specialize). Each later request shares the build already under way.
+  config.onDevice=device=>{warmShapePipelines(device);feedPasses(device).catch(()=>{});};
   const output=document.createElement('canvas'),renderer=await TerrainRenderer.createChunked(output,config);
+  renderer.buildOutputPipelines().catch(()=>{});erosionOf(renderer).then(erosion=>erosion.mapsPipeline()).catch(()=>{});
   renderer.drawWhileCompiling=true;   // the view keeps a material's last picture while its new pipeline compiles (sculpt-material-cache.js)
   const g=canvas.getContext('2d'),ink=overlay.getContext('2d'),cache=new Map();
   const previewFields=createPreviewFields(renderer.device,api.previewScene);
@@ -75,13 +82,14 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   const interacting=()=>Boolean(gesture||api.previewActive?.());
   const pipelineWaits=new Map();
   let cacheBytes=0,peakGPU=0,peakHeap=0,peakAccountedHeap=0,evictions=0,bakes=0,reused=0,hits=0,rebakes=0,scale=1,overview=true,pending=false,drawing=false,rerun=false,serial=0,viewEpoch=0,busy=false,features,metadata,passability,canonicalSize=512,displaySize=256;
-  let paintedView=-1,navigationTimer=null,activeBake=null;
+  let paintedView=-1,navigationTimer=null,activeBake=null,masksWarmed=false;
   // Only optional background work and hover detail wait for navigation to
   // settle. Visible terrain starts immediately, including during a held pan.
   const navigationDelay=180;
-  const navigating=()=>Boolean(pan||navigationPointer!==null||navigationTimer!==null);
+  const navigating=()=>Boolean(pan||touchNav||navigationPointer!==null||navigationTimer!==null);
   const bakedBefore=new Set(); let lastScroll=-Infinity,lastPresented=0,pendingStrokeTime=0,budgetUpdating=false;
-  let heldSince=null,pan=null,space=false,gesture=null,hover=null;
+  let heldSince=null,pan=null,touchNav=null,space=false,gesture=null,hover=null;
+  const touches=new Map();   // the fingers down on the map (touchNavigation below), by pointer id
   const previewRejects=new Set();let previewRejectScope='';
   const DRAFT_LEAD=900;   // ms the whole map's Time pass yields to a shape edit's half-level draft
   const DRAFT_WAIT=3600;   // ms without input after which the finals start although the half-level draft has not arrived
@@ -332,7 +340,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       const atSerial=lattice?sourceSerial:serial,atRev=lattice?sourceRev:{...rev};
       let result=await drawTile(view?{reuse,check}:null);
       if(result.reused&&!cached())result=await drawTile({reuse:null});   // prior was dropped while the check ran: the tile is drawn after all
-      const entryFor=bitmap=>({...rect,bitmap,bytes:ow*oh*4,digest:null,kept:false,scale,pixel,fit,lattice:Boolean(lattice),weathered:readWeather,fed:true,serial:atSerial,rev:atRev,shapeRev:feed.revision,pipelineKey:result.pipelineKey,weatherRevB:fit?null:feed.weatherRevB,level:scale,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null});
+      const entryFor=bitmap=>({...rect,bitmap,bytes:ow*oh*4,digest:null,kept:false,scale,pixel,fit,lattice:Boolean(lattice),weathered:readWeather,fed:true,serial:atSerial,rev:atRev,shapeRev:feed.revision,pipelineKey:result.pipelineKey,weatherRevB:fit?null:feed.weatherRevB,level:scale,input:{x:required.gridOrigin[0],y:required.gridOrigin[1],width:(required.gridWidth-1)*required.gridSpacing,height:(required.gridHeight-1)*required.gridSpacing},heightPatch:null,late:block?result.late??null:null});
       const kept=entry=>{entry.digest=reuse;entry.kept=true;entry.pipelineKey=prior.pipelineKey;entry.finalCostMs=prior.finalCostMs;entry.finalCostBudget=prior.finalCostBudget;return entry;};
       // A kept picture is prior's bitmap; the caller replaces prior with it only while prior is still the cached entry.
       if(check)return {pending:result.check.then(d=>{if(d!==reuse)return null;reused++;metrics();return kept(entryFor(prior.bitmap));},()=>null)};
@@ -507,6 +515,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   function presented(fresh=true) {
     api.presented?.(fresh);   // fresh: a newly drawn tile or block is on screen, not only retained ones repainted
+    if(fresh&&!masksWarmed){masksWarmed=true;renderer.warmRockMasks();}   // the other rock mask's pipelines, after the first picture
     const now=performance.now();if(lastPresented&&now-lastScroll<300&&now-lastPresented<3000){frameTimes.push(now-lastPresented);if(frameTimes.length>1024)frameTimes.shift();}lastPresented=now;
     // Exercise the refinement working sets before clearing the crash note.
     if(fresh&&!foregroundPending()&&(!api.canExport||api.canExport()))terrainBudget.settled();
@@ -706,6 +715,9 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
             e.block=true;e.dirty=changedSince(e.serial,e.input,'F',e.lattice);e.bakedAt=performance.now();if(!e.color)await retainColor(e);
             if(want===coarseLevel){fineSinceCoarse=false;}
             if(prior){if(prior.color!==e.color)renderer.releaseColorTile(prior.color);blockBytes-=prior.bytes;}blocks.set(key,e);blockBytes+=e.bytes;
+            // A preview shown before its voxel count was checked (VoxelSurface render) and found wrong is drawn again, with its geometry record
+            // given up: a color-only redraw (renderColorTile above, which carries late along) would show the same wrong rock.
+            const late=e.late;if(late)late.then(wrong=>{const now=blocks.get(key);if(!wrong||now?.late!==late)return;now.late=null;now.dirty=true;if(now.color){renderer.releaseColorTile(now.color);now.color=null;}schedule();},()=>{});
             paintedView=-1;presentView();presented();rerun=true;
             // The gates in this picture have already answered input. Compile
             // their exact final set without holding another preview behind it.
@@ -857,7 +869,8 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   }
   $('fit').onclick=()=>zoom('overview');$('one').onclick=()=>zoom(1);$('zoom').onchange=e=>zoom(e.target.value==='overview'?'overview':Number(e.target.value));
   // Pinch (Ctrl or Cmd with the wheel, which is how Chrome sends a trackpad pinch; Safari's gesture events) steps through the zoom
-  // menu's levels and keeps the point under the pointer where it is. A plain wheel or two-finger scroll still pans.
+  // menu's levels and keeps the point under the pointer where it is. A plain wheel or two-finger scroll still pans. On a touch screen
+  // two fingers pan and pinch (touchNavigation below); iPad Safari sends gesture events for that pinch too, which wait while a finger is down.
   const ZOOM_LEVELS=[.25,.5,1,2,4];
   function zoomStep(dir,event){
     if(busy||gesture)return;
@@ -875,7 +888,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   },{passive:false});
   let gestureScale=1;
   viewport.addEventListener('gesturestart',event=>{event.preventDefault();gestureScale=1;});
-  viewport.addEventListener('gesturechange',event=>{event.preventDefault();const ratio=event.scale/gestureScale;if(ratio>1.25||ratio<.8){zoomStep(ratio>1?1:-1,event);gestureScale=event.scale;}});
+  viewport.addEventListener('gesturechange',event=>{event.preventDefault();if(touches.size)return;const ratio=event.scale/gestureScale;if(ratio>1.25||ratio<.8){zoomStep(ratio>1?1:-1,event);gestureScale=event.scale;}});
   $('tile-grid').onchange=()=>schedule();
   $('weathered-view').onchange=()=>{
     weatheredView=$('weathered-view').checked;
@@ -937,7 +950,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   // Where an art pixel's center is on the page now (Pick's card follows it as the view moves).
   function client(at){const r=overlay.getBoundingClientRect(),v=state();return {x:r.left+(Math.floor(at.x)+.5-v.x)*scale,y:r.top+(Math.floor(at.y)+.5-v.y)*scale};}
   function localPoint(event){const p=screen(event),q=pickWorld(p);return {x:q[0],y:q[1]};}
-  function nodeMetadata(index){return api.nodeMetadata?api.nodeMetadata(index):api.graph()[index];}
+  function nodeMetadata(index){return api.selectionNode?api.selectionNode(index):api.nodeMetadata?api.nodeMetadata(index):api.graph()[index];}
   const groundAt=(x,y)=>Math.max(config.seaLevel,visibleSample(x,y));
   const project=p=>({x:p.x,y:p.y-(groundAt(p.x,p.y)-config.baseHeight)/2});
   // A shape's points are drawn at the ground's height under them. While shapes are moved, turned or scaled or a point is dragged, and after,
@@ -1006,7 +1019,7 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
       // In path mode empty ground selects; only a point can start a drag.
       if(api.pathEditing?.()&&pointIndex<0)return;
       // Shift + drag sets the shape's height setting (sculpt.js heightControl: a landform's Elevation); a shape without one (Reset ground) starts no drag.
-      const action=hit?.action==='rotate'||hit?.action==='scale'||pointIndex>=0?hit.action:event.shiftKey&&!group?'height':'move',height=action==='height'?api.heightOf?.(index)??null:null;
+      const action=hit?.action==='rotate'||hit?.action==='scale'||pointIndex>=0?hit.action:event.shiftKey&&!group&&!nodeMetadata(index)?.joined?'height':'move',height=action==='height'?api.heightOf?.(index)??null:null;
       if(action==='height'&&height===null)return;
       holdShapes(group?api.selectedShapes():[index]);
       const h=geometry(index);if(api.beginMove(index)===false)return;
@@ -1043,6 +1056,70 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   overlay.addEventListener('pointerleave',()=>{hoveredNode=-1;hover=null;overlays();});
   const end=event=>{if(pan?.id===event.pointerId){pan=null;navigationChanged();}if(gesture?.id===event.pointerId){const commit=event.type==='pointerup';released=commit;if(commit)preview(event,true);const s=gesture;gesture=null;if(s.type==='move')api.endMove(commit);else api.endStroke(commit);released=commit;if(commit)pendingStrokeTime=performance.now();}if(overlay.hasPointerCapture(event.pointerId))overlay.releasePointerCapture(event.pointerId);schedule();};
   for(const name of ['pointerup','pointercancel','lostpointercapture'])overlay.addEventListener(name,end);
+  // Touch: one finger uses the tool, two fingers pan and pinch the map. A finger's press waits until it moves 8 px or lifts before the
+  // tools see it, so a second finger that lands before then pans without the first having placed a feature, picked a pixel, selected a
+  // shape or begun a stroke; one that lands later cancels what the first began, as Escape does. Two fingers do not pan under a Pencil or
+  // mouse gesture. Pinching steps through the zoom
+  // menu's levels (one a doubling of the fingers' spread) and the art point between the fingers stays between them. A finger left down
+  // after a pan does nothing until every finger is up or a second joins it again. Apple Pencil and the mouse are not touches and are not held back.
+  const TOUCH_SLOP=8,replayed=new WeakSet();
+  let touchWait=null;   // the first finger's held press: {event}
+  const forward=(type,from,extra={})=>{
+    const e=new PointerEvent(type,{bubbles:true,cancelable:true,composed:true,pointerId:from.pointerId,pointerType:from.pointerType,isPrimary:from.isPrimary,
+      clientX:from.clientX,clientY:from.clientY,screenX:from.screenX,screenY:from.screenY,button:from.button,buttons:from.buttons,width:from.width,height:from.height,
+      pressure:from.pressure,shiftKey:from.shiftKey,altKey:from.altKey,ctrlKey:from.ctrlKey,metaKey:from.metaKey,...extra});
+    replayed.add(e);overlay.dispatchEvent(e);
+  };
+  const releaseWait=()=>{if(!touchWait)return;const {event}=touchWait;touchWait=null;const t=touches.get(event.pointerId);if(t)t.forwarded=true;forward('pointerdown',event);};
+  const midpoint=()=>{const [a,b]=[...touches.values()];return {clientX:(a.x+b.x)/2,clientY:(a.y+b.y)/2};};
+  const spread=()=>{const [a,b]=[...touches.values()];return Math.max(1,Math.hypot(a.x-b.x,a.y-b.y));};
+  function beginTouchNavigation(){
+    touchWait=null;
+    // What the first finger began ends unmade: the terrain's stroke or move, or a feature tool's drag (each listens for its pointer's cancel).
+    for(const [id,t] of touches)if(t.forwarded)forward('pointercancel',{pointerId:id,pointerType:'touch',isPrimary:false,clientX:0,clientY:0,screenX:0,screenY:0,button:0,buttons:0,width:1,height:1,pressure:0});
+    if(gesture||pan||features?.busy){for(const t of touches.values())t.spent=true;return;}   // a Pencil or mouse gesture holds the map
+    const mid=midpoint();
+    touchNav={ids:new Set(touches.keys()),anchor:screen(mid),spread:spread()};
+    for(const id of touchNav.ids)if(!overlay.hasPointerCapture(id))try{overlay.setPointerCapture(id);}catch{}
+    hoveredNode=-1;hover=null;navigationChanged();
+  }
+  function moveTouchNavigation(){
+    // A level each time the spread passes 1.5x (or 1/1.5x) of where the last level began: a doubling of the spread is about one level, and
+    // a finger's wobble at the threshold does not step back and forth. At the end of the menu the threshold moves with the fingers.
+    const mid=midpoint();
+    for(let n=0;n<5&&!busy;n++){
+      const ratio=Math.log2(spread()/touchNav.spread),dir=ratio>.6?1:ratio<-.6?-1:0;if(!dir)break;
+      const was=overview?'overview':scale;zoomStep(dir,mid);touchNav.spread*=2**dir;if((overview?'overview':scale)===was)break;
+    }
+    if(!overview){const r=overlay.getBoundingClientRect();viewport.scrollLeft=Math.max(0,touchNav.anchor.x*scale-(mid.clientX-r.left));viewport.scrollTop=Math.max(0,touchNav.anchor.z*scale-(mid.clientY-r.top));}
+    navigationChanged();
+  }
+  const isTouch=event=>event.pointerType==='touch'&&!replayed.has(event);
+  viewport.addEventListener('pointerdown',event=>{
+    if(!isTouch(event)||event.target!==overlay)return;
+    touches.set(event.pointerId,{x:event.clientX,y:event.clientY,spent:Boolean(touchNav)||touches.size>=2});
+    event.preventDefault();
+    if(touches.size===1){event.stopImmediatePropagation();touchWait={event};return;}
+    event.stopImmediatePropagation();
+    if(touches.size===2&&!touchNav)beginTouchNavigation();   // also a finger put back beside one left down after a pan
+  },{capture:true});
+  viewport.addEventListener('pointermove',event=>{
+    const t=isTouch(event)&&touches.get(event.pointerId);if(!t)return;
+    t.x=event.clientX;t.y=event.clientY;
+    if(touchWait?.event.pointerId===event.pointerId){
+      if(Math.hypot(event.clientX-touchWait.event.clientX,event.clientY-touchWait.event.clientY)<TOUCH_SLOP){event.stopImmediatePropagation();return;}
+      releaseWait();return;   // the tool sees the press, then this move
+    }
+    if(touchNav?.ids.has(event.pointerId)){event.stopImmediatePropagation();event.preventDefault();moveTouchNavigation();return;}
+    if(t.spent||touches.size>1)event.stopImmediatePropagation();
+  },{capture:true});
+  for(const name of ['pointerup','pointercancel'])viewport.addEventListener(name,event=>{
+    const t=isTouch(event)&&touches.get(event.pointerId);if(!t)return;
+    touches.delete(event.pointerId);
+    if(touchWait?.event.pointerId===event.pointerId){if(name==='pointerup')releaseWait();else{touchWait=null;event.stopImmediatePropagation();}return;}   // a tap: the press, then this lift
+    if(touchNav?.ids.has(event.pointerId)){event.stopImmediatePropagation();for(const [,o] of touches)o.spent=true;if(overlay.hasPointerCapture(event.pointerId))overlay.releasePointerCapture(event.pointerId);touchNav=null;navigationChanged();return;}
+    if(t.spent)event.stopImmediatePropagation();
+  },{capture:true});
   // Space held pans the map, wherever the focus is, but in a text field, in a modal dialog, or on a control the artist reached with Tab,
   // which Space presses. A button the mouse clicked keeps the focus, and Space still pans there (it would press it again).
   let tabbed=false;document.addEventListener('pointerdown',()=>{tabbed=false;},true);document.addEventListener('keydown',event=>{if(event.key==='Tab')tabbed=true;},true);
@@ -1077,12 +1154,12 @@ export async function mountMapCanvas({config,canvas,overlay,api,drawOptions}) {
   api.subscribeSubmit?.(change=>{if(api.gpuFeedActive?.()){pendingStrokeTime ||= performance.now();invalidate(change);}});
   api.subscribe?.(change=>{pendingStrokeTime ||= performance.now();markCoarse(change?.rect??null);if(!api.gpuFeedActive?.())invalidate(change);});
   function setBusy(on){busy=on;api.setBusy(on);$('weathered-view').disabled=on;find('[data-gpu]').disabled=on;find('[data-heap]').disabled=on;if(!on){if(resizePending)resize();else schedule();}}
-  // The export's own numbers for one feature: an anchor cell's four corner bytes, sampled as sampleHeights samples them, and a
-  // rectangle of export art. Either answers null when the scene changed while it was read.
+  // The export's own numbers for one feature: an anchor cell's four corner bytes, sampled as sampleHeights samples them (each corner's
+  // footprint, read with its apron), and a rectangle of export art. Either answers null when the scene changed while it was read.
   async function exportCorners(x,z){
-    const seq=serial,r=await((api.readHeights??api.read)({x:x*16,y:z*16,width:16,height:16}));checkHeap(r);
-    if(changedSince(seq,{x:x*16-16,y:z*16-16,width:48,height:48}))return null;
-    return [[0,0],[1,0],[0,1],[1,1]].map(([dx,dz])=>Math.round(clamp(sampleField(r,(x+dx)*16,(z+dz)*16),0,255)));
+    const apron=footprintApron(),seq=serial,r=await((api.readHeights??api.read)({x:x*16,y:z*16,width:16,height:16,apron}));checkHeap(r);
+    if(changedSince(seq,{x:x*16-16-apron,y:z*16-16-apron,width:48+2*apron,height:48+2*apron}))return null;
+    return [[0,0],[1,0],[0,1],[1,1]].map(([dx,dz])=>Math.round(clamp(cornerHeight(r,(x+dx)*16,(z+dz)*16),0,255)));
   }
   // held: whether the caller already holds the renderer. The deposit and vent fit (features.fitGround) runs inside a frame, which does; the
   // export's feature pack (stream.bakeArt) runs outside the frames and takes it for the draw.

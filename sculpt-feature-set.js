@@ -76,7 +76,7 @@ export function hash32(a, b) {
 const unit = (a, b) => hash32(a, b) / 4294967296;
 
 export function worldKinds(config) {
-  return KINDS.filter(kind => GROUND_KINDS.includes(kind) || config?.features?.[kind]?.types?.length);
+  return KINDS.filter(kind => GROUND_KINDS.includes(kind) || config?.features?.[kind]?.types?.length || config?.featureSet?.[kind]?.recipes?.length);
 }
 // Deposits and vents are the same on every world but their look: a world's table may set their painter's params (the halo's tone).
 function kindData(kind, config) {
@@ -105,8 +105,12 @@ export function makeRecipe(kind, data, id = 0, name = LABELS[kind]) {
 }
 export function defaultSet(config) {
   return Object.fromEntries(worldKinds(config).map(kind => {
-    const recipe=makeRecipe(kind,kindData(kind,config),0,`${config.biome || 'Default'} ${LABELS[kind].toLowerCase()}`);
-    return [kind,{nextId:1,recipes:[normalizeRecipe(kind,recipe,config,recipe)]}];
+    const data = kindData(kind,config) ?? config.featureSet[kind].recipes[0]?.data ?? {};
+    // Named types are separate starter styles. Unnamed types are variants within one recipe.
+    const recipes = data.types?.length && data.types.every(type => type.name)
+      ? data.types.map((type,id) => makeRecipe(kind,{...data,types:[type]},id,type.name))
+      : [makeRecipe(kind,data,0,`${config.biome || 'Default'} ${LABELS[kind].toLowerCase()}`)];
+    return [kind,{nextId:recipes.length,recipes:recipes.map(recipe => normalizeRecipe(kind,recipe,config,recipe))}];
   }));
 }
 // Only JSON values that the generators use are kept. Unknown/removed options do not
@@ -117,11 +121,13 @@ const EXTRA_NUMBERS = {forks:[2,5],ash:[0,1],pieces:[1,8],lump:[0,1],cap:[0,1],s
 function cleanParams(value, config, kind, overrides = false) {
   const examples = [kindData(kind, config), ...featureCatalog(config, kind).map(p => p.data)].filter(Boolean);
   const allowed = new Set(['species','canopyStyle','cells','trunkColor','accentColor',...Object.keys(FORMS[kind] || {}), ...Object.keys(EXTRA_NUMBERS)]);
+  if (kind === 'deposit') allowed.add('rimMode');
   if (kind === 'vent') { allowed.add('holeAspect'); allowed.add('rimLayers'); }
   for (const d of examples) for (const t of d.types || [{params:d.params}]) for (const k of Object.keys(t.params || {})) allowed.add(k);
   const out = {};
   for (const [k, v] of Object.entries(value || {})) {
     if (!allowed.has(k)) continue;
+    if (k === 'rimMode') { if (v === 'flat' || v === 'relief') out[k] = v; continue; }
     if (k === 'canopyStyle') { if (['round','clustered','palm'].includes(v)) out[k]=v; continue; }
     if (k === 'trunkColor' || k === 'accentColor') { if(hex(v))out[k]=v.toLowerCase();continue; }
     if (k === 'species') { if (SPECIES.includes(v)) out[k] = v; continue; }
@@ -182,13 +188,19 @@ function normalizeRecipe(kind, v, config, fallback) {
 }
 export function normalizeSet(value, config) {
   const base = defaultSet(config), out = {};
-  for (const [kind, b] of Object.entries(base)) {
+  for (const kind of KINDS) {
+    const b = base[kind], saved = value?.[kind]?.recipes;
+    if (!b && !Array.isArray(saved)) continue;
+    // A saved map can own a catalog recipe that its world's new maps omit.
+    const fallback = b?.recipes[0] ?? featureCatalog(config,kind)[0];
+    if (!fallback) continue;
     const ids = new Set(), recipes = [];
-    for (const v of (Array.isArray(value?.[kind]?.recipes) ? value[kind].recipes : []).slice(0, MAX_RECIPES)) {
+    for (const v of (Array.isArray(saved) ? saved : []).slice(0, MAX_RECIPES)) {
       if (!v || !Number.isInteger(v.id) || v.id < 0 || v.id > 1000000 || ids.has(v.id)) continue;
-      ids.add(v.id); recipes.push(normalizeRecipe(kind, v, config, b.recipes[0]));
+      ids.add(v.id); recipes.push(normalizeRecipe(kind, v, config, fallback));
     }
-    out[kind] = recipes.length ? {nextId: Math.max(...recipes.map(r => r.id + 1), Math.round(number(value[kind].nextId, 1, 1000001, 1))), recipes} : b;
+    if (recipes.length) out[kind] = {nextId: Math.max(...recipes.map(r => r.id + 1), Math.round(number(value[kind].nextId, 1, 1000001, 1))), recipes};
+    else if (b) out[kind] = b;
   }
   return out;
 }

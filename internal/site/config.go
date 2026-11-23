@@ -35,6 +35,7 @@ type Site struct {
 	featureKinds map[string][]string
 	configs      map[string]object
 	catalog      object
+	editor       object
 }
 
 func decode(data []byte, target any) error {
@@ -241,7 +242,8 @@ func (s *Site) featureCatalog() []any {
 	for _, w := range s.Manifest.FeatureWorlds {
 		features := obj(s.tables[w]["features"])
 		for _, kind := range s.featureKinds[w] {
-			if !allowed[kind] {
+			// A null kind opts out of the fallback and supplies no catalog styles.
+			if !allowed[kind] || features[kind] == nil {
 				continue
 			}
 			data := obj(features[kind])
@@ -275,7 +277,11 @@ func (s *Site) featureCatalog() []any {
 				if c, ok := params["cells"].(string); ok && c != "" {
 					cells = " (" + strings.ReplaceAll(c, "x", "×") + ")"
 				}
-				out = append(out, object{"id": fmt.Sprintf("%s-%s-%d", w, kind, i), "kind": kind, "name": fmt.Sprintf("%s · %s %d%s", names[w], form, i+1, cells), "data": recipe})
+				name := fmt.Sprintf("%s · %s %d%s", names[w], form, i+1, cells)
+				if style, ok := shape["name"].(string); ok && style != "" {
+					name = fmt.Sprintf("%s · %s", names[w], style)
+				}
+				out = append(out, object{"id": fmt.Sprintf("%s-%s-%d", w, kind, i), "kind": kind, "name": name, "data": recipe})
 			}
 		}
 	}
@@ -308,7 +314,7 @@ func (s *Site) configure() error {
 				surfaces = append(surfaces, k)
 			}
 		}
-		c := merge(object{"biome": names[w], "biomeId": w, "size": 1024, "grid": 512, "seaLevel": 0, "baseHeight": base, "materialTable": materialPath(w), "layers": surfaces, "material": material, "water": table["water"]}, world)
+		c := merge(object{"biome": names[w], "biomeId": w, "size": 1024, "grid": 512, "seaLevel": 0, "baseHeight": base, "layers": surfaces, "material": material, "water": table["water"]}, world)
 		// The world's surface layers (docs/SURFACE_LAYERS.md): its own (world.surface) or the shared default stack.
 		if _, ok := c["surface"]; !ok {
 			c["surface"] = clone(s.defaults["surface"])
@@ -377,6 +383,23 @@ func (s *Site) configure() error {
 		c["beachSources"] = clone(beaches)
 	}
 	s.catalog = object{"worlds": worlds}
+	// Keep the valid option names here, without picking a template's default values.
+	editorKnobs := object{}
+	for _, c := range s.configs {
+		for k := range obj(c["defaults"]) {
+			editorKnobs[k] = true
+		}
+		for k := range obj(c["engineDefaults"]) {
+			editorKnobs[k] = true
+		}
+	}
+	s.editor = object{
+		"knobs":  keys(editorKnobs),
+		"biomes": names, "biomeDescriptions": s.descriptions(), "worldShapes": shapes,
+		"beachSources": beaches, "featureCatalog": features,
+		"defaults": stringsOf(obj(s.defaults["knobs"])),
+		"material": object{"site": s.defaults["site"]},
+	}
 	return nil
 }
 
@@ -429,7 +452,10 @@ func (s *Site) Generated(mapsURL string) (map[string][]byte, error) {
 	if mapsURL != "" {
 		services["maps"] = object{"available": true, "url": mapsURL}
 	}
-	data := map[string]any{"services.json": services, "config/catalog.json": s.catalog}
+	data := map[string]any{
+		"services.json": services, "config/catalog.json": s.catalog,
+		"config/editor.json": s.pickerOrder(merge(s.editor), ""),
+	}
 	for _, w := range s.Worlds() {
 		data["config/"+w+".json"] = s.pickerOrder(merge(s.configs[w]), w)
 	}

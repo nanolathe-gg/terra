@@ -176,6 +176,9 @@ export const EDITOR_HELP = {
 };
 
 const FEATURE_PARAMETERS = {
+  deposit: {
+    rimMode: 'Blend the rim color into the ground or shade a recessed edge with the map’s light. The rim moves with the deposit.',
+  },
   tree: {
     species: EDITOR_HELP['feature-species'],
     canopyStyle: EDITOR_HELP['feature-canopy-style'],

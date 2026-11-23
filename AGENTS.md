@@ -90,7 +90,7 @@ numbering.
    - Layout lives in `index.html`: each element sits at its final place,
      and no script moves, reorders or renames page elements at load. The one
      exception is the toolbar's shape buttons, which are built from the
-     world's tool list and the map's own tools.
+     map's saved tool list.
 9. **A control for everything an artist would shape, and each one earns its place.**
    - Artists set a world's look by hand (shape, structure, layering,
      variation, roughness, broad and fine detail, weathering, color,

@@ -160,7 +160,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
     const bands=columnRows(this.config.column).bands[0]*Math.max(Math.abs(rock('banding',0))*4,.8);
     // The bed's lumps (bedRelief) stay under the water plane, but the pictures are sensitive to this reach (Green's hills shade differently by about one unit of it), so it keeps counting them.
     const lumps=1.6*(Math.abs(n('plainRelief',1.2))+Math.abs(n('lumpRelief',4))+Math.abs(n('bedRelief',0)));
-    const extra=relief+blocks+bands+lumps+7.84*Math.abs(n('worms',0))+Math.abs(rock('looseSize',6))+Math.abs(n('rippleHeight',1.4))+(rock('debrisAmount',0)>0?1.5*rock('debrisDepth',4):0);
+    const fine=Math.max(Math.abs(rock('fineRelief',0)),Math.abs(n('fineLevel',0)))*Math.abs(rock('fineSize',8))*.36;   // the bake's fine octaves (engine-common.wgsl fineOctaves): a quarter of each half wavelength (under fineSize / 4 summed), times the direction blend's sqrt 2
+    const extra=relief+blocks+bands+lumps+fine+7.84*Math.abs(n('worms',0))+Math.abs(rock('looseSize',6))+Math.abs(n('rippleHeight',1.4))+(rock('debrisAmount',0)>0?1.5*rock('debrisDepth',4):0);
     const maxVisible=Math.max(this.config.seaLevel,heightBounds[1]+2.85+Math.abs(this.config.material?.surfaceRelief??1)*extra+4+this.groundRelief());
     // The surface facts read the authored height around a pixel in the color pass (engine-common.wgsl): distance to water out to
     // SURFACE_WATER_REACH (192 px), plus the height grid's linear filter. The color record's lattice keeps them (colorLattice).
@@ -591,8 +592,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       if(this.canvas.width!==atlasWidth)this.canvas.width=atlasWidth;if(this.canvas.height!==height)this.canvas.height=height;
       if(this.outputCanvas.width!==outWidth)this.outputCanvas.width=outWidth;if(this.outputCanvas.height!==outHeight)this.outputCanvas.height=outHeight;
       this.outputBytes=atlasWidth*height*4+outWidth*outHeight*4;this.recordMemory();
-      await this.outputPipelines();
-      const encoder=this.device.createCommandEncoder({label:'cached tile colors'}),presentation=this.context.getCurrentTexture(),pipeline=this.genericPipelines[this.rockMask()].draw,regions=[];let x=0,outX=0,slot=0;
+      await this.outputPipelines();const pipeline=(await this.genericFor()).draw;   // before the canvas texture, which lasts only this task
+      const encoder=this.device.createCommandEncoder({label:'cached tile colors'}),presentation=this.context.getCurrentTexture(),regions=[];let x=0,outX=0,slot=0;
       this.outputSize(width,height);
       for(const tile of tiles){
         const scissor=colorScissor(tile,view),r=tile.rect;
@@ -632,6 +633,8 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       const dimensions=await this.allocate(region,w,h,request.width,request.height,Boolean(feed),scale,pixelScale);
       if(feed)await this.feedFromGpu(request,region,dimensions,feed,passes);else this.upload(request,region,dimensions,planes);
       this.activeRegion=region;this.voxelScale=voxelScale;
+      // A gesture's own preview may be shown before its voxel count is checked (VoxelSurface render); the result's late says if it was wrong.
+      this.uncheckedPreview=Boolean(preview);
       // An export draws the world as saved: the Surface section's design view (hidden layers, its coverage preview) is set aside for its tiles,
       // and the view's world sync is left as it was (exportView).
       const view=request.exportArt?this.exportView():null;
@@ -655,7 +658,7 @@ export class ChunkTerrainRenderer extends TerrainRenderer {
       // drain it before recycling the working set, just as on success.
       const completion=this.device.queue.onSubmittedWorkDone();this.previousChunk=completion;
       completion.then(()=>{this.completedChunk=completion;},()=>{});throw error;
-    } finally { this._busy=false;this.cpuWorkingBytes=0;this.fastRaster=false; }   // a bake outside a chunk (timeBake, timeDraw) is never a gesture's
+    } finally { this._busy=false;this.cpuWorkingBytes=0;this.fastRaster=false;this.uncheckedPreview=false; }   // a bake outside a chunk (timeBake, timeDraw) is never a gesture's
   }
   evict() {
     this.trimColorTiles();this.colorTargets.clear();this.voxel?.release();this.rockWeather?.clear();

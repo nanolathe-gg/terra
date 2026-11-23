@@ -6,6 +6,7 @@
 // Authoring prototype, not retail rules.
 
 import {terrainAllocation} from './sculpt-memory.js';
+import {entryConstants} from './sculpt-gates.js';
 import {feedPasses, feedUniform} from './sculpt-gpu-fields.js';
 // The Time pass reads the world's own rock (slot 0) for its beds' hardness: its pipelines read every rock number at slot 0's fixed offset
 // (engine-common.wgsl rockMask). A rock preset's own beds do not reach the heights yet.
@@ -14,6 +15,7 @@ const TIME_ROCK = {rockMask: 0};
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // The Time pass's cell, world px: a lattice finer than this is simulated on cells this size and gets the result as a change of its own
 // heights (runCoarse). The game keeps one height per 16 px, so the finer half was art; a pass on 4 px cells costs a quarter of one on 2.
+const FIRST_RATE = 35;     // ms an iteration a million active cells that a Time pass with no measured rate assumes (runGpu)
 const TIME_CELL = 4;
 // Constants of the model. Each comment says what it trades; the four knobs a user sees are
 // erosionAge, erosionRain, columnContrast and talusAngle.
@@ -58,7 +60,7 @@ export class GpuErosion {
       const layout = device.createPipelineLayout({bindGroupLayouts: [this.layout0, this.layout1]});
       this.pipelines = {};
       return Promise.all(['offsetMain', 'fluxMain', 'waterMain', 'exchangeMain', 'settleMain', 'carryMain', 'thermalMain'].map(async entry =>
-        { this.pipelines[entry] = await device.createComputePipelineAsync({label: entry, layout, compute: {module, entryPoint: entry, constants: TIME_ROCK}}); }));
+        { this.pipelines[entry] = await device.createComputePipelineAsync({label: entry, layout, compute: {module, entryPoint: entry, constants: entryConstants(source, entry, TIME_ROCK)}}); }));
     });
   }
 
@@ -66,15 +68,16 @@ export class GpuErosion {
   quiet() { return this.running ? new Promise(r => (this.quietWaiters ??= []).push(r)) : Promise.resolve(); }
 
   // H5: the maps pass (engine-weather.wgsl) on the erosion's own device and common source, built on first use.
-  async mapsPipeline() {
-    if (this.maps) return this.maps;
+  // Built once; a start-up warm-up and the first Time pass share the one build.
+  mapsPipeline() { return this.mapsBuilding ??= this.buildMaps().catch(error => { this.mapsBuilding = null; throw error; }); }
+  async buildMaps() {
     const {device} = this, C = GPUShaderStage.COMPUTE, buffer = (type, binding) => ({binding, visibility: C, buffer: {type}});
     const source = this.renderer.timeSources.maps;
     const module = device.createShaderModule({label: 'engine-weather', code: source});
     const info = await module.getCompilationInfo(), errors = info.messages.filter(m => m.type === 'error');
     if (errors.length) throw new Error('nanolathe: engine-weather.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
     const layout = device.createBindGroupLayout({label: 'engine-weather', entries: [buffer('uniform', 0), ...[1, 2, 3, 4].map(b => buffer('read-only-storage', b)), ...[5, 6, 7].map(b => buffer('storage', b))]});
-    const pipeline = await device.createComputePipelineAsync({label: 'mapsMain', layout: device.createPipelineLayout({bindGroupLayouts: [this.layout0, layout]}), compute: {module, entryPoint: 'mapsMain', constants: TIME_ROCK}});
+    const pipeline = await device.createComputePipelineAsync({label: 'mapsMain', layout: device.createPipelineLayout({bindGroupLayouts: [this.layout0, layout]}), compute: {module, entryPoint: 'mapsMain', constants: entryConstants(source, 'mapsMain', TIME_ROCK)}});
     return this.maps = {layout, pipeline};
   }
 
@@ -118,7 +121,9 @@ export class GpuErosion {
       tileArgs = make('erosion tile args', 12, S | GPUBufferUsage.INDIRECT);
       weather = make('time pass height', n * 8), maps = [0, 1, 2].map(k => make('time pass map ' + k, n * 4));
       });current();
-      const uniform = feedUniform(device, {grid, cells: n, rateMask: request.rateMask, maskStride: request.maskStride, shownHeights: request.shownHeights, sea: seaLevel, spacing, envelope: request.envelope ?? 1, tilesWide: tw});
+      // The fine relief's field octaves (engine-feed.wgsl feedFine) at each cell's world point: the window's first cell and the world rock's values.
+      const fine = [request.fineRelief ?? 0, request.fineSize ?? 8, request.fineGrain ?? 0, this.renderer.uniformValue('uPool')];
+      const uniform = feedUniform(device, {grid, cells: n, rateMask: request.rateMask, maskStride: request.maskStride, shownHeights: request.shownHeights, sea: seaLevel, spacing, envelope: request.envelope ?? 1, tilesWide: tw, ox: request.ox ?? 0, oy: request.oy ?? 0, fine, fineBase: this.renderer.config.baseHeight});
       owned.push(uniform);
       device.queue.writeBuffer(paramBuffer, 0, params);
       this.renderer.setColumn();
@@ -172,13 +177,17 @@ export class GpuErosion {
       // A slice is sized to about 25 ms of the pass's own GPU work, so input and visible chunks get the queue between slices. A slice's wait
       // also holds whatever else was queued ahead of it (tiles, another Time pass), so it only bounds the pass's own cost: the lowest cost an
       // iteration a million cells has shown (this.rate, per wet or dry pass, drifting up 2% a slice) sizes the batch, and a busy queue no
-      // longer shrinks the slices into many more round trips. The first pass starts at one iteration. Slicing does not change the result.
+      // longer shrinks the slices into many more round trips. Slicing does not change the result.
+      // A pass with no rate yet sizes its first slice by a GPU four times slower than an M3 Pro (Chrome settles there at 8.8 ms an iteration a
+      // million active cells, measured), then doubles as below. It started at one iteration: where every wait costs 100 ms (Firefox), the first
+      // pass of a session, the first drag's (no Time pass runs at load), doubled through eight slices and took 956 ms (measured).
       // The cells are the active tiles' (8 x 8 each), the steps' work: a window that is mostly sea or flat costs little, and timed against the
       // whole window it would lower the rate for the next dense pass, which would then run whole in one slice. A pass with no active tile
       // does no step work and teaches the rate nothing.
       const rateKey=rain!==0?'wet':'dry',mcells=active*64/1e6;this.rate??={};
-      const sized=()=>mcells>0?clamp(Math.floor(25/(this.rate[rateKey]*mcells)),1,256):256;
-      let batch=this.rate[rateKey]?sized():1;
+      const sized=()=>mcells>0?clamp(Math.floor(25/((this.rate[rateKey]??FIRST_RATE)*mcells)),1,256):256;
+      this.latencyBatch??={};
+      let batch=Math.max(sized(),this.latencyBatch[rateKey]??0),last=null;
       for(let it=0;it<age;){
         current();const count=Math.min(batch,age-it);
         encoder=device.createCommandEncoder({label:'erosion gpu slice'});
@@ -189,7 +198,17 @@ export class GpuErosion {
         }
         pass.end();const wait=await submitSlice(encoder,count);it+=count;
         if(mcells>0){const cost=Math.max(wait,.01)/(count*mcells),known=this.rate[rateKey];this.rate[rateKey]=known?Math.min(cost,known*1.02):cost;}
-        batch=sized();
+        // A wait can be the browser's, not the GPU's: Firefox 160 on a Mac answers every completion on a 100 ms timer (measured: an empty
+        // submit waits 100 ms, Chrome 0.1), and sized by that wait every slice stayed one iteration long (574 slices, 62 s after one stroke).
+        // So the first slice, and any slice that ran more iterations than the last without waiting 30% longer, doubles the next one; a wait
+        // that grows with the work sizes it as before. (Firefox's timestamp queries read zero or too small on most slices, measured.)
+        // A batch shown to wait no longer than a smaller one starts the next pass (latencyBatch), which would otherwise double up from its rate
+        // again; a larger batch whose wait grew with the work forgets it.
+        const proven=last&&count>last.count&&wait<last.wait*1.3,latency=!last||proven;
+        // Only a slice with work teaches it: with no active tile a larger batch never waits longer, in any browser (Chrome learned 199
+        // from the load's empty passes and started every later pass as one 199-iteration slice, measured).
+        if(mcells>0){if(proven)this.latencyBatch[rateKey]=Math.max(this.latencyBatch[rateKey]??0,Math.min(256,count));else if(last&&count>last.count)delete this.latencyBatch[rateKey];}
+        batch=latency?Math.min(256,Math.max(sized(),count*2)):sized();last={count,wait};
         await yieldWork();
       }
       encoder=device.createCommandEncoder({label:'erosion output'});
@@ -264,11 +283,11 @@ export class GpuErosion {
     // One build of the five pipelines, shared by calls that overlap (the preview lattice's and the canonical pass's): a call never sees the
     // table before its pipelines exist. A failed build is tried again.
     this.fieldReady ??= (async () => {
-      const module = device.createShaderModule({label: 'engine-weather material field', code: this.renderer.timeSources.maps});
+      const source = this.renderer.timeSources.maps, module = device.createShaderModule({label: 'engine-weather material field', code: source});
       const errors = (await module.getCompilationInfo()).messages.filter(m => m.type === 'error');
       if (errors.length) throw new Error('nanolathe: engine-weather.wgsl does not compile:\n' + errors.map(e => `${e.lineNum}:${e.linePos} ${e.message}`).join('\n'));
       const entries = {source: 'mfSourceMain', drops: 'mfDropsMain', counts: 'mfCountsMain', blur: 'mfBlurMain', combine: 'mfCombineMain'}, field = {};
-      await Promise.all(Object.entries(entries).map(async ([k, entryPoint]) => { field[k] = await device.createComputePipelineAsync({label: entryPoint, layout: 'auto', compute: {module, entryPoint, constants: TIME_ROCK}}); }));
+      await Promise.all(Object.entries(entries).map(async ([k, entryPoint]) => { field[k] = await device.createComputePipelineAsync({label: entryPoint, layout: 'auto', compute: {module, entryPoint, constants: entryConstants(source, entryPoint, TIME_ROCK)}}); }));
       return field;
     })().catch(err => { this.fieldReady = null; throw err; });
     this.field = await this.fieldReady;

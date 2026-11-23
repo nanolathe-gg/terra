@@ -555,6 +555,9 @@
  "world": {
     "materials": {"ground": "lava-ground", "water": "lava-water", "rock": "lava-rock", "slope": "lava-slope", "debris": "lava-debris", "soil": "lava-soil", "snow": "lava-snow", "moss": "lava-moss", "sand": "lava-sand", "band": "lava-band", "crystal": "crystals"},
     "knobDefaults": {
+        "fineRelief": 0.42,
+        "fineSize": 10,
+        "fineGrain": -0.71,
         "shineHeadroom": 0.08,
         "deepDepth": 7,
         "undulationCover": 1,
@@ -640,8 +643,8 @@
      "label": "Crumpled flow rock",
      "material": "lava-crumpled",
      "knobs": {
-      "faceCrease": 3,
-      "faceCreaseSize": 12,
+      "fineRelief": 0.45,
+      "finePits": 0.2,
       "faceFold": 20,
       "faceRun": 150,
       "faceSpall": 1.5,

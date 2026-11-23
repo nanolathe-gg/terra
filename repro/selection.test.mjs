@@ -74,3 +74,20 @@ test('Shift-click adds a shape as the primary and removes a selected one',()=>{
   assert.deepEqual(toggleSelection(2,[],2),{primary:-1,others:[]});
   assert.deepEqual(toggleSelection(2,[4],-1),{primary:2,others:[4]});
 });
+
+test('joined shapes retain interleaved terrain order and disconnected path geometry', async () => {
+  const {shapeGroups, joinedGeometry} = await import('../sculpt-selection.js');
+  const nodes = [
+    {kind: 'ground'},
+    {joined: 'Island', points: [{x: 1, y: 2}], params: {radius: 12}},
+    {points: [{x: 3, y: 4}]},
+    {joined: 'Island', points: [{x: 5, y: 6}, {x: 7, y: 8}], paths: [[0], [0, 1]], params: {radius: 18}}
+  ];
+  const groups = shapeGroups(nodes);
+  assert.deepEqual(groups, [[0], [1, 3], [2]]);
+  const joined = joinedGeometry(nodes, groups[1]);
+  assert.deepEqual(joined.paths, [[0], [1], [1, 2]]);
+  assert.deepEqual(joined.points, [...nodes[1].points, ...nodes[3].points]);
+  assert.equal(joined.params.radius, 18);
+  assert.deepEqual(nodes[3].paths, [[0], [0, 1]]);
+});

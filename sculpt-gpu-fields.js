@@ -630,31 +630,40 @@ export function shapeRequestBytes(prepared){
 // Shader layouts and pipelines depend only on device and storage variant.
 // Each engine still owns all fields, uniforms, scratch and request queues.
 const shapePipelineCache=new WeakMap();
+// The shader text, read once for both variants (they ask together at start-up); a failed read is tried again on the next ask.
+let shapeShader=null;
+const shapeShaderText=()=>shapeShader??=fetch('engine-shape.wgsl').then(r=>{if(!r.ok)throw new Error(`nanolathe: engine-shape.wgsl could not be read (HTTP ${r.status})`);return r.text();}).catch(err=>{shapeShader=null;throw err;});
 async function sharedShapePipelines(device,pages){
   let variants=shapePipelineCache.get(device);if(!variants){variants=new Map();shapePipelineCache.set(device,variants);}
   if(!variants.has(pages)){
     const pending=(async()=>{
-      const r = await fetch('engine-shape.wgsl'); if (!r.ok) throw new Error(`nanolathe: engine-shape.wgsl could not be read (HTTP ${r.status})`);
-      const raw = await r.text();
+      const raw = await shapeShaderText();
       const S = GPUShaderStage.COMPUTE, rw = {type: 'storage'}, ro = {type: 'read-only-storage'};
       const layout = device.createBindGroupLayout({entries: [
         {binding: 0, visibility: S, buffer: {type: 'uniform', hasDynamicOffset: true}}, {binding: 1, visibility: S, buffer: rw}, {binding: 2, visibility: S, buffer: rw},
         {binding: 3, visibility: S, buffer: rw}, {binding: 4, visibility: S, buffer: rw}, {binding: 5, visibility: S, buffer: ro}, {binding: 6, visibility: S, buffer: ro}, {binding: 7, visibility: S, buffer: rw}]});
       const pl = device.createPipelineLayout({bindGroupLayouts: [layout]});
       // The pipelines of one variant of the shader: the whole-map text, or the pages text (direct noise, a target's own origin).
-      const buildPipes = (paged, entries) => {
+      // Asked for all at once and async: the browser compiles them in parallel off its GPU thread, where synchronous creation compiled them
+      // one by one and held every other GPU command (the measured start-up's longest wait).
+      const buildPipes = async (paged, entries) => {
         const source = preprocessShader(raw, paged ? ['PAGES'] : []).replace('/*NODE_STRUCT*/', nodeStruct()).replace('/*CV_N*/', `const CV_N = ${CV_N}.0;`);
-        const module = device.createShaderModule({label: paged ? 'shape (pages)' : 'shape', code: source}), out = {};
-        for (const e of entries) out[e] = device.createComputePipeline({layout: pl, compute: {module, entryPoint: e}});
-        return out;
+        const module = device.createShaderModule({label: paged ? 'shape (pages)' : 'shape', code: source});
+        return Object.fromEntries(await Promise.all(entries.map(async e => [e, await device.createComputePipelineAsync({label: e, layout: pl, compute: {module, entryPoint: e}})])));
       };
       const MAIN = ['noise', 'stamp', 'stampN', 'stampLandform', 'stampFissure', 'smoothCopy', 'blurH', 'blurV', 'ground', 'heights', 'init', 'artHold', 'artLevel', 'pack', 'coastInit', 'coastSeed', 'coastJump', 'coastFinish', 'coastSd', 'coastBlurH', 'coastBlurV', 'coastFinger', 'coastJoin', 'coastSites', 'coastJag', 'coastLayers', 'coastPlates', 'coastBeach', 'facetSnap', 'facetApply', 'packPlane', 'lfCrystalSites', 'lfCrystalRoom', 'lfCrystalApply', 'marginSave', 'marginRestore'];
-      const pipes = buildPipes(pages, [...MAIN, ...(pages ? ['coarse'] : [])]);
+      const pipes = await buildPipes(pages, [...MAIN, ...(pages ? ['coarse'] : [])]);
       return {layout,pipes};
     })();
     variants.set(pages,pending);pending.catch(()=>{if(variants.get(pages)===pending)variants.delete(pages);});
   }
   return variants.get(pages);
+}
+
+// Start both variants' pipelines (the whole-map fields' and the paged previews') on a new device, before any engine asks: the page's start-up
+// calls this as soon as the renderer has its device. Errors surface when an engine asks for the same build.
+export function warmShapePipelines(device) {
+  for (const pages of [false, true]) sharedShapePipelines(device, pages).catch(() => {});
 }
 
 export async function createShapeEngine({device, grid, spacing, baseHeight, sea, minH, maxH, refSpacing = spacing, pages = false}) {
@@ -1879,7 +1888,7 @@ export function feedPasses(device) {
 }
 // The feed passes' uniform (struct FU of engine-feed.wgsl): 20 words.
 export function feedUniform(device, f) {
-  const buffer = device.createBuffer({label: 'feed uniform', size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}), dv = new DataView(new ArrayBuffer(80));
+  const buffer = device.createBuffer({label: 'feed uniform', size: 112, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST}), dv = new DataView(new ArrayBuffer(112));
   const u = ['grid', 'cells', 'ox', 'oy', 'gw', 'gh', 'cw', 'ch', 'mode', 'rateMask'], fl = ['sea', 'spacing', 'envelope'];
   u.forEach((k, i) => { if (['ox', 'oy'].includes(k)) dv.setInt32(i * 4, f[k] ?? 0, true); else dv.setUint32(i * 4, (f[k] ?? 0) >>> 0, true); });
   fl.forEach((k, i) => dv.setFloat32((10 + i) * 4, f[k] ?? 0, true));
@@ -1887,6 +1896,7 @@ export function feedUniform(device, f) {
   dv.setUint32(14 * 4, f.maskStride ?? 7, true);
   dv.setUint32(15 * 4, f.shownHeights ?? 0, true);   // engine-feed.wgsl FU.shownHeights
   const r=f.invalidRect;[r?.x0??1,r?.y0??1,r?.x1??0,r?.y1??0].forEach((v,i)=>dv.setInt32(64+i*4,v,true));
+  (f.fine??[0,0,0,0]).forEach((v,i)=>dv.setFloat32(80+i*4,v,true));dv.setFloat32(96,f.fineBase??0,true);   // engine-feed.wgsl FU.fine, fineBase (seedMain)
   device.queue.writeBuffer(buffer, 0, dv.buffer);
   return buffer;
 }

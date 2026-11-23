@@ -847,6 +847,9 @@
  "world": {
     "materials": {"ground": "desert-painted-grit", "water": "desert-water", "rock": "desert-rock", "slope": "desert-slope", "debris": "desert-debris", "soil": "desert-soil", "moss": "desert-moss", "sand": "desert-sand", "band": "desert-band", "crystal": "crystals"},
     "knobDefaults": {
+        "fineRelief": 0.33,
+        "fineSize": 10,
+        "fineGrain": -0.9,
         "lightCap": 1.25,
         "sunTilt": 0.5,
         "sunHeight": 47.757198028247245,
@@ -875,7 +878,6 @@
         "faceBlock": 0.54,
         "faceJoint": 0.07,
         "faceWear": 0.8,
-        "faceCrease": 0.65,
         "crackFrom": 0.26
       },
       "engineDefaults": {
@@ -900,13 +902,13 @@
      "label": "Gray caprock",
      "material": "desert-triad",
      "knobs": {
+      "fineRelief": 0.35,
       "strata": 1,
       "strataContrast": 1,
       "strataGrain": 0.25,
       "faceBlock": 1,
       "faceJoint": 0.15,
       "faceWear": 0.8,
-      "faceCrease": 1,
       "banding": 0.9,
       "crackSeverity": 0.5,
       "crackMajor": 0.7,

@@ -143,7 +143,7 @@ fn rockSite(p:vec3f)->RockSite {
     useRock(p.xy);
     let empty=RockSite(false,0.0,0.0,0.0,0.0,0.0);
     let rock=u.rock[rs & rockMask];
-    let cuts=max(max(rock.faceJoint,rock.faceLamina),max(rock.faceLedge,max(rock.faceCrease,rock.faceScratch)));
+    let cuts=max(max(rock.faceJoint,rock.faceLamina),rock.faceLedge);
     if(rock.rockFace<=0.0||cuts<=0.0){return empty;}
     let source=voxelAuthored(p.xy);let guide=voxelGuide(p.xy);let nz=sqrt(max(.000225,1.0-dot(guide.xy,guide.xy)));
     let slope=length(broadGradient(p.xy));let route=routeProtection(p.xy);
@@ -156,20 +156,10 @@ fn rockSite(p:vec3f)->RockSite {
     if(u.rock[rs & rockMask].columnCount>0){let column=voxelColumnCoord(p);let gg=columnGather(columnBedIn(column,columnSectionAt(column),u.rock[rs & rockMask].bedCycleVary),length(source.yz)/max(source.w,.015));gathered=gg.y;hard=gg.x;}
     return RockSite(true,face,face+soil*3.0,u.rock[rs & rockMask].rockFace*.5*voxelRelief(p.xy,slope)*heightGate,gathered,voxelJointWear(hard));
 }
-// Pits and runnels (Pits, Runnels), a height outward in rock space: 1 to 2 px marks the 2 px solid would blur away, so they are drawn at the
-// hit (rockDetail), not cut.
-fn rockMarks(r:vec3f)->f32 {
-    let pits=(abs(voxelNoise(r/max(2.0,u.rock[rs & rockMask].faceCreaseSize))-.5)-.25)*u.rock[rs & rockMask].faceCrease*2.5;
-    let angle=radians(u.rock[rs & rockMask].faceScratchAngle);
-    let scratched=vec3f(r.x*cos(angle)-r.z*sin(angle),r.y,r.x*sin(angle)+r.z*cos(angle));
-    let runnel=pow(1.0-abs(voxelNoise(scratched/vec3f(max(2.0,u.rock[rs & rockMask].faceScratchSize),max(2.0,u.rock[rs & rockMask].faceScratchSize),u.rock[rs & rockMask].faceScratchLength))*2.0-1.0),4.0)*u.rock[rs & rockMask].faceScratch*.5;
-    return pits-runnel;
-}
 fn rockLayers(p:vec3f,gathered:f32)->f32 { let l=voxelFine(p,voxelColumnCoord(p),gathered);return l.x+l.y; }
 // The height (outward) the solid lacks at p, near the pixel its site was read at.
 fn rockDetail(p:vec3f,site:RockSite)->f32 {
     var h=0.0;let r=voxelRockSpace(p);
-    if(max(u.rock[rs & rockMask].faceCrease,u.rock[rs & rockMask].faceScratch)>0.0&&site.face>.001){h+=rockMarks(r)*voxelDetail(r)*site.face;}
     if(u.rock[rs & rockMask].faceJoint>0.0&&site.face>.001){
         let fracture=voxelFractureSpace(p,r);
         let c=voxelBlocks(fracture,max(4.0,u.rock[rs & rockMask].faceBlockSize));
@@ -342,7 +332,6 @@ fn voxelDensity(p:vec3f)->f32 {
     let joint=voxelJointW(fracture,c,broad,js,voxelJointFine(wear))*jw/js;   // the share this solid holds (rockDetail draws the rest)
     let layers=voxelFine(p,column,gathered);let lamina=layers.x+layers.y;
     let bed=(.55-hard)*u.rock[rs & rockMask].faceLedge*2.4;
-    let detail=voxelDetail(r);
     // Soil-covered beds have their own rounded terraces, including on
     // slopes that also expose rock; an activation mask alone hid this control.
     // Chips remove corners and patches along weaker partings. This exposes

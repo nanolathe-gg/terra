@@ -1,7 +1,7 @@
 // Generated map features (owner, November 5-6 2026). Each map carries its own feature set: a recipe in the save (sculpt-feature-set.js)
 // from which sculpt-feature-gen.js draws every variant, lit by the map's light. Placements belong to the map, never to its baked terrain
 // art. Deposits and vents are painted into the ground: the view draws them from the export art under them, with the export's painter.
-import {GROUND_KINDS,FILL_KINDS,LABELS,PLURALS,MAX_VARIANTS,worldKinds,normalizeSet,variants as kindVariants,pickVariant,typeLabel,normalizePlacement,hash32,MAX_RECIPES,recipeId,makeRecipe,featureCatalog,FORMS,controlRequirement} from './sculpt-feature-set.js';
+import {GROUND_KINDS,FILL_KINDS,LABELS,PLURALS,MAX_VARIANTS,normalizeSet,variants as kindVariants,pickVariant,typeLabel,normalizePlacement,hash32,MAX_RECIPES,recipeId,makeRecipe,featureCatalog,FORMS,controlRequirement} from './sculpt-feature-set.js';
 const MAX_STARTS=10;   // TA's limit of start positions on a map
 const CELL=16,PATCH=128,DEFAULT_FILL={kind:'tree',region:'brush',density:15,clustering:.5,gap:1,seed:2701,margin:96,radius:128};
 const clamp=(v,a,b) => Math.max(a,Math.min(b,v));
@@ -60,9 +60,10 @@ export async function mountMapFeatures(api) {
   const {config,canvas}=api,map=config.map,doc=canvas.ownerDocument,$=id => doc.getElementById(id);
   const nothing=() => {};
   if (!map) return {serialize:() => ({features:[],featureSet:{},starts:[],fill:{...DEFAULT_FILL}}),load:nothing,draw:nothing,deactivate:nothing,activate:() => false,clearSelection:nothing,pointerSelect:() => false,hitAt:() => null,fitGround:async () => false,groundChanged:nothing,stats:() => ({imageBytes:0}),get selectionCount(){return 0;},get active(){return false;},get busy(){return false;}};
-  const cols=map.playRight/CELL,rows=map.playBottom/CELL,shift=Math.floor(config.baseHeight/2),kinds=worldKinds(config);
+  const cols=map.playRight/CELL,rows=map.playBottom/CELL,shift=Math.floor(config.baseHeight/2);
   const defaults=() => defaultStarts(map);
   let set=normalizeSet(config.featureSet,config),placements=[],starts=defaults(),fill={...DEFAULT_FILL},generated=new Set(),mode='',placeKind='deposit',placeVariant=-1,selectedStart=0,rolls=0;
+  let kinds=Object.keys(set);
   let selection=new Set(),gesture=null,hover=null,space=false,message='';
   const panPointers=new Set(),controls=$('map-features-controls'),kindTabs=[...doc.querySelectorAll('[data-feature-kind]')],buttons=new Map([...doc.querySelectorAll('[data-feature-mode]')].map(b => [b.dataset.featureMode,b]));
   const enabled=() => api.enabled();
@@ -300,10 +301,13 @@ export async function mountMapFeatures(api) {
   }
 
   // ---- the panel (index.html #map-features-panel) ----
-  const unavailable=['tree','shrub','rock','scar'].filter(k => !kinds.includes(k));
-  for (const option of $('feature-kind').options) option.disabled=!kinds.includes(option.value);
-  for (const option of $('fill-kind').options) option.disabled=!kinds.includes(option.value);
-  $('feature-kind-note').textContent=unavailable.length?`No generated ${unavailable.map(k => PLURALS[k]).join(', ').replace(/, ([^,]*)$/,' or $1')} for this world yet.`:'';
+  function syncKinds() {
+    const unavailable=['tree','shrub','rock','scar'].filter(k => !kinds.includes(k));
+    for (const option of $('feature-kind').options) option.disabled=!kinds.includes(option.value);
+    for (const option of $('fill-kind').options) option.disabled=!kinds.includes(option.value);
+    $('feature-kind-note').textContent=unavailable.length?`No generated ${unavailable.map(k => PLURALS[k]).join(', ').replace(/, ([^,]*)$/,' or $1')} for this world yet.`:'';
+  }
+  syncKinds();
   const settingInputs=[...doc.querySelectorAll('#feature-place [data-setting]')];
   const paramInputs=[...doc.querySelectorAll('#feature-place [data-param]')];
   const numericInputs=[...doc.querySelectorAll('#map-features-panel input[type=range],#feature-selection-metal')];
@@ -336,7 +340,7 @@ export async function mountMapFeatures(api) {
       const reason=controlRequirement(kind,k,first); input.disabled=Boolean(reason); input.title=reason;
       const note=row.querySelector('[data-requirement]'); if(note)note.textContent=reason;
       if(doc.activeElement!==input) {
-        const fallback = k==='trunkColor' ? first.trunk?.[Math.floor(first.trunk.length/2)] || '#3b3323' : k==='accentColor' ? '#b8c277' : FORMS[kind]?.[k]?.[2];
+        const fallback = k==='rimMode' ? 'flat' : k==='trunkColor' ? first.trunk?.[Math.floor(first.trunk.length/2)] || '#3b3323' : k==='accentColor' ? '#b8c277' : FORMS[kind]?.[k]?.[2];
         const value = ['species','canopyStyle'].includes(k) ? entry.params[k] ?? '' : entry.params[k] ?? (['height','width','reach','thick'].includes(k) ? nominal(k) : undefined) ?? first[k] ?? fallback;
         const inheritedVariation = k.endsWith('Variation') && entry.params[k] === undefined;
         if(input.type==='range'){input.dataset.unset=String(inheritedVariation);input.dataset.unsetLabel='Preset';}
@@ -382,7 +386,7 @@ export async function mountMapFeatures(api) {
     $('feature-count-line').textContent=`${placements.length} features · ${starts.length} starts`;
     $('feature-state').textContent=message;
     const hints={place:`Click a cell to place a ${LABELS[placeKind].toLowerCase()} (${placeVariant>=0?`variant ${placeVariant%MAX_VARIANTS+1}`:'a random variant'}). Select (V) moves, re-rolls and deletes placed features.`,erase:'Click or drag across feature footprints to erase them.',starts:'Click empty ground to add a start. Drag a marker, or Shift-click ground, to move the selected start.',fill:`${(PLURALS[fill.kind]??fill.kind).replace(/^./,c => c.toUpperCase())} fill: ${fill.region==='brush'?'drag a brush':fill.region==='lasso'?'draw a closed lasso':'click connected gentle dry ground'}. Space or middle-drag still pans.`};
-    $('feature-help').textContent=hints[mode]||'Choose a feature tool, or keep sculpting terrain. Space or middle-drag pans in every tool.';
+    $('feature-help').textContent=hints[mode]||'Choose a feature tool, or keep sculpting terrain. Space or middle-drag pans in every tool; on a touch screen two fingers pan and pinch to zoom.';
     refreshVariants();
     api.schedule();
   }
@@ -722,6 +726,8 @@ export async function mountMapFeatures(api) {
     const bases=nextStarts.map(p => ({x:p?.x,z:p?.z}));
     if (bases.some((p,i) => !validStart(p) || bases.some((q,j) => j<i && p.x===q.x && p.z===q.z))) throw new Error('Every start must be a distinct pixel position inside the play area.');
     set=nextSet;
+    kinds=Object.keys(set);syncKinds();
+    if (!kinds.includes(placeKind)) placeKind='deposit';
     // The cells the features kept so far cover: a feature that overlaps one of them is left out, in the list's order (as testing it against each).
     const next=[],taken=new Uint8Array(cols*rows); let unfit=0;
     const free=p => { const [fw,fz]=footprint(p); for (let z=p.z;z<p.z+fz;z++) for (let x=p.x;x<p.x+fw;x++) if (taken[z*cols+x]) return false; return true; };

@@ -112,7 +112,7 @@ try {
   const loaded = await ev(`(async()=>{const s=sculptRegion.sketch();s.mapData={...s.mapData,features:[{name:'Tree1',x:5,z:5},...s.mapData.features]};sculptDebug.loadSketch(s);await sculptCanvas.idle();return {n:sculptCanvas.features.serialize().features.length,status:document.getElementById('status').textContent};})()`);
   assert.equal(loaded.n, 4); assert.match(loaded.status, /1 saved feature does not fit this world or map and was left out/); report.unfit = loaded.status;
   report.select = 'select, drag, metal, re-roll, Shift-add, Delete, refused overlap';
-  // Every world places every kind: a kind its table lacks is Green's (the Go config generator), lit by the world's own sun. Moon has rocks of its
+  // Worlds inherit missing feature kinds unless they opt out. Moon has rocks of its
   // own and Green's trees, shrubs and scars. Archipelago also takes Green's rocks.
   for (const world of ['moon', 'archipelago']) {
     await send('Page.navigate', {url: `${server}/?biome=${world}&mapX=4&mapY=4&scratch=features-test-${world}&gpuMB=512&heapMB=1536`}); await ready();
@@ -131,6 +131,7 @@ try {
   await set('#feature-recipe-name','Blue tendrils'); await set('#feature-tree-color','#325caa'); await set('#feature-form-tree-curl',.8);
   await set('#feature-form-tree-arms',12); await set('#feature-form-tree-reach',60); await set('#feature-form-tree-thick',6);
   await set('#feature-form-tree-reachVariation',35); await set('#feature-form-tree-thickVariation',20);
+  await set('#feature-form-tree-accentAmount',0);
   assert.equal(await ev('document.getElementById("feature-tree-accent-color").disabled'),true);
   await set('#feature-form-tree-accentAmount',55); await set('#feature-tree-accent-color','#b8c277'); await set('#feature-form-tree-patternScale',9);
   assert.equal(await ev('document.getElementById("feature-tree-accent-color").disabled'),false);

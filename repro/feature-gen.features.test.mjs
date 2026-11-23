@@ -165,3 +165,29 @@ test('a rock stays anchored to its ground footprint as its height changes', () =
     }
   }
 });
+
+test('the deposit rim follows its anchor and shades with the map sun', () => {
+  function patch(cx, params, light) {
+    const w = 200, h = 160, rgba = new Uint8ClampedArray(w * h * 4).fill(110);
+    paintDeposit({w, h, rgba}, cx, 80, params, 17, {palette, light});
+    return Buffer.concat(Array.from({length: 128}, (_, y) => {
+      const offset = ((y + 16) * w + cx - 64) * 4;
+      return Buffer.from(rgba.subarray(offset, offset + 128 * 4));
+    }));
+  }
+  for (const params of [{}, {underwater: true}, {style: 'pebbles'}]) {
+    const left = {x: -1, y: 0}, right = {x: 1, y: 0};
+    const relief = {...params, rimMode: 'relief'};
+    assert.deepEqual(patch(70, params, left), patch(70, {...params, rimMode: 'flat'}, left));
+    assert.notDeepEqual(patch(70, params, left), patch(70, relief, left));
+    assert.notDeepEqual(patch(70, relief, left), patch(70, relief, right));
+    const moved = patch(125, relief, left), flat = patch(125, params, left);
+    let changed = 0;
+    for (let i = 0; i < 128 * 128; i++) {
+      if (moved.readUInt32LE(i * 4) === flat.readUInt32LE(i * 4)) continue;
+      assert.ok(Math.abs(i % 128 - 64) < 62 && Math.abs((i >> 7) - 64) < 62);
+      changed++;
+    }
+    assert.ok(changed > 50);
+  }
+});

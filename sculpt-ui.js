@@ -171,7 +171,7 @@ export const WORLD_HOMES={
  'World/Light & weather':'sunHeight erosionRain',
  'Ground/Pattern':'groundPatchSize',
  'Surface/':'highland highFrom highReach baseBand baseBandLow baseBandHigh baseBandWander baseBandGaps',
- 'Ground/Bumps & relief':'reliefScale reliefLumps reliefWarp reliefPatchy gentleRelief plainRelief lumpRelief worms',
+ 'Ground/Bumps & relief':'reliefScale reliefLumps reliefWarp reliefPatchy gentleRelief plainRelief lumpRelief worms fineLevel fineLevelGrain',
  'Ground/Terrain shape':'undulation undulationScale undulationCover undulationArt faceSteep',
  'Ground/Slope cover':'hillLight slopeTexture slopeMarks wrinkles',
  'Ground/Low ground':'lowReach lowGrain',
@@ -181,7 +181,7 @@ export const WORLD_HOMES={
  'Rock types/Exposure & relief':'rockFace faceRock rockFaceFrom faceExtrude faceMass rockCrown',
  'Rock types/Blocks & joints':'faceWholeLarge faceRegular faceBlock faceStretch faceBlockHeight faceSlopeAlign faceJointTilt faceScaleVary faceBreak faceRound faceJoint faceJointWidth faceSecondary faceContinuity faceLean',
  'Rock types/Layers':'strata strataContrast strataGrain bedDip bedDipDir bedCycleVary faceBedVary faceLedge faceRun faceFold faceSpall faceLamina faceLaminaSize faceLayers faceGrass',
- 'Rock types/Weathering':'faceCrease faceCreaseSize faceScratchSize faceScratchLength faceScratchAngle faceClast faceClastSize faceDetailPatch runoffScale runoffConcentration runoffCut runoffStain',
+ 'Rock types/Weathering':'fineSize fineGrain finePits faceClast faceClastSize runoffScale runoffConcentration runoffCut runoffStain',
  'Rock types/Surface & crust':'shineRock shineRockSharp shineRockRough shineRockScale faceShade faceTone faceFresh faceRind faceRindDepth faceRindTone faceRindWarmth faceRindRough faceMineral faceStrata faceWet',
  'Rock types/Stones & debris':'looseSize stoneSort stoneRound stoneSlab debrisAmount debrisReach debrisDepth',
  'Rock types/Cracks & bands':'crackSpacing crackFrom crackMajor crackMinor crackHairline crackBlocks crackWidth crackNetwork crackDark banding bandLevel bandFill stepCrease',
@@ -195,7 +195,7 @@ export const WORLD_HOMES={
  'Water & shores/Shore & beach':'coastRamp beachWidth apron shoreEdge bankRock wetBand frostGaps frostGapReach frostGapSize frostGapDepth',
  'Water & shores/Water bed':'slabShallows bedTint bedBright bedContrast bedRelief bedCracks bedCrackSize bedFlat',
  'Rain & erosion/':'wetSwath wetGround',
- 'Light & shine/Sun & shade':'faceFill flatShadow flatOcclusion lightCap shadeDepth sunTilt ambient creaseShade',
+ 'Light & shine/Sun & shade':'faceFill fillFollow flatShadow flatOcclusion lightCap shadeDepth sunTilt ambient creaseShade',
  'Light & shine/Shine':'shineOutside shineSlopeGate shineStretch shineWhite shineGround shineGroundSharp shineGroundRough shineGroundScale shineSlope shineSlopeSharp shineSlopeRough shineSand shineSandSharp shineSandRough shineCrystal shineCrystalSharp shineCrystalRough shineGate shineHeadroom',
 };
 const homeOf=new Map(Object.entries(WORLD_HOMES).flatMap(([home,keys])=>keys.split(' ').map(key=>[key,home])));

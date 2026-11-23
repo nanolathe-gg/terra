@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {MOVEMENT_FAMILIES,terrainLattice,profileMask,familyCoverage,cellBlockReason,movementObstacles,createPassability,updatePassability,inspectMovement} from '../sculpt-passability.js';
-import {mapGeometry,cellHeights,cellHeightTiles} from '../sculpt-map.js';
+import {mapGeometry,cellHeights,cellHeightTiles,cornerHeight,footprintApron} from '../sculpt-map.js';
 const terrain=(width=12,height=12,base=99,extra={})=>terrainLattice({width,height,sea:75,heights:new Uint8Array(width*height).fill(base),edges:false,...extra});
 const p={size:2,slope:15,depth:12,waterSlope:255,minDepth:-10000};
 
@@ -43,10 +43,11 @@ test('only blocking generated features contribute their complete variant footpri
   assert.deepEqual(movementObstacles(config,{features}),[{x:0,z:4,width:2,height:2},{x:3,z:4,width:3,height:2}]);
 });
 
-const sampleRead=map=>async({x,y,width,height})=>{
-  const w=width/16+1,h=height/16+1;
-  return {gridWidth:w,gridHeight:h,gridOrigin:[x,y],gridSpacing:16,fields:{h:Float32Array.from({length:w*h},(_,i)=>{
-    const xx=x/16+i%w,zz=y/16+Math.floor(i/w);
+// A 16 px lattice, read with the request's apron (the corners' footprints, sculpt-map.js footprintApron) as the fields read it, clipped at 0.
+const sampleRead=map=>async({x,y,width,height,apron=0})=>{
+  const x0=Math.max(0,Math.floor((x-apron)/16)),y0=Math.max(0,Math.floor((y-apron)/16)),w=Math.ceil((x+width+apron)/16)-x0+1,h=Math.ceil((y+height+apron)/16)-y0+1;
+  return {gridWidth:w,gridHeight:h,gridOrigin:[x0*16,y0*16],gridSpacing:16,fields:{h:Float32Array.from({length:w*h},(_,i)=>{
+    const xx=x0+i%w,zz=y0+Math.floor(i/w);
     return 74+xx*.23+zz*.15+(xx>=31&&xx<=34?25:0)+(zz>=30&&zz<=33?20:0)+(xx===map.widthCells-1?180:0);
   })}};
 };
@@ -72,9 +73,32 @@ test('streamed tiles match complete masks across seams, features, water and expo
 });
 test('height tiles yield before the next read, honor cancellation and retain export rounding and clipping',async()=>{
   const map=mapGeometry(2,1),controller=new AbortController();let reads=0;
-  const read=async req=>{reads++;const r=await sampleRead(map)(req);r.fields.h.fill(99.5);r.fields.h[0]=-2;r.fields.h[r.fields.h.length-1]=260;return r;};
+  // The read's first and last corners stand out far enough that their footprint means (a 16 px lattice: the corner's own sample weighs 9/16)
+  // leave the byte range and their neighbors' stay inside it.
+  const read=async req=>{reads++;const r=await sampleRead(map)(req),w=r.gridWidth,at=(px,py)=>(py-r.gridOrigin[1])/16*w+(px-r.gridOrigin[0])/16;r.fields.h.fill(99.5);r.fields.h[at(req.x,req.y)]=-150;r.fields.h[at(req.x+req.width,req.y+req.height)]=500;return r;};
   const stream=cellHeightTiles(map,read,{signal:controller.signal,priority:t=>-t.x}),first=await stream.next();
   assert.equal(reads,1);assert.equal(first.value.x,64);assert.equal(first.value.heights[0],0);assert.equal(first.value.heights.at(-1),255);
   controller.abort();await assert.rejects(stream.next(),{name:'AbortError'});assert.equal(reads,1);
   const exported=await cellHeights(map,read);assert.equal(exported.clipped,12);assert.equal(exported.heights[0],0);assert.equal(exported.heights.at(-1),255);
+});
+
+// A 2.0009 px lattice like a map's field: a ramp, plus a 5-8 px ripple of +-6 units (above the lattice's 4 px Nyquist), read from any origin that holds a corner's footprint.
+const fineRead=(ripple=6)=>({x,y,width,height,apron=0})=>{
+  const step=2.0009,x0=Math.max(0,Math.floor((x-apron)/step)),y0=Math.max(0,Math.floor((y-apron)/step)),w=Math.ceil((x+width+apron)/step)-x0+1,h=Math.ceil((y+height+apron)/step)-y0+1;
+  return {gridWidth:w,gridHeight:h,gridOrigin:[x0*step,y0*step],gridSpacing:step,worldGrid:4000,fields:{h:Float32Array.from({length:w*h},(_,i)=>{
+    const px=(x0+i%w)*step,py=(y0+Math.floor(i/w))*step;
+    return 90+px*.05+py*.02+ripple*Math.sin(px*1.1+py*.3)*Math.cos(py*.8);
+  })}};
+};
+test('a corner byte is its 16 px footprint mean: ramps and level ground keep their heights, sub-cell ripples go, and any read agrees',async()=>{
+  const map=mapGeometry(1,1),smooth=(await cellHeights(map,fineRead())).heights,ramp=(await cellHeights(map,fineRead(0))).heights;
+  let worst=0;for(let i=0;i<smooth.length;i++)worst=Math.max(worst,Math.abs(smooth[i]-ramp[i]));
+  assert.ok(worst<=1,`a +-6 unit ripple under a cell moves a byte by ${worst}`);
+  const point=(await cellHeights(map,fineRead(),{footprint:{kind:'point'}})).heights;let moved=0;for(let i=0;i<point.length;i++)if(Math.abs(point[i]-ramp[i])>1)moved++;
+  assert.ok(moved>point.length/4,'point samples keep the ripple (the test has teeth)');
+  for(let z=0;z<map.heightCells;z+=7)for(let x=0;x<map.widthCells;x+=5){
+    const r=fineRead()({x:x*16-37,y:z*16-11,width:90,height:70,apron:footprintApron()});
+    assert.equal(Math.round(Math.max(0,Math.min(255,cornerHeight(r,x*16,z*16)))),smooth[z*map.widthCells+x],`corner ${x},${z} from another read`);
+  }
+  assert.throws(()=>cornerHeight(fineRead()({x:320,y:320,width:16,height:16}),320,320),/footprint reaches past its read/);
 });

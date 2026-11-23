@@ -85,7 +85,6 @@ export function worldControlRequirement(key,v){
   return n('rockFace')>0&&blocks>0||n('debrisAmount')>0&&n('faceBreak')>0?'':'Raise Rock relief: Depth and enable blocks or joints to follow the slope.';
  }
  if(key==='faceRegular')return worldControlRequirement('faceBlockSize',v);   // it moves every block and joint, as Block size does
- if(key==='faceDetailPatch')return needs('rockFace','Rock relief: Depth')||(Math.max(n('faceCrease'),n('faceScratch'))>0?'':'Raise Pitting, or Scratches and water grooves, to cluster fine detail.');
  const fractures=Math.max(n('faceBreak'),n('faceSpall'),n('faceJoint'));
  if(key==='faceRind')return needs('rockFace','Rock relief: Depth');
  if(key==='faceFresh')return needs('rockFace','Rock relief: Depth')||(fractures>0?'':'Raise Block release, Broken layer edges, or Joint depth to expose fresh rock.');
@@ -102,13 +101,13 @@ export function worldControlRequirement(key,v){
  if(key==='stoneRound'&&n('stoneSlab')>=1)return 'Reduce Flat fragments below 100% to round the remaining fragments.';
  if(['stoneSort','stoneRound','stoneSlab'].includes(key))return Math.max(n('looseSupply'),n('debrisAmount'),n('stonePaint'),n('boulders'))>0?'':'Raise loose-stone Supply, Boulders or Cliff debris accumulation, or paint Denser scatter, to shape the stones.';
  // Rows that shape the rock's relief do nothing while it is flat (Depth 0); amount, placement, grass and colour act at any depth.
- if(['faceLaminaSize','faceScratchLength','faceScratchAngle'].includes(key)){
-  const parent={faceLaminaSize:'faceLamina',faceScratchLength:'faceScratch',faceScratchAngle:'faceScratch'}[key];
-  const label={faceLamina:'Fine layer relief',faceScratch:'Scratches and water grooves'}[parent];
+ if(['faceLaminaSize'].includes(key)){
+  const parent={faceLaminaSize:'faceLamina'}[key];
+  const label={faceLamina:'Fine layer relief'}[parent];
   return needs(parent,label);
  }
  if(['faceJoint','faceExtrude','faceLamina'].includes(key))return needs('rockFace','Rock relief: Depth');
- if(['faceCreaseSize','faceCrease','faceBlock','faceLedge','faceScratch','faceScratchSize','faceWear','faceShade','faceLayers','faceMass'].includes(key))return n('rockFace')>0?'':'Raise Rock relief: Depth to use this setting.';
+ if(['faceBlock','faceLedge','faceWear','faceShade','faceLayers','faceMass'].includes(key))return n('rockFace')>0?'':'Raise Rock relief: Depth to use this setting.';
  if(['faceBlockSize','faceLean'].includes(key))return n('rockFace')>0||n('faceTone')>0||(n('debrisAmount')>0&&(key==='faceBlockSize'||n('faceBreak')>0))?'':'Raise Rock relief: Depth or Color variation to use this setting.';
  if(key==='bedCycleVary'&&n('repeatBeds')<2&&v.repeatBeds!==undefined)return 'Add at least two beds to a Rock column section to vary their repetition.';
  if(['faceBedVary','bedCycleVary'].includes(key))return n('column')<=0?NO_COLUMN:(Math.max(n('rockFace'),n('strata'),n('faceStrata'),n('faceWet'),n('debrisAmount'))>0?'':'Raise rock relief or layer color coverage to vary the beds.');
@@ -117,6 +116,9 @@ export function worldControlRequirement(key,v){
  // Plants grow only on surface layers that carry them (World › Surface; worldPanelValues' plants).
  if(key==='plantRelief')return n('plants')>0?'':'No surface layer grows plants: give one plants in World › Surface to use this setting.';
  if(['undulationScale','undulationCover','undulationArt'].includes(key))return needs('undulation','Undulation height');
+ if(key==='fillFollow')return needs('faceFill','Fill light on shaded faces');
+ if(key==='fineLevelGrain')return n('fineLevel')>0?'':'Raise Fine relief on level ground to use this setting.';
+ if(['fineSize','fineGrain'].includes(key))return Math.max(n('fineRelief'),n('fineLevel'))>0?'':'Raise Fine relief on slopes or on level ground to use this setting.';
  if(key==='lowReach')return Number(v.lowGrain??1)<1?'':'Lower Grain kept in Low ground to use this setting.';
  // Strata, the foot band and the cap color the beds of a rock column: the world's own, or one the map adds (the Rock column panel; worldPanelValues passes the active one).
  if(['strata','strataContrast','strataGrain'].includes(key)&&n('column')<=0)return NO_COLUMN;
@@ -170,14 +172,14 @@ export function worldControlRequirement(key,v){
 // Primary controls describe a visible feature. Fine tuning remains available
 // explicitly (and through search), without filling the default inspector.
 export const WORLD_PRIMARY_CONTROLS=new Set([
- 'faceWhole','faceWholeLarge','faceRegular','sandLee','faceJointWidth','faceSecondary','faceContinuity','faceDetailPatch','faceFresh','faceRind','faceRindDepth','faceRindTone','faceRindWarmth','faceRindRough','faceBreak','faceBedVary','bedCycleVary','faceJointTilt','faceSlopeAlign','faceScaleVary','faceFold','faceSpall','faceClast','faceClastSize','faceMineral',
+ 'faceWhole','faceWholeLarge','faceRegular','sandLee','faceJointWidth','faceSecondary','faceContinuity','faceFresh','faceRind','faceRindDepth','faceRindTone','faceRindWarmth','faceRindRough','faceBreak','faceBedVary','bedCycleVary','faceJointTilt','faceSlopeAlign','faceScaleVary','faceFold','faceSpall','faceClast','faceClastSize','faceMineral',
  'runoff','runoffScale','runoffConcentration','runoffCut','runoffStain','debrisAmount','debrisReach','debrisDepth','stoneSort','stoneRound','stoneSlab',
  'plantRelief',
- 'bedDip','bedDipDir','faceStretch','faceBlockHeight','faceRound','faceJoint','faceExtrude','faceLamina','faceLaminaSize','faceScratchLength','faceScratchAngle',
- 'rockFace','faceRock','rockFaceFrom','rimReach','faceCreaseSize','faceCrease','faceBlock','faceBlockSize','faceBed','faceLedge','faceRun','faceScratch','faceScratchSize','faceLean','faceGrass','faceWear','faceShade','faceLayers','faceMass','faceTone','faceStrata','faceWet',
+ 'bedDip','bedDipDir','faceStretch','faceBlockHeight','faceRound','faceJoint','faceExtrude','faceLamina','faceLaminaSize',
+ 'rockFace','faceRock','rockFaceFrom','rimReach','faceBlock','faceBlockSize','faceBed','faceLedge','faceRun','faceLean','faceGrass','faceWear','faceShade','faceLayers','faceMass','faceTone','faceStrata','faceWet',
  'groundPatch','groundPatchSize','undulation','undulationScale','undulationCover','undulationArt','coastRamp','faceSteep','lowReach','lowGrain',
- 'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief',
- 'flatShadow','flatOcclusion','sunTilt','sunHeight','ambient','shadeDepth','lightCap','creaseShade',
+ 'reliefScale','reliefAmount','reliefLumps','gentleRelief','plainRelief','lumpRelief','fineRelief','fineLevel','fineLevelGrain','fineSize','fineGrain','finePits',
+ 'flatShadow','fillFollow','flatOcclusion','sunTilt','sunHeight','ambient','shadeDepth','lightCap','creaseShade',
  'hillLight','faceFill','rockCrown','highland','sandCrown','slopeTexture','erosionRain','wetSwath','wetGround','lushness','soilRim','slopeMarks','wrinkles',
  'shineRockSharp','shineRockRough','shineRockScale',
  'absorbDepth','shadowTint',

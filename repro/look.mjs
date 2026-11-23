@@ -116,7 +116,7 @@ try {
   const hill = await ev(`sculptDebug.sketch().nodes.findIndex(n=>n.kind==='landform')`);
   await ev(`(async()=>{const c=s=>document.querySelector(s).click(),w=ms=>new Promise(r=>setTimeout(r,ms));c('#tab-objects');await w(300);c('#layers li[data-index="${hill}"] .layer-name');await w(300);c('#tab-tool');await w(300);document.getElementById('tool-save').open=true;document.getElementById('tool-save-name').value='Look hill';document.getElementById('tool-save-name').dispatchEvent(new Event('input'));await w(200);c('#tool-save-button');return true;})()`); await ready();
   await ev(`(()=>{const d=sculptRegion.mapData();d.name='Look source';sculptRegion.restoreMapData(d);return true;})()`);
-  const source = await sketch(); assert.equal(source.tools?.[0]?.label, 'Look hill', 'Save as tool saved to the map');
+  const source = await sketch(); assert.equal(source.tools.at(-1)?.label, 'Look hill', 'Save as tool saved to the map');
   const file = join(out, 'look-source.json'); writeFileSync(file, JSON.stringify(source));
   // 3. New map with this look.
   await click('#tab-map'); await click('#new-map-look'); await sleep(300);
@@ -128,7 +128,7 @@ try {
   assert.equal(child.map.unitsX, 2, 'at the size chosen');
   assert.equal(child.worldSettings.knobs.reliefAmount, '1.1', 'with the edited row');
   assert.equal(child.nodes.find(n => n.kind === 'ground')?.amplitude, 10, 'with the source\'s undulation in its ground');
-  assert.deepEqual(child.tools.map(t => t.label), ['Look hill'], 'with the map\'s tool');
+  assert.deepEqual(child.tools, source.tools, 'with the map\'s tool');
   assert.deepEqual(child.mapData.featureSet, source.mapData.featureSet, 'with the feature styles');
   assert.deepEqual(child.rocks, source.rocks, 'with the rock types');
   assert.equal(await ev(`document.getElementById('undo').disabled`), true, 'nothing to undo on a new map');
@@ -141,7 +141,7 @@ try {
   assert.match(await text('#look-note'), /One Undo/);
   await click('#look-apply'); await sleep(500); await ready();
   const tooled = await sketch();
-  assert.deepEqual(tooled.tools.map(t => t.label), ['Look hill'], 'Tools brought the file\'s tool');
+  assert.deepEqual(tooled.tools.map(t => t.label), source.tools.map(t => t.label), 'Tools brought the file\'s tool');
   assert.notEqual(tooled.worldSettings.knobs.reliefAmount, '1.1', 'and nothing else');
   report.file = 'Tools from a map file, alone';
   await apply('file', ['ground']);
@@ -168,8 +168,9 @@ try {
   await apply('builtin:lava'); await sleep(800);
   assert.match(await text('#look-note'), /another world/);
   await click('#look-apply'); await sleep(2000); await ready(`sculptDebug.biome==='lava'`);
+  for(let i=0;i<40&&(await sketch()).worldSettings.name!=='Lava';i++)await sleep(100);
   const forked = await sketch();
-  assert.equal(forked.worldSettings.name, 'Lava'); assert.deepEqual(forked.tools ?? [], [], 'a whole look takes the world\'s tools: none of its own');
+  assert.equal(forked.worldSettings.name, 'Lava', await text('#error')); assert.deepEqual(forked.tools.map(t=>t.id),(await (await fetch(server+'/config/lava.json')).json()).tools.map(t=>t.id),'a whole look copies Lava’s brush list');
   assert.match(await text('#status'), /Applied the look of Lava/);
   assert.equal(forked.nodes.filter(n => n.kind === 'landform').length, 1, 'the fork keeps the shapes');
   const kept = await ev(`(async()=>{const r=indexedDB.open('terraform-maps',1);const db=await new Promise((a,b)=>{r.onsuccess=()=>a(r.result);r.onerror=()=>b(r.error);});const t=db.transaction('meta','readonly').objectStore('meta').getAll();return await new Promise(a=>t.onsuccess=()=>a(t.result.map(m=>({id:m.id,name:m.name,biome:m.biome}))));})()`);

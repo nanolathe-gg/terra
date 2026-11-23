@@ -34,8 +34,6 @@ struct Rock {
     faceLedge: f32,       // ledge step, 0..1 of the bed
     faceRun: f32,         // typical unbroken ledge length, px
     faceLean: f32,        // scratches and joints lean from the screen's north-south, degrees
-    faceScratch: f32,     // scratch depth, height units
-    faceScratchSize: f32, // scratch spacing, px
     faceBlock: f32,       // joint depth and block tilt, height units
     faceBlockSize: f32,   // px between joints along a bed
     faceGrass: f32,       // how strongly grass takes the ledges, 0..1
@@ -47,8 +45,6 @@ struct Rock {
     faceWet: f32,         // wet streaks: the runnels and open partings darker
     faceShade: f32,       // how dark the rock face's own shadows and creases go (0: the sky still fills them; 1: black)
     faceRock: f32,        // rock's share of a steep face (the rest grass, in clumps and on ledges); a stroke's Local vegetation scales it
-    faceCrease: f32,      // crease depth (fine creases along the contours, the face's grain), height units
-    faceCreaseSize: f32,  // crease spacing, px
     runoff: f32,
     runoffScale: f32,
     runoffConcentration: f32,
@@ -80,15 +76,12 @@ struct Rock {
     faceJointWidth: f32,
     faceSecondary: f32,
     faceContinuity: f32,
-    faceDetailPatch: f32,
     faceWhole: f32, // Whole blocks
     faceWholeLarge: f32, // Whole large blocks
     faceRegular: f32, // Block regularity
     faceExtrude: f32, // Extrusion bias: inset to projecting
     faceLamina: f32, // Fine layer relief
     faceLaminaSize: f32, // Fine layer spacing (height units, 6 to 16)
-    faceScratchLength: f32, // Groove length (px)
-    faceScratchAngle: f32, // Groove tilt from vertical (deg)
     looseSize: f32,       // px: the median stone diameter
     stoneRound: f32,      // world material data: 0 angular chips .. 1 rounded stones
     stoneSort: f32,       // world material data: 0 a mixed power-law gravel, 1 one size class sorted by the process (talus coarsens outward, fans and channels fine downslope)
@@ -140,6 +133,11 @@ struct Rock {
     moonFoldSpacing: f32, // height units between the folds' first set of contours
     rockCrown: f32,
     gougeWeb: f32,        // 0..1: a bold web of long dark gouges across raised crystal, round cells about 42 px (0: none)
+    // Fine relief (fineSite), per rock: a recipe that sets none takes the world's.
+    fineRelief: f32,      // its slope amplitude from a slope of 0.5 (rise per px), 0: none
+    fineSize: f32,        // its largest wavelength, px
+    fineGrain: f32,       // -1 strands down the fall line .. 0 no direction .. 1 ripples along the contours
+    finePits: f32,        // pits' share of the cells on steep ground (dimples that cast 1-2 px shadows)
 }
 
 // Absolute ground recipes; the cache holds height and unlit color parameters.
@@ -192,6 +190,7 @@ struct Uniforms {
     diagnosticView: i32,   // GLSL uDiagnostic (diagnostic is a WGSL keyword)
     surfacePreview: i32,  // the row of the surface layer the Surface section previews (diagnostic view 13), -1 none
     faceFill: f32,
+    fillFollow: f32,      // 0: Fill light on shaded faces is even; 1: it comes from the side away from the sun, so the relief and its hollows read in shade
     slopeProfile: vec4f,
     elevatedCover: vec3f,
     slopeOnLowBanks: i32,
@@ -252,6 +251,10 @@ struct Uniforms {
     sandBandSpacing: f32,
     apron: f32,           // sand apron reach round raised ground, world px (0: none)
     worms: f32,           // wormy regolith relief on slopes (lunar)
+    // Fine relief (world): 1 to 32 px art height on the lit surface (fineSite; engine-bake.wgsl bake, engine-frag.wgsl geometryMain).
+    fineLevel: f32,       // its slope amplitude on level ground (the world's; amount, size, grain and pits are each rock's, struct Rock)
+    fineLevelGrain: f32,  // level ground's grain (the world's): a rock's Fine grain holds on its slopes only
+    fineAny: f32,         // the largest Fine relief on slopes or Fine pits of the rocks in use (writeRocks): 0 with fineLevel 0, none is drawn
     bandSpacing: f32,     // height between bands, height units (the column block's `bands`)
     bandSoftness: f32,    // share of each band that is riser
     bandLine: f32,        // darkness of the line along each riser (the column block's `bands`)
@@ -992,6 +995,163 @@ fn surfaceGradient(p: vec2f) -> vec2f {
     return vec2f(surfaceHeight(p + vec2f(e, 0.0)) - surfaceHeight(p - vec2f(e, 0.0)),
                  surfaceHeight(p + vec2f(0.0, e)) - surfaceHeight(p - vec2f(0.0, e))) / (2.0 * e);
 }
+// ---- Fine relief (world: fineRelief, fineLevel, fineSize, fineGrain, finePits) ----
+// Art height finer than the shapes, on any dry ground: octaves of value noise from Fine relief size down to 2 px, each with the same slope
+// (fineRelief from a slope of 0.5, fineLevel on level ground, mixed by slope), so it lights as roughness at every scale; plus pits on steep
+// ground. It is appearance only: the export's corners take each corner's 16 px mean (sculpt-map.js cornerHeight). The octaves the 2 px solid
+// resolves (6 px and up) go into the bake's relief (engine-bake.wgsl bake), so the solid, its cast shadows and occlusion see them; the finer
+// ones and the pits are drawn at the hit (engine-frag.wgsl geometryMain, beside rockDetail), bending the normal, deepening the cavity and
+// casting their own 1-2 px shadow. An octave between 6 and 10 px is split between the two, so Fine relief size moves the picture smoothly.
+// The noise lives on the screen (x, y - height / 2: a face turned to the viewer is not smeared down it) and is grained along the screen's
+// fall line: its lattice is turned to one of eight directions whose integer steps repeat with the pool (so level ground still repeats with
+// the pool, card tilepool) and stretched along the contours (Grain above 0) or down the fall line (below 0); a pixel blends the two
+// directions either side of its own. At Grain 0 neither axis stretches and the two sides of 0 meet.
+struct FineSite { on: bool, strength: f32, pits: f32, q: vec2f, g: vec2f, frameA: u32, frameB: u32, mixB: f32, field: f32, grain: f32, levelGrain: f32, steep: f32, levelA: u32, levelB: u32, levelMix: f32 }
+// The octaves of FINE_FIELD_FROM px and up, at the world rock's slope strength (field), are also written into the height the Time pass erodes
+// (engine-feed.wgsl feedFine): on a chunk fed the Time pass's height (u.weatherMaps) the bake leaves out what the field already holds of them.
+const FINE_FIELD_FROM = 12.0;
+const FINE_FIELD_FULL = 20.0;
+const FINE_FRAMES = array<vec2f, 8>(vec2f(1.0, 0.0), vec2f(2.0, 1.0), vec2f(1.0, 1.0), vec2f(1.0, 2.0), vec2f(0.0, 1.0), vec2f(-1.0, 2.0), vec2f(-1.0, 1.0), vec2f(-2.0, 1.0));
+const FINE_ANGLES = array<f32, 9>(0.0, 0.4636476, 0.7853982, 1.1071487, 1.5707964, 2.0344439, 2.3561945, 2.6779451, 3.1415927);
+const FINE_STRETCH = 3.0;   // a fully grained octave's cells are 1 + FINE_STRETCH times longer along the grain
+const FINE_PIT_CELL = 7.0;  // px: at most one pit a cell
+const FINE_PIT_DEPTH = 3.0; // height units at full strength
+fn fineOn() -> bool { return u.fineAny > 0.0 || u.fineLevel > 0.0; }
+fn fineSite(p: vec2f) -> FineSite {
+    var s = FineSite(false, 0.0, 0.0, vec2f(0.0), vec2f(0.0), 0u, 1u, 0.0, 0.0, 0.0, 0.0, 0.0, 0u, 1u, 0.0);
+    if (!fineOn()) { return s; }
+    let h = baseHeight(p);
+    if (h <= u.sea + 0.5) { return s; }
+    let g = broadGradient(p);
+    let slope = length(g);
+    let steep = smoothstep(0.03, 0.5, slope);
+    let rough = 1.0 - routeProtection(p);
+    // Level ground takes the world's Fine relief on level ground; slopes the pixel's rock's (rs: the caller's useRock).
+    s.strength = mix(u.fineLevel, u.rock[rs & rockMask].fineRelief, steep) * rough;
+    s.pits = u.rock[rs & rockMask].finePits * steep * rough;
+    s.field = u.rock[0].fineRelief * steep * rough;   // the Time pass reads the world's rock alone; level ground's part stays art (flat ground stays flat)
+    if (s.strength <= 0.0 && s.pits <= 0.0) { return s; }
+    s.on = true;
+    s.q = vec2f(p.x, p.y - 0.5 * (h - u.base));
+    s.g = g;
+    // The lattice's first axis. Ripples (Grain above 0) stretch along it, so it lies along the contour, which keeps its world direction on the
+    // screen (it does not change height). Strands (below 0) stretch along the second axis, so the first lies across the screen fall line: a
+    // step down the slope also moves the drawn point down by half the drop, so on a slope facing east or west the screen fall line leans
+    // away from the contour's perpendicular. The axis turns from one to the other as Grain crosses 0, where neither stretches. Both lean
+    // south by 0.1 (in slope) so contours run across the screen on level ground and follow the slope from about 0.1 (a gentle bowl draws
+    // no rings).
+    // Slopes take the rock's Fine grain, level ground the world's Fine grain on level ground (fineLevelGrain); between, both are drawn
+    // and mixed by the slope ramp (a single grain where they agree).
+    s.steep = steep;
+    s.grain = u.rock[rs & rockMask].fineGrain;
+    s.levelGrain = u.fineLevelGrain;
+    let slopeFrames = fineFrames(g, slope, s.grain);
+    s.frameA = u32(slopeFrames.x); s.frameB = (s.frameA + 1u) % 8u; s.mixB = slopeFrames.y;
+    let levelFrames = fineFrames(g, slope, s.levelGrain);
+    s.levelA = u32(levelFrames.x); s.levelB = (s.levelA + 1u) % 8u; s.levelMix = levelFrames.y;
+    return s;
+}
+// The two of the eight lattice directions either side of the grain's first axis, and the share of the second: (k, mix).
+fn fineFrames(g: vec2f, slope: f32, grain: f32) -> vec2f {
+    let contour = atan2(-g.y + 0.1, -g.x) + 1.5707964;
+    let acrossFall = atan2(-g.y + 0.5 * slope * slope + 0.1, -g.x) + 1.5707964;
+    var turn = acrossFall - contour;
+    turn = turn - 3.1415927 * round(turn / 3.1415927);   // the nearer way round (directions repeat every half turn)
+    var a = contour + turn * (1.0 - smoothstep(-0.3, 0.3, grain));
+    a = a - 3.1415927 * floor(a / 3.1415927);
+    var k = 0u;
+    for (var i = 1u; i < 8u; i++) { if (a >= FINE_ANGLES[i]) { k = i; } }
+    return vec2f(f32(k), clamp((a - FINE_ANGLES[k]) / (FINE_ANGLES[k + 1u] - FINE_ANGLES[k]), 0.0, 1.0));
+}
+// valueNoise on a lattice that repeats every n.x cells across and n.y down (wrapNoise with a period an axis).
+fn fineWrapNoise(q: vec2f, n: vec2f) -> f32 {
+    let c = floor(q);
+    let f = fract(q);
+    let fade = f * f * (3.0 - 2.0 * f);
+    let w = vec2f(1.0, 0.0);
+    let a = cellHash(c - n * floor(c / n)).x;
+    let b = cellHash((c + w) - n * floor((c + w) / n)).x;
+    let d = cellHash((c + w.yx) - n * floor((c + w.yx) / n)).x;
+    let e = cellHash((c + 1.0) - n * floor((c + 1.0) / n)).x;
+    return mix(mix(a, b, fade.x), mix(d, e, fade.x), fade.y) * 2.0 - 1.0;
+}
+// One octave in one of the eight directions: cells `cell` px across the grain, stretched along it.
+fn fineFrame(q: vec2f, k: u32, cell: f32, salt: f32, grain: f32) -> f32 {
+    let d = FINE_FRAMES[k];
+    let r = length(d);
+    let cu = cell * (1.0 + FINE_STRETCH * max(grain, 0.0));    // along the contours
+    let cw = cell * (1.0 + FINE_STRETCH * max(-grain, 0.0));   // down the fall line
+    let n = max(vec2f(1.0), round(vec2f(u.pool / (r * cu), u.pool / (r * cw))));
+    let pq = poolPos(q);
+    let t = vec2f(d.x * pq.x + d.y * pq.y, -d.y * pq.x + d.x * pq.y) * n / u.pool;
+    return fineWrapNoise(t + vec2f(salt, 2.0 * salt), n);
+}
+// One octave of one grain, blended between its two lattice directions (variance kept).
+fn fineGrained(q: vec2f, ka: u32, kb: u32, m: f32, cell: f32, salt: f32, grain: f32) -> f32 {
+    let a = fineFrame(q, ka, cell, salt, grain);
+    let b = fineFrame(q, kb, cell, salt, grain);
+    return (a * (1.0 - m) + b * m) / sqrt((1.0 - m) * (1.0 - m) + m * m);
+}
+// The octaves of wavelength `lambda` px down to 2 px, each weighted by `path` (bake: 1 from 10 px up; hit: 1 under 6 px), at the screen
+// point q. Every octave has slope s.strength: an amplitude of a quarter of its cell.
+fn fineOctaves(s: FineSite, q: vec2f, bake: bool) -> f32 {
+    var total = 0.0;
+    var fieldOctaves = 0.0;
+    var lambda = max(u.rock[rs & rockMask].fineSize, 1.0);
+    for (var k = 0; k < 6; k++) {
+        if (lambda < 1.5) { break; }
+        let split = smoothstep(6.0, 10.0, lambda);
+        let w = select(1.0 - split, split, bake) * smoothstep(1.5, 2.5, lambda);
+        if (w > 0.0) {
+            let cell = 0.5 * lambda;
+            var n = fineGrained(q, s.frameA, s.frameB, s.mixB, cell, f32(k) * 7.31, s.grain);
+            if (s.levelGrain != s.grain && s.steep < 1.0) {
+                let level = fineGrained(q, s.levelA, s.levelB, s.levelMix, cell, f32(k) * 7.31, s.levelGrain);
+                n = (n * s.steep + level * (1.0 - s.steep)) / sqrt(s.steep * s.steep + (1.0 - s.steep) * (1.0 - s.steep));
+            }
+            let o = n * 0.25 * cell * w;
+            let f = select(0.0, smoothstep(FINE_FIELD_FROM, FINE_FIELD_FULL, lambda), bake);
+            total += o * (1.0 - f);
+            fieldOctaves += o * f;
+        }
+        lambda *= 0.5;
+    }
+    // Where the chunk's height is the Time pass's, the field holds the world rock's slope share of the field octaves.
+    let fieldStrength = select(s.strength, max(s.strength - s.field, 0.0), u.weatherMaps != 0);
+    return total * s.strength + fieldOctaves * fieldStrength;
+}
+// Pits: at most one a 7 px cell (pool lattice), a dimple of radius 1-2.1 px and FINE_PIT_DEPTH deep, in a cell's share of finePits.
+fn finePitsAt(s: FineSite, q: vec2f) -> f32 {
+    let n = poolCells(FINE_PIT_CELL);
+    let t = poolPos(q) * (n / u.pool);
+    let c = floor(t);
+    let hsh = cellHash(poolWrap(c, n) + vec2f(53.0, 17.0));
+    let hsh2 = cellHash(poolWrap(c, n) + vec2f(11.0, 91.0));
+    if (hsh2.x >= s.pits) { return 0.0; }
+    let cellPx = u.pool / n;
+    let radius = (1.0 + 1.1 * hsh2.y) / cellPx;   // in cells (the centre keeps 0.3 of a cell, 2.1 px, from its edges)
+    let center = c + 0.3 + 0.4 * hsh;
+    let d = length(t - center) / radius;
+    let k = max(1.0 - d * d, 0.0);
+    return -FINE_PIT_DEPTH * k * k;
+}
+// The screen point of a world point near the site (the site's own slope carries it: a step down the fall line also drops the drawn point).
+fn fineQ(s: FineSite, p: vec2f, site: vec2f) -> vec2f { let d = p - site; return s.q + vec2f(d.x, d.y - 0.5 * dot(s.g, d)); }
+// What the bake adds to its relief: the resolved octaves.
+fn fineBake(p: vec2f) -> f32 {
+    let s = fineSite(p);
+    if (!s.on || s.strength <= 0.0) { return 0.0; }
+    return fineOctaves(s, s.q, true);
+}
+// What the hit adds (a height outward, rockDetail's units): the octaves under the solid's reach and the pits, at world point p near site.
+fn fineDetail(p: vec2f, s: FineSite, site: vec2f) -> f32 {
+    let q = fineQ(s, p, site);
+    var h = 0.0;
+    if (s.strength > 0.0) { h += fineOctaves(s, q, false); }
+    if (s.pits > 0.0) { h += finePitsAt(s, q); }
+    return h * u.detail;
+}
+
 #endif
 
 #ifndef EROSION
@@ -1266,13 +1426,6 @@ fn voxelJointW(r:vec3f,c:VoxelRock,broad:VoxelRock,width:f32,secondary:f32)->f32
     }
     return (1.0-smoothstep(width*.25,width,c.edge))*secondary*fine
         +(1.0-smoothstep(width*.15,width*.85,broad.edge))*1.15*primary;
-}
-fn voxelDetail(r:vec3f)->f32 {
-    if(u.rock[rs & rockMask].faceDetailPatch<=0.0){return 1.0;}
-    // Leave intact faces between damaged patches; the existing pitting,
-    // grooves and grit retain their own amplitudes and physical scales.
-    let cluster=smoothstep(.28,.65,voxelNoise(r/max(12.0,u.rock[rs & rockMask].faceBlockSize*1.3)+vec3f(67,11,43)));
-    return mix(1.0,cluster*1.6,u.rock[rs & rockMask].faceDetailPatch);
 }
 fn voxelSpall(r:vec3f,c:VoxelRock,hard:f32)->f32 {
     let chip=voxelNoise(r/vec3f(max(5.0,u.rock[rs & rockMask].faceBlockSize*.65),max(5.0,u.rock[rs & rockMask].faceBlockSize*.65),max(3.0,u.rock[rs & rockMask].faceBed*.8))+vec3f(19,53,7));
