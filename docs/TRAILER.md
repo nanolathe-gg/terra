@@ -82,9 +82,12 @@ paper, faster and faster; then every print gets the same dashed box and
 "HILL 17" tag, and "Every hill: exactly the same." In the match cut the
 paper dissolves into the engine's render of seven Terra hills at the same
 spots (`trailer/cartoon/hills.json`), each with its own size, height,
-outline and breakup: "Terra: every hill its own." The stamps are generic
+outline and breakup: "Terra: every hill its own." Then twelve other
+variants of the same seven hills (`stills.mjs --vary 1..12`: new seeds,
+size, height, wander and width variation within a fifth) swap in every four
+frames to the end of the cut: there is no end to them. The stamps are generic
 cartoon hills, not retail art. `assemble-combined.sh <cuts> <take> cartoon`
-writes a 65 s version: the cartoon, the real-time take, the quick cut of
+writes a 66 s version: the cartoon, the real-time take, the quick cut of
 every world, the gameplay and the end card.
 
 ## End card (2026-11-23)
@@ -104,6 +107,21 @@ terrain).
 another picture). It replaces the Green TERRA letters (`logo-green.json`),
 which stay for comparison.
 
+## Music (2026-11-23)
+
+`trailer/music.mjs` synthesizes an original score (oscillators, plucked
+strings, filtered noise and a small reverb; no samples, no dependencies,
+the same bytes every run), and `assemble-combined.sh` makes it to the cut:
+each segment passes its style and length, so every section starts on its
+cut. D minor at 100 beats a minute. The cartoon gets pizzicato with a thud
+on each stamp, a deflating trombone on "exactly the same", a riser and a
+boom on the match cut, and a pluck on every hill swap; the take builds from
+pad and arpeggio to drums; the world montage has a hit on each world; the
+gameplay and the battle each open on a hit with full drums; the end card
+lands on a hit, then Bb opening into D major. Measured: −15.7 LUFS
+integrated, peaks at −1 dBFS. Checked by its spectrogram and levels only;
+nobody has listened to it yet.
+
 ## Combined cut (2026-11-21)
 
 The owner picked B + C and added Nanolathe gameplay. Owner's notes: TERRA
@@ -117,18 +135,18 @@ gameplay to prove the map works.
 | Title | `slate.html` | 3 s |
 | Sections vs Terra | `cuts.html?cut=sections`, its title and end card cut off; the world cut runs Green, Red (0.8 s each), then the other seven (0.42 s each) | 23 s |
 | Slate | "One take, in real time" | 2.2 s |
-| Real-time take | `capture-realtime.mjs` on Green: Mountain, two Hills, Deep water and Crater dragged, Knoll field; then the range is selected again for variation at work (New seed, Height dragged up and back, Outline & variation opened and Wander dragged); three metal deposits by start 1, eight trees, then Build game map. The two starts and start 2's three deposits (in the far corner, off camera) are set just before the take | 24.2 s |
+| Real-time take | `capture-realtime.mjs` on Green: Mountain, two Hills, Deep water and Crater dragged, Knoll field; then the range is selected again for variation at work (New seed, Height dragged up and back, Outline & variation opened and Wander dragged); three metal deposits round start 1 (200 to 330 px apart), eight trees, then Build game map. The two starts and start 2's three deposits (in the far corner, off camera, as far apart) are set just before the take | 24.5 s |
 | Gameplay | Nanolathe `tools/film` with `trailer/nanolathe-film.json` on the take's own `.ufo`: the commander lands at start 1 and builds its extractor on a placed deposit beside the lake, then a staged skirmish by the crater | 18.8 s |
 | End card | `cuts.html?cut=end`, the owner's Terra map (`logo-terra.json`, see End card) with a slow push in and the name spelled out | 6 s |
 
-Assembled by `trailer/assemble-combined.sh` to 77 s.
+Assembled by `trailer/assemble-combined.sh` to 78 s, with music (see Music).
 
-**Measured (2026-11-23).** The take runs 24.23 s against 24.27 s of wall
-clock (57 delivered frames a second): about 6 s of it is the variation
+**Measured (2026-11-23).** The take runs 24.52 s against 24.52 s of wall
+clock (59 delivered frames a second): about 6 s of it is the variation
 step, and the rest is quicker than the first takes (26.3 s without
 variation) because the pauses wait only until the view is drawn, plus a
 quarter second, and the drags and glides are shorter; nothing is retimed
-after capture. Its build passed the exporter's self-check: 1,204 unique
+after capture. Its build passed the exporter's self-check: 1,235 unique
 tiles in 4,420 slots, 14 features, 2 starts.
 
 Variation comes after every shape is down, because a new seed also changes
@@ -137,15 +155,16 @@ reached the metal). The Height drag goes to the top and back to 236: the
 range at 266 or more clamps game heights (7 to 49 cells) and the Export
 pane warns on camera. Shapes' seeds also differ from run to run, so the
 lake ends a little short of the metal to keep it dry whatever the outline.
-One take in two showed black flashes of one to three frames over the area
-being drawn (at 1.2 s and 4.0 s); the take kept here has none (checked
-frame by frame). That looks like an editor preview bug, not the capture. Every start and deposit has game
+Many takes show black flashes of one to three frames over the area being
+drawn (an editor preview issue the owner set aside); the take kept here has
+none (checked frame by frame), and its starts and deposits all have game
+heights 84 within 48 px. It was the sixth of seven tries. Every start and deposit has game
 heights 83 to 84 within 48 px (dry base 84, sea 75). Nanolathe loaded
 `Terra Valley.ufo` from a second `--root` (the TA install is never
 written): the commander landed at start 1 (1130, 880) and built its
-extractor at (1064, 952), about 95 px away, finished about 9.5 s into the
+extractor at (1032, 952), about 120 px away, finished about 9.5 s into the
 film; the other commander stays in the far corner with its own metal. It
-staged 73 units for the battle and skipped 19 it could not place.
+staged 74 units for the battle and skipped 18 it could not place.
 
 Before 2026-11-23 both commanders walked to the map's only metal: ours
 along the lake, the other from the far corner, so they met there.

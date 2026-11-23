@@ -48,4 +48,6 @@ With `A=~/terraform-assets/agent-trailer/v2` (cuts) and `B=~/terraform-assets/ag
 3. The end card's logo from the owner's map (it opens in the editor, so it needs your server):
    `node trailer/logo-from-save.mjs --server http://127.0.0.1:<yours> --port <cdp> --save trailer/logo-terra.json --zoom 1.2 --size 1920x924 --center 2150,2075 --out $A/logo-terra/final.png`
 4. Render `cuts.html?cut=sections`, `cuts.html?cut=end` and the two slates with `render-explainer.mjs` into `$A/out`.
-5. `trailer/assemble-combined.sh $A $B` (add `cartoon` for the cartoon version)
+5. `trailer/assemble-combined.sh $A $B` (add `cartoon` for the cartoon version); it writes the music to the cut (`music.mjs`) and muxes it in.
+
+The cartoon's hill variants: `for n in $(seq 12); do node trailer/stills.mjs trailer/cartoon/hills.json $A/cartoon-hills/v$n --vary $n; done`.
