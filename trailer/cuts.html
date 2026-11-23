@@ -186,13 +186,24 @@ async function cartoonCut() {
     ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
     ctx.save(); ctx.strokeStyle = '#2f4f86'; ctx.lineCap = 'round'; ctx.lineWidth = 96; ctx.beginPath(); ctx.moveTo(40, 40); ctx.lineTo(420, 380); ctx.stroke();   // sleeve, off to the bottom right
     ctx.strokeStyle = '#3b6fb6'; ctx.lineWidth = 82; ctx.stroke(); ctx.restore();
-    ctx.save(); ctx.rotate(rot); ctx.fillStyle = '#c99862'; ctx.strokeStyle = '#7b5530'; ctx.lineWidth = 3; ctx.beginPath(); ctx.roundRect(-68, -38, 136, 76, 8); ctx.fill(); ctx.stroke();   // the wooden block
-    ctx.fillStyle = '#8a5a33'; ctx.beginPath(); ctx.arc(0, 0, 32, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#5e3c1f'; ctx.stroke();   // the knob
-    ctx.fillStyle = '#f4d35e'; ctx.fillRect(-27, -10, 54, 20); ctx.fillStyle = '#3a2a10'; ctx.font = `13px ${CARTOON}`; ctx.textAlign = 'center'; ctx.fillText('HILL 17', 0, 5); ctx.restore();
-    ctx.fillStyle = '#f2c09a'; ctx.strokeStyle = '#b9825c'; ctx.lineWidth = 3;   // the hand: palm below right of the knob, fingers over its edge
-    ctx.beginPath(); ctx.ellipse(54, 52, 40, 34, .7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    for (const [fx, fy] of [[14, 30], [34, 22], [48, 10], [56, -6]]) { ctx.beginPath(); ctx.ellipse(fx, fy, 13, 17, .5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
-    ctx.beginPath(); ctx.ellipse(-4, 38, 12, 18, -1.1, 0, Math.PI * 2); ctx.fill(); ctx.stroke();   // thumb
+    ctx.save(); ctx.rotate(rot); ctx.fillStyle = '#c99862'; ctx.strokeStyle = '#7b5530'; ctx.lineWidth = 3; ctx.beginPath(); ctx.roundRect(-80, -42, 160, 84, 9); ctx.fill(); ctx.stroke();   // the wooden block
+    ctx.fillStyle = '#f4d35e'; ctx.fillRect(-74, -18, 40, 36); ctx.strokeStyle = '#b8962e'; ctx.lineWidth = 1.5; ctx.strokeRect(-74, -18, 40, 36);   // its label, beside the knob
+    ctx.fillStyle = '#3a2a10'; ctx.font = `14px ${CARTOON}`; ctx.textAlign = 'center'; ctx.fillText('HILL', -54, -2); ctx.fillText('17', -54, 13);
+    ctx.fillStyle = '#8a5a33'; ctx.beginPath(); ctx.arc(8, 0, 28, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#5e3c1f'; ctx.lineWidth = 3; ctx.stroke(); ctx.restore();   // the knob
+    // The hand, a fist round the knob seen from above: palm behind it toward the arm, four fingers side by side curled over its top, the thumb
+    // round its side. One outline for the whole hand (every part stroked wide first, then filled), then thin lines between the fingers.
+    ctx.save(); ctx.translate(8, 0); ctx.rotate(-Math.PI / 4);
+    const fingers = [[-21, -20], [-7, -28], [7, -27], [21, -18]], parts = [
+      () => ctx.roundRect(-34, 4, 68, 64, 26),   // palm
+      ...fingers.map(([fx, tip]) => () => ctx.roundRect(fx - 7.5, tip, 15, 30 - tip, 7.5)),
+      () => { ctx.save(); ctx.translate(-33, 16); ctx.rotate(.45); ctx.roundRect(-10, -26, 20, 44, 10); ctx.restore(); }];   // thumb
+    for (const [width, style, fill] of [[7, '#a8724a', false], [0, '#f2c09a', true]]) for (const part of parts) {
+      ctx.beginPath(); part(); if (fill) { ctx.fillStyle = style; ctx.fill(); } else { ctx.strokeStyle = style; ctx.lineWidth = width; ctx.stroke(); }
+    }
+    ctx.strokeStyle = '#c48d63'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+    for (const fx of [-14, 0, 14]) { ctx.beginPath(); ctx.moveTo(fx, -16); ctx.lineTo(fx, 10); ctx.stroke(); }   // between the fingers
+    for (const [fx] of fingers) { ctx.beginPath(); ctx.arc(fx, -4, 4.5, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); }   // knuckle creases
+    ctx.restore();
     ctx.restore(); ctx.restore();
   };
   const desk = () => { ctx.fillStyle = '#7a4f2c'; ctx.fillRect(0, 0, W, H); ctx.strokeStyle = 'rgba(0,0,0,.12)'; ctx.lineWidth = 2; for (let y = 8; y < H; y += 22) { ctx.beginPath(); ctx.moveTo(0, y); for (let x = 0; x <= W; x += 80) ctx.lineTo(x, y + Math.sin(x * .013 + y) * 4); ctx.stroke(); } };
