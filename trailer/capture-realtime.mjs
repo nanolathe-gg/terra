@@ -1,5 +1,6 @@
 // Concept C (docs/TRAILER.md): one real-time take in the real editor on Green Planet. Shapes are dragged (Mountain, Crater, Deep water, Hill),
-// metal and trees are placed, and the game map is built. The two starts (and the far start's metal) are set before the take. A screencast of our own headless Chrome, every frame placed by its own timestamp, so
+// the mountain gets a new seed, more height and more wander, metal and trees are placed, and the game map is built. The two starts (and
+// the far start's metal) are set before the take. A screencast of our own headless Chrome, every frame placed by its own timestamp, so
 // the clip lasts exactly as long as the take did; a clock badge in the corner (added by the capture, like the pointer) shows it.
 //   node trailer/capture-realtime.mjs --server http://127.0.0.1:<yours> --port <cdp> --out <file.mp4> [--ufo <dir>] [--name 'Terra Valley']
 // After the take the build finishes off camera and, with --ufo, its .ufo is saved there (for Nanolathe). Prints the delivered frame rate,
@@ -35,6 +36,17 @@ try {
   const drag = async (points, ms) => { await glide(...points[0]); down = true; await b.mouse('mousePressed', px, py, true); const t0 = Date.now(), n = points.length - 1;
     for (;;) { const u = Math.min(1, (Date.now() - t0) / ms) * n, i = Math.min(n - 1, Math.floor(u)), f = u - i; await move(points[i][0] + (points[i + 1][0] - points[i][0]) * f, points[i][1] + (points[i + 1][1] - points[i][1]) * f); if (u >= n) break; await sleep(16); }
     down = false; await b.mouse('mouseReleased', px, py, false); };
+  // A slider in the shape panel, dragged by hand: the panel scrolls it into view, the pointer takes the handle where the value is and
+  // drags it to `to` (or through a list of values) over `ms`, the picture following live.
+  const slide = async (id, to, ms) => {
+    const bar = `(() => { const i = document.getElementById('${id}'); let e = i; while (e.getBoundingClientRect().width < 200) e = e.parentElement; return e; })()`;
+    await b.ev(`${bar}.scrollIntoView({block: 'center', behavior: 'smooth'}), true`);
+    let r = null;   // wait for the smooth scroll to stop: two reads a frame apart that agree
+    for (let i = 0; i < 60; i++) { await sleep(50); const n = await b.ev(`(() => { const i = document.getElementById('${id}'), r = ${bar}.getBoundingClientRect(); return {x: r.x, y: r.y + r.height / 2, w: r.width, min: +i.min, max: +i.max, v: +i.value}; })()`); if (r && Math.abs(n.y - r.y) < 0.5) { r = n; break; } r = n; }
+    const at = v => r.x + r.w * (v - r.min) / (r.max - r.min);
+    await drag([r.v, ...[to].flat()].map(v => [at(v), r.y]), ms);
+    await glide(760, 400, 260);   // off the panel, before the control's help card opens
+  };
   // A hand's stroke: a smooth curve through a few points (Catmull-Rom).
   const curve = (pts, n = 48) => { const P = i => pts[Math.max(0, Math.min(pts.length - 1, i))], out = [], per = Math.ceil(n / (pts.length - 1));
     for (let i = 0; i < pts.length - 1; i++) for (let s = 0; s < per; s++) { const t = s / per, p0 = P(i - 1), p1 = P(i), p2 = P(i + 1), p3 = P(i + 2);
@@ -64,9 +76,18 @@ try {
   await tool('mountain'); await drag(curve([[320, 255], [470, 210], [650, 240], [830, 205], [970, 245]]), 1000); await settle();
   await tool('hill'); await drag(curve([[400, 370], [490, 350], [560, 365]]), 420); await settle(150, 700);
   await drag(curve([[750, 355], [830, 340], [890, 350]]), 420); await settle();
-  await tool('deep'); await drag(curve([[290, 610], [420, 570], [560, 615], [690, 595]]), 850); await settle();
+  await tool('deep'); await drag(curve([[290, 610], [420, 570], [560, 615], [655, 598]]), 850); await settle();
   await tool('crater'); await drag([[1080, 500], [1130, 545]], 350); await settle();
   await tool('knollField'); await click(880, 815, 300); await settle(150, 800);
+  // Variation at work, once every shape is down (a new seed would give the shapes after it other seeds too): select the range, give it a
+  // new seed, raise it, then let its route wander more.
+  await clickOn('[data-tool="move"]'); await sleep(100); await click(640, 215, 280); await sleep(200);
+  await clickOn('#seed-randomize'); await settle(200, 800);
+  await slide('lf-elevation', [300, 236], 800); await settle(150, 700);   // up to the top, then back below what the game's heights hold
+  // Wander lives in the folded Outline & variation section: open it as an artist would, then drag.
+  await b.ev(`(() => { const s = document.getElementById('lf-wander').closest('details').querySelector('summary'); s.dataset.trailer = 'variation'; s.scrollIntoView({block: 'center', behavior: 'smooth'}); return true; })()`); await sleep(350);
+  await clickOn('[data-trailer="variation"]'); await sleep(150);
+  await slide('lf-wander', 70, 600); await settle(300, 900);
   // Metal round start 1, then trees along the lake's shores
   await press('#feature-tool'); await sleep(150); await press('[data-feature-kind="deposit"]');
   for (const [x, y] of METAL) { await click(x, y, 160); await sleep(50); }
