@@ -242,7 +242,8 @@ func (s *Site) featureCatalog() []any {
 	for _, w := range s.Manifest.FeatureWorlds {
 		features := obj(s.tables[w]["features"])
 		for _, kind := range s.featureKinds[w] {
-			if !allowed[kind] {
+			// A null kind opts out of the fallback and supplies no catalog styles.
+			if !allowed[kind] || features[kind] == nil {
 				continue
 			}
 			data := obj(features[kind])
@@ -276,7 +277,11 @@ func (s *Site) featureCatalog() []any {
 				if c, ok := params["cells"].(string); ok && c != "" {
 					cells = " (" + strings.ReplaceAll(c, "x", "×") + ")"
 				}
-				out = append(out, object{"id": fmt.Sprintf("%s-%s-%d", w, kind, i), "kind": kind, "name": fmt.Sprintf("%s · %s %d%s", names[w], form, i+1, cells), "data": recipe})
+				name := fmt.Sprintf("%s · %s %d%s", names[w], form, i+1, cells)
+				if style, ok := shape["name"].(string); ok && style != "" {
+					name = fmt.Sprintf("%s · %s", names[w], style)
+				}
+				out = append(out, object{"id": fmt.Sprintf("%s-%s-%d", w, kind, i), "kind": kind, "name": name, "data": recipe})
 			}
 		}
 	}
