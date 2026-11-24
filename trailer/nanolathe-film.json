@@ -53,14 +53,15 @@
    "text": [
     {
      "at": 15,
-     "ticks": 110,
+     "ticks": 150,
      "style": "lower",
      "anim": "rise",
      "in": 14,
      "out": 16,
      "rule": true,
      "lines": [
-      "Terra Valley, playing in Nanolathe"
+      "The same map, exported and in play",
+      "Nanolathe, an open-source Total Annihilation engine"
      ]
     },
     {
@@ -83,7 +84,7 @@
     "kind": "battle",
     "map": "Terra Valley",
     "seed": 3,
-    "pre_ticks": 150,
+    "pre_ticks": 90,
     "per_side": 40,
     "buildings": 6,
     "factories": true,
