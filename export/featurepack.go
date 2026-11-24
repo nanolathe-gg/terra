@@ -10,7 +10,7 @@ import (
 
 	"github.com/nanolathe-gg/nanolathe/formats"
 	"github.com/nanolathe-gg/nanolathe/vfs"
-	"github.com/nanolathe-gg/terraform/mapdata"
+	"github.com/nanolathe-gg/terra/mapdata"
 )
 
 // A map's generated features (owner, November 2026: each map carries its own set). The page draws every sprite with

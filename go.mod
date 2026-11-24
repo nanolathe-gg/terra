@@ -1,4 +1,4 @@
-module github.com/nanolathe-gg/terraform
+module github.com/nanolathe-gg/terra
 
 go 1.27.1
 

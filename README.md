@@ -50,11 +50,11 @@ locally.
 You need [Go](https://go.dev/) 1.27.1 or later.
 
 ```bash
-git clone https://github.com/nanolathe-gg/terraform.git
+git clone https://github.com/nanolathe-gg/terra.git
 ```
 
 ```bash
-cd terraform && go run ./cmd/terraform --port 8080
+cd terra && go run ./cmd/terraform --port 8080
 ```
 
 Then open <http://127.0.0.1:8080/>. To build the static site instead:

@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nanolathe-gg/terraform/internal/site"
+	"github.com/nanolathe-gg/terra/internal/site"
 )
 
 type Options struct{ Mode, Source, Tools, Out, Assets, Evidence, Report string }

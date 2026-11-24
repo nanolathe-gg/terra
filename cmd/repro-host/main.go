@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/nanolathe-gg/terraform/internal/previewassets"
-	"github.com/nanolathe-gg/terraform/internal/reprohost"
+	"github.com/nanolathe-gg/terra/internal/previewassets"
+	"github.com/nanolathe-gg/terra/internal/reprohost"
 )
 
 func run() error {

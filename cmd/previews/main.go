@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nanolathe-gg/terraform/internal/previewassets"
+	"github.com/nanolathe-gg/terra/internal/previewassets"
 )
 
 func run() error {
@@ -24,7 +24,7 @@ func run() error {
 	dir := f.String("dir", "", "rendered previews directory (default <root>/ui-previews)")
 	expected := f.String("expected-inputs", "", "fingerprint recorded before rendering")
 	out := f.String("out", "", "archive path")
-	repo := f.String("repo", "nanolathe-gg/terraform", "release repository")
+	repo := f.String("repo", "nanolathe-gg/terra", "release repository")
 	asJSON := f.Bool("json", false, "print fingerprint and input file checksums")
 	published := f.Bool("published", false, "verify the pinned release asset exists and matches its checksum")
 	replace := f.Bool("replace", false, "replace local previews with the pinned bundle")

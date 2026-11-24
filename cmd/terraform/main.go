@@ -10,8 +10,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/nanolathe-gg/terraform/internal/previewassets"
-	"github.com/nanolathe-gg/terraform/internal/site"
+	"github.com/nanolathe-gg/terra/internal/previewassets"
+	"github.com/nanolathe-gg/terra/internal/site"
 )
 
 func run() error {

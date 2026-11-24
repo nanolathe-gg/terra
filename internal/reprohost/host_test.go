@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nanolathe-gg/terraform/internal/site"
+	"github.com/nanolathe-gg/terra/internal/site"
 )
 
 func fixture(t *testing.T, mode string) (*Host, Options) {
