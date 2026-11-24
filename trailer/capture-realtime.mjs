@@ -1,5 +1,5 @@
 // Concept C (docs/TRAILER.md): one real-time take in the real editor on Green Planet. Shapes are dragged (Mountain, Crater, Deep water, Hill),
-// the mountain gets a new seed, more height and more wander, metal and trees are placed, and the game map is built. The two starts (and
+// the mountain gets more height, more wander and then new seeds, metal and trees are placed, and the game map is built. The two starts (and
 // the far start's metal) are set before the take. A screencast of our own headless Chrome, every frame placed by its own timestamp, so
 // the clip lasts exactly as long as the take did; a clock badge in the corner (added by the capture, like the pointer) shows it. The clip
 // runs until the build has finished; <out>.marks.json gives each step's time on the clip.
@@ -47,7 +47,7 @@ try {
     for (let i = 0; i < 60; i++) { await sleep(50); const n = await b.ev(`(() => { const i = document.getElementById('${id}'), r = ${bar}.getBoundingClientRect(); return {x: r.x, y: r.y + r.height / 2, w: r.width, min: +i.min, max: +i.max, v: +i.value}; })()`); if (r && Math.abs(n.y - r.y) < 0.5) { r = n; break; } r = n; }
     const at = v => r.x + r.w * (v - r.min) / (r.max - r.min);
     await drag([r.v, ...[to].flat()].map(v => [at(v), r.y]), ms);
-    await glide(760, 400, 260);   // off the panel, before the control's help card opens
+    await glide(1185, 300, 220);   // off the panel onto empty ground (no shape's hover outline), before the control's help card opens
   };
   // A hand's stroke: a smooth curve through a few points (Catmull-Rom).
   const curve = (pts, n = 48) => { const P = i => pts[Math.max(0, Math.min(pts.length - 1, i))], out = [], per = Math.ceil(n / (pts.length - 1));
@@ -83,19 +83,22 @@ try {
   await tool('deep'); await drag(curve([[290, 610], [420, 570], [560, 615], [655, 598]]), 850); await settle();
   await tool('crater'); await drag([[1080, 500], [1130, 545]], 350); await settle();
   await tool('knollField'); await click(870, 832, 300); await settle(150, 800);
-  // Variation at work, once every shape is down (a new seed would give the shapes after it other seeds too): select the range, give it a
-  // new seed, raise it, then let its route wander more.
+  // Variation at work, once every shape is down (a new seed would give the shapes after it other seeds too): select the range, raise it,
+  // let its route wander more, then re-roll its seed twice, so the wilder outline changes the most.
   mark('select');
   await clickOn('[data-tool="move"]'); await sleep(100); await click(640, 215, 280); await sleep(200);
-  mark('seed');
-  await clickOn('#seed-randomize'); await settle(200, 800);
   mark('height');
   await slide('lf-elevation', [300, 236], 800); await settle(150, 700);   // up to the top, then back below what the game's heights hold
   mark('wander');
   // Wander lives in the folded Outline & variation section: open it as an artist would, then drag.
   await b.ev(`(() => { const s = document.getElementById('lf-wander').closest('details').querySelector('summary'); s.dataset.trailer = 'variation'; s.scrollIntoView({block: 'center', behavior: 'smooth'}); return true; })()`); await sleep(350);
   await clickOn('[data-trailer="variation"]'); await sleep(150);
-  await slide('lf-wander', 70, 600); await settle(300, 900);
+  await slide('lf-wander', 70, 600); await settle(250, 900);
+  // Back up to New seed, and re-roll.
+  await b.ev(`document.getElementById('seed-randomize').scrollIntoView({block: 'center', behavior: 'smooth'}), true`); await sleep(400);
+  mark('seed');
+  await clickOn('#seed-randomize'); await settle(350, 900);
+  await clickOn('#seed-randomize'); await settle(350, 900);
   // Metal round start 1, then trees along the lake's shores
   mark('features');
   await press('#feature-tool'); await sleep(150); await press('[data-feature-kind="deposit"]');

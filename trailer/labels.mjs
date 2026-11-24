@@ -11,10 +11,10 @@ const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 ? 
 const port = Number(opt('--port', 0)), [marksFile, out] = args;
 if (!marksFile || !out || !port) { console.error('usage: node trailer/labels.mjs <marks.json> <out-dir> --port <cdp>'); process.exit(2); }
 const marks = JSON.parse(readFileSync(marksFile, 'utf8'));
-// The label for each marked step; a label lasts until the next labelled step (the last until the take ends).
-const STEPS = [['mountain', 'Draw a mountain range'], ['hills', 'Hills, a lake, a crater'], ['seed', 'New seed: a different mountain'],
+// The label for each marked step; a label lasts until the next labelled step in time (the last until the take ends).
+const STEPS = [['mountain', 'Draw a mountain range'], ['hills', 'Hills, a lake, a crater'], ['seed', 'New seed: same settings, a new mountain'],
   ['height', 'Taller? Just drag.'], ['wander', 'More wander, more natural'], ['features', 'Metal and trees'], ['exportPane', 'Export for Total Annihilation']];
-const steps = STEPS.filter(([k]) => Number.isFinite(marks[k]));
+const steps = STEPS.filter(([k]) => Number.isFinite(marks[k])).sort((a, b) => marks[a[0]] - marks[b[0]]);   // in the take's order
 mkdirSync(out, {recursive: true});
 const b = await browser({port, width: 1280, height: 720, profile: join(out, `profile-${port}`)});
 try {
