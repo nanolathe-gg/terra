@@ -828,7 +828,8 @@
         {"name": "Snow on ice crests", "builtin": "iceCrest", "material": "@snow"},
         {"name": "Snow on ice tops", "builtin": "iceCap", "material": "@snow"},
         {"id": "gentlelumps", "name": "Lumps on gentle grades", "material": "green-lumps", "stage": "ground", "where": [{"fact": "slope", "from": 0.03, "to": 0.1, "fade": 0.02}, {"fact": "toWater", "from": 180, "fade": 10}]},
-        {"id": "shoalspecks", "name": "Specks on the shallow bed", "material": "green-shoal", "stage": "ground", "where": [{"fact": "aboveSea", "from": -30, "to": -1, "fade": 1}]}
+        {"id": "shorebed", "name": "Shoreline bedrock", "material": "green-shoal", "stage": "ground", "where": [{"fact": "aboveSea", "from": -62, "to": 9, "fade": 4}, {"fact": "toWater", "to": 34, "fade": 19}]},
+        {"id": "bankmoss", "name": "Moss on the dry bank", "material": "green-bank-moss", "stage": "ground", "where": [{"fact": "aboveSea", "from": -0.8, "to": 11, "fade": 3}, {"fact": "toWater", "to": 34, "fade": 19}], "edge": {"width": 0.85, "noise": 0.18, "noiseSize": 5, "height": 0.12}}
     ],
     "knobDefaults": {
         "fineRelief": 0.17,
@@ -856,7 +857,7 @@
         "faceShade": 0.65,
         "bedTint": 1,
         "bedContrast": 0.7,
-        "bedRelief": 2,
+        "bedRelief": 0.6,
         "deepEdge": 1,
         "undulationScale": 48,
         "undulationCover": 0.4,
@@ -868,7 +869,7 @@
         "shineWhite": 1,
         "shineOutside": 1,
         "shelfWander": 24,
-        "bedFlat": 1,
+        "bedFlat": 0.55,
         "shoalRag": 5,
         "closeShadow": 0.8,
         "cavity": 0.6,
