@@ -53,15 +53,15 @@ function path(nodes, p, alpha = 1) {
 let logo;
 const PUSH = 1.14, FOCUS = [0.5, 0.52];   // how far the push goes, and where it ends (a fraction of the picture)
 function endCard(t, a, b) {
-  const al = fadeIO(t, a, b, .5); if (al <= 0) return;
+  const al = ease(span(t, a, a + .12)) * (1 - ease(span(t, b - .5, b))); if (al <= 0) return;   // in fast, so the music's hit lands on the picture
   const p = span(t, a, b), z = 1 + (PUSH - 1) * p, sw = logo.width / z, sh = logo.height / z;
   const sx = (logo.width - sw) * (0.5 + (FOCUS[0] - 0.5) * p * 2), sy = (logo.height - sh) * (0.5 + (FOCUS[1] - 0.5) * p * 2);
   const k = Math.min(1040 / logo.width, 450 / logo.height), w = logo.width * k, h = logo.height * k;
   ctx.save(); ctx.globalAlpha = al; ctx.drawImage(logo, sx, sy, sw, sh, (W - w) / 2, 26 + (450 - h) / 2, w, h); ctx.restore();
   const name = al * ease(span(t, a + .5, a + 1.2));
   text('Terra', name, {x: W / 2, y: 548, size: 62, weight: 700, align: 'center'});
-  text('A map editor for Total Annihilation', name, {x: W / 2, y: 596, size: 30, align: 'center'});
-  text('Exports .ufo maps that play in the game', name * .85, {x: W / 2, y: 634, size: 21, weight: 400, align: 'center'});
+  text('A free map editor for Total Annihilation, in your browser', name, {x: W / 2, y: 596, size: 30, align: 'center'});
+  text('terra.nanolathe.gg', name, {x: W / 2, y: 642, size: 28, weight: 600, align: 'center', color: '#9fe08a'});
 }
 
 // ---------- A: one editor, every world
@@ -113,7 +113,8 @@ async function sectionsCut() {
   const keys = await Promise.all([0, 1, 2].map(k => json(`sections/ridge-${k}-green/info.json`)));
   const ridge = await Promise.all([0, 1, 2].map(k => image(`sections/ridge-${k}-green/final.png`)));
   // The same hill on every world, Green and Red (the classic defaults) first and held a little longer.
-  const ALL = [['green', 'Green Planet', .8], ['red', 'Red Planet', .8], ['archipelago', 'Archipelago', .42], ['moon', 'Moon', .42], ['lush', 'Lush', .42], ['lava', 'Lava', .42], ['desert', 'Painted Desert', .42], ['crystal', 'Crystal', .42], ['ice', 'Ice', .42]];
+  // On the music's beat (120 a minute): Green and Red two beats each, then a beat a world, the last held two; six seconds, three bars.
+  const ALL = [['green', 'Green Planet', 1], ['red', 'Red Planet', 1], ['archipelago', 'Archipelago', .5], ['moon', 'Moon', .5], ['lush', 'Lush', .5], ['lava', 'Lava', .5], ['desert', 'Painted Desert', .5], ['crystal', 'Crystal', .5], ['ice', 'Ice', 1]];
   const worlds = await Promise.all(ALL.map(([w]) => image(`sections/ridge-2-${w}/final.png`)));
   const want = keys[0].strokes[0].points, at = x => { for (let i = 1; i < want.length; i++) if (x <= want[i][0]) { const [x0, y0] = want[i - 1], [x1, y1] = want[i]; return y0 + (y1 - y0) * (x - x0) / (x1 - x0); } return want.at(-1)[1]; };
   // Where a map maker would put them: the closest diagonal ridges, centered on the path every ~240 px, snapped to the 32 px grid.
@@ -219,7 +220,7 @@ async function cartoonCut() {
   };
   const desk = () => { ctx.fillStyle = '#7a4f2c'; ctx.fillRect(0, 0, W, H); ctx.strokeStyle = 'rgba(0,0,0,.12)'; ctx.lineWidth = 2; for (let y = 8; y < H; y += 22) { ctx.beginPath(); ctx.moveTo(0, y); for (let x = 0; x <= W; x += 80) ctx.lineTo(x, y + Math.sin(x * .013 + y) * 4); ctx.stroke(); } };
   const paper = () => { ctx.fillStyle = '#f6f1e3'; ctx.fillRect(0, 0, W, H); ctx.strokeStyle = 'rgba(80,130,190,.22)'; ctx.lineWidth = 1; for (let x = 0; x <= W; x += 32) { ctx.beginPath(); ctx.moveTo(x + .5, 0); ctx.lineTo(x + .5, H); ctx.stroke(); } for (let y = 0; y <= H; y += 32) { ctx.beginPath(); ctx.moveTo(0, y + .5); ctx.lineTo(W, y + .5); ctx.stroke(); } };
-  const T = {reveal: [4.8, 6.9], cut: 7.6, paperIn: [7.0, 8.0], render: [8.1, 9.3], end: 11.8}, DURATION = T.end;
+  const T = {reveal: [4.8, 6.9], cut: 7.6, paperIn: [7.0, 8.0], render: [8.1, 9.3], end: 11.6}, DURATION = T.end;   // the cut to 7.6 s, then eight beats
   // The hand's place and lift at time t: it hovers between stamps and drops on each, quicker as it goes, then leaves.
   const handState = t => {
     let prev = {x: 1150, y: 780}, prevT = .3;
@@ -247,10 +248,10 @@ async function cartoonCut() {
     ctx.restore();
     draw(hills, ease(span(t, ...T.render)));
     if (t >= T.render[1] + .3) draw(variants[Math.floor((t - T.render[1] - .3) * FPS / SWAP) % variants.length]);
-    const title = fadeIO(t, .3, 3.0, .4); if (title > 0) { ctx.save(); ctx.globalAlpha = title; ctx.font = `34px ${CARTOON}`; ctx.fillStyle = INK; ctx.fillText('Making maps, the old way', 70, 80); ctx.restore(); }
-    const same = fadeIO(t, T.reveal[0] + .9, T.cut, .3); if (same > 0) { ctx.save(); ctx.globalAlpha = same; ctx.font = `36px ${CARTOON}`; ctx.fillStyle = '#d6402c'; ctx.textAlign = 'center'; ctx.fillText('Every hill: exactly the same.', W / 2, 676); ctx.restore(); }
+    const title = fadeIO(t, .3, 4.2, .4); if (title > 0) { ctx.save(); ctx.globalAlpha = title; ctx.font = `34px ${CARTOON}`; ctx.fillStyle = INK; ctx.fillText('Making Total Annihilation maps, the old way', 70, 80); ctx.restore(); }
+    const same = fadeIO(t, T.reveal[0] + .9, T.cut, .3); if (same > 0) { ctx.save(); ctx.globalAlpha = same; ctx.font = `36px ${CARTOON}`; ctx.fillStyle = '#d6402c'; ctx.textAlign = 'center'; ctx.fillText('Every hill: exactly the same.', W / 2, 650); ctx.restore(); }
     const sighA = fadeIO(t, 6.2, T.cut, .3); if (sighA > 0) { ctx.save(); ctx.globalAlpha = sighA; ctx.font = `28px ${CARTOON}`; ctx.fillStyle = INK; ctx.fillText('sigh.', 1110, 120 - 14 * span(t, 6.2, T.cut)); ctx.restore(); }
-    caption(t, T.render[1] - .2, T.end, 'Terra: every hill its own', 'Procedural hills, each one different, drawn where you want them');
+    caption(t, T.render[1] - .2, T.end, 'Terra: every hill its own', 'Each one different. Drawn where you want it.');
   }};
 }
 
