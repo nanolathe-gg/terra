@@ -70,7 +70,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          site=$(go run ./cmd/terraform --build-site _site)
+          site=$(go run ./cmd/terra --build-site _site)
           TERRAFORM_SITE_DIR="$site" node --test repro/site.build.test.mjs
           echo terra.nanolathe.gg > _site/CNAME
           touch _site/.nojekyll

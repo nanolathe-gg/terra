@@ -27,7 +27,7 @@ const scene = JSON.parse(readFileSync(sceneFile, 'utf8'));
 const url = `${server}/?biome=${scene.biome}&mapX=${map}&mapY=${map}&scratch=1&gpuMB=512&heapMB=1536${scene.query ? '&' + scene.query : ''}`;
 await cdpPortFree(port);
 const chrome = spawn(chromePath, ['--headless=new', ...chromeGpuFlags,
-  `--remote-debugging-port=${port}`, `--user-data-dir=${join(tmpdir(), `terraform-zoom-${port}`)}`, `--window-size=${vw},${vh}`, '--no-first-run', 'about:blank'], {stdio: 'ignore'});
+  `--remote-debugging-port=${port}`, `--user-data-dir=${join(tmpdir(), `terra-zoom-${port}`)}`, `--window-size=${vw},${vh}`, '--no-first-run', 'about:blank'], {stdio: 'ignore'});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const result = {scene: sceneFile, checks: {}};
 const check = (name, ok, detail) => { result.checks[name] = detail === undefined ? ok : {ok, ...detail}; if (!ok) process.exitCode = 1; };

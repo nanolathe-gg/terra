@@ -6,7 +6,7 @@ import {resolve} from 'node:path';
 import * as H from './headless.mjs';
 import {preprocess} from '../sculpt-renderer.js';
 const args=process.argv.slice(2),opt=(name,fallback)=>{const at=args.indexOf(name);return at<0?fallback:args.splice(at,2)[1];};
-const server=opt('--server',''),out=resolve(opt('--out','/private/tmp/terraform-color-mask-pack'));
+const server=opt('--server',''),out=resolve(opt('--out','/private/tmp/terra-color-mask-pack'));
 if(args.length||!server||new URL(server).port==='8801'||out===H.REPO||out.startsWith(H.REPO+'/'))throw Error('Give your own --server and an --out folder outside the repository.');
 mkdirSync(out,{recursive:true});await H.openHost({server});
 const s=await H.openScene({biome:'green',ground:false,strokes:[]},'biome=green&mapX=4&mapY=4&scratch=1&gpuMB=512'),r=s.renderer,d=r.device;

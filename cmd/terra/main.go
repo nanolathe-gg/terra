@@ -1,4 +1,4 @@
-// terraform serves development files, builds the static site, or emits configs.
+// terra serves development files, builds the static site, or emits configs.
 // Rendering and .ufo export always run in the browser.
 package main
 

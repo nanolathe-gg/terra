@@ -28,7 +28,7 @@ test('share links use #/maps/<id> at the site root', () => {
   assert.equal(shareUrl('http://127.0.0.1:8851/?biome=red&mapX=4#x', id), 'http://127.0.0.1:8851/#/maps/' + id);
   assert.equal(shareUrl('https://terra.nanolathe.gg/b/0123456789/?x=1', id), 'https://terra.nanolathe.gg/#/maps/' + id);
   assert.equal(shareUrl('https://terra.nanolathe.gg/index.html?x=1', id), 'https://terra.nanolathe.gg/#/maps/' + id);
-  assert.equal(shareUrl('https://example.github.io/terraform/b/0123456789/index.html', id), 'https://example.github.io/terraform/#/maps/' + id);
+  assert.equal(shareUrl('https://example.github.io/terra/b/0123456789/index.html', id), 'https://example.github.io/terra/#/maps/' + id);
 });
 
 test('the editor reads map fragments and lets the link loader validate the ID', () => {

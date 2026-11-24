@@ -80,7 +80,7 @@ export function planChecks(argv) {
       steps.push({name:'preview-freshness',command:'go',args:['run','./cmd/previews','check','--published']});
       steps.push({name:'preview-fetch',command:'go',args:['run','./cmd/previews','fetch']});
     }
-    if (mode === 'config') steps.push({name: 'go-site', command: 'go', args: ['test', './internal/site', './cmd/terraform']});
+    if (mode === 'config') steps.push({name: 'go-site', command: 'go', args: ['test', './internal/site', './cmd/terra']});
     node(mode, '--test', ...testFiles(mode === 'site' ? '.build.test.mjs' : `.${mode}.test.mjs`));
   }
   return {mode, out, list: !!options.list, steps};

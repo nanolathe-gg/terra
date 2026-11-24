@@ -16,7 +16,7 @@ const world = args[0];
 if (!world || world.startsWith('--')) { console.error('usage: node repro/retail_knobs.mjs <world> [--configs DIR] [--group text] [--changed]'); process.exit(2); }
 const repo = new URL('..', import.meta.url).pathname;
 let configs = opt('--configs', '');
-if (!configs) { configs = mkdtempSync(join(tmpdir(), 'terraform-configs-')); runSite(['--dump-configs', configs], {stdio: ['ignore', 'ignore', 'inherit']}); }
+if (!configs) { configs = mkdtempSync(join(tmpdir(), 'terra-configs-')); runSite(['--dump-configs', configs], {stdio: ['ignore', 'ignore', 'inherit']}); }
 const config = JSON.parse(readFileSync(join(configs, 'config', `${world}.json`), 'utf8'));
 const defaults = JSON.parse(readFileSync(join(repo, 'materials/defaults.json'))).knobs;
 const group = opt('--group', ''), changedOnly = args.includes('--changed');

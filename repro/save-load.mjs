@@ -13,7 +13,7 @@ import {gzipText} from '../sculpt-share.js';
 import {checkSave} from '../deploy/worker/worker.js';
 const args=process.argv.slice(2),opt=k=>args[args.indexOf(k)+1],server=args.includes('--server')?opt('--server'):'',port=Number(args.includes('--port')?opt('--port'):0);
 if(!server||!Number.isInteger(port)||port<1024)throw Error('Give your own --server and --port; the check uses that CDP port and the next.');
-const out=resolve(args.includes('--out')?opt('--out'):mkdtempSync(join(tmpdir(),'terraform-save-load-')));mkdirSync(out,{recursive:true});
+const out=resolve(args.includes('--out')?opt('--out'):mkdtempSync(join(tmpdir(),'terra-save-load-')));mkdirSync(out,{recursive:true});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms)),browsers=[];
 async function open(offset){
   const p=port+offset;await cdpPortFree(p);

@@ -63,10 +63,10 @@ test('bad bodies are refused with clear errors and nothing is stored', async () 
   const cases = [
     [Buffer.from(JSON.stringify(save())), 400, /not gzip/],
     [gz('{not json'), 400, /not valid JSON/],
-    [gz({format: 'other', version: 6, nodes: []}), 400, /not a Terraform save/],
+    [gz({format: 'other', version: 6, nodes: []}), 400, /not a Terra save/],
     [gz({format: 'nanolathe-terrain-sculpt', nodes: []}), 400, /version/],
     [gz({format: 'nanolathe-terrain-sculpt', version: 6, nodes: 'x'}), 400, /nodes/],
-    [gz([1, 2]), 400, /not a Terraform save/],
+    [gz([1, 2]), 400, /not a Terra save/],
     [Buffer.concat([gz(save()).subarray(0, 20)]), 400, /damaged/],
     [gz(JSON.stringify(save({mapData: {pad: 'a'.repeat(MAX_UNCOMPRESSED + 1)}}))), 413, /uncompressed/],
     [gz(save({junk: 'stored for good'})), 400, /fields a save does not have \(junk\)/],

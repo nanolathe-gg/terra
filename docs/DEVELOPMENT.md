@@ -1,6 +1,6 @@
 # Development
 
-How to run, change and check Terraform. For why it is built this way, see
+How to run, change and check Terra. For why it is built this way, see
 [DESIGN.md](DESIGN.md). Agents also follow [AGENTS.md](../AGENTS.md).
 
 ## Requirements
@@ -35,7 +35,7 @@ private this needs `gh auth login` or `GH_TOKEN`. See
 ## The development server
 
 ```bash
-go run ./cmd/terraform --port <port> --assets-root /tmp/terraform-dev
+go run ./cmd/terra --port <port> --assets-root /tmp/terra-dev
 ```
 
 - `--port` defaults to 8767. `--assets-root` holds local share-link storage
@@ -44,8 +44,8 @@ go run ./cmd/terraform --port <port> --assets-root /tmp/terraform-dev
   are reread on every request, so edit and refresh. Exporter Go changes
   rebuild on its next request. Only changes to the server's own Go code need
   a restart.
-- `go build -o /tmp/terraform ./cmd/terraform`, then
-  `/tmp/terraform --root <checkout> --port <port>`, runs a compiled server.
+- `go build -o /tmp/terra ./cmd/terra`, then
+  `/tmp/terra --root <checkout> --port <port>`, runs a compiled server.
 
 ## Where things live
 
@@ -78,7 +78,7 @@ gate, with no GPU, browser or Go. Other groups (`browser`, `engine`, `digest`,
 ## The static site and deployment
 
 ```bash
-go run ./cmd/terraform --build-site <dir>
+go run ./cmd/terra --build-site <dir>
 ```
 
 This writes `<dir>/index.html` and `<dir>/b/<version>/`, where the version
@@ -100,7 +100,7 @@ scripts with cached old shaders. Any static host can serve the result.
 and control-audit harnesses:
 
 ```bash
-go run ./cmd/repro-host --mode interaction --port <port> --out /tmp/terraform-interaction
+go run ./cmd/repro-host --mode interaction --port <port> --out /tmp/terra-interaction
 ```
 
 See [repro/interaction](../repro/interaction/README.md) and

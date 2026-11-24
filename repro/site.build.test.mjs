@@ -1,4 +1,4 @@
-// The static build (go run ./cmd/terraform --build-site, which needs Go): a versioned folder, the page's files at relative paths, every world's configs,
+// The static build (go run ./cmd/terra --build-site, which needs Go): a versioned folder, the page's files at relative paths, every world's configs,
 // services and the map exporter.
 import test from 'node:test';
 import assert from 'node:assert/strict';

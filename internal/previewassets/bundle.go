@@ -267,7 +267,7 @@ func fetchWithClient(root string, replace bool, client client) error {
 	if err != nil {
 		return err
 	}
-	temp, err := os.MkdirTemp("", "terraform-previews-")
+	temp, err := os.MkdirTemp("", "terra-previews-")
 	if err != nil {
 		return err
 	}

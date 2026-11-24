@@ -18,7 +18,7 @@ import {join, resolve} from 'node:path';
 const args = process.argv.slice(2), opt = k => args[args.indexOf(k) + 1];
 const server = args.includes('--server') ? opt('--server') : '', port = Number(args.includes('--port') ? opt('--port') : 0);
 if (!server || !Number.isInteger(port) || port < 1024) throw Error('Give your own --server and --port.');
-const out = resolve(args.includes('--out') ? opt('--out') : mkdtempSync(join(tmpdir(), 'terraform-look-'))); mkdirSync(out, {recursive: true});
+const out = resolve(args.includes('--out') ? opt('--out') : mkdtempSync(join(tmpdir(), 'terra-look-'))); mkdirSync(out, {recursive: true});
 const old = args.includes('--old') ? resolve(opt('--old')) : '';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 await cdpPortFree(port);

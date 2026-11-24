@@ -7,7 +7,7 @@
 // (sculpt-scene.js sceneNodes). H12b: the scene is played on a 4x4 map (--map WxH for another) with every stroke shifted by --offset (default 0:
 // the window is the map's top-left 1024 px; --sea N sets the sea, default the map's), and the window is captured at 1x. Writes <out-dir>/ours.png (the
 // window) and ours-heights.json (the displayed heights over the window, 512 x 512 samples at 2 px). Both hosts write the same bytes for the same pixels.
-// Under Node the engine's files come from --server, or with no --server from this checkout (the world configs from go run ./cmd/terraform --dump-configs, or
+// Under Node the engine's files come from --server, or with no --server from this checkout (the world configs from go run ./cmd/terra --dump-configs, or
 // --configs DIR); --port is Chrome's alone (default 9450). --chrome needs --server: the page path has no default server, so it never loads
 // another session's editor.
 import {chromePath, chromeGpuFlags} from './chrome.mjs';
@@ -86,7 +86,7 @@ async function renderInChrome() {
   const url = `${server}/?${search}`;
   await cdpPortFree(port);
   const browser = spawn(chromePath, ['--headless=new', ...chromeGpuFlags,
-    `--remote-debugging-port=${port}`, `--user-data-dir=${join(tmpdir(), `terraform-render-${port}`)}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
+    `--remote-debugging-port=${port}`, `--user-data-dir=${join(tmpdir(), `terra-render-${port}`)}`, '--window-size=1500,1200', '--no-first-run', 'about:blank'], {stdio: 'ignore'});
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   try {
     let ws;

@@ -1,5 +1,5 @@
 // Geological presets through the editor: a shared undo step, saved recipe and exact reload pixels.
-// node repro/rock-controls-ui.mjs --server http://127.0.0.1:8904 --port 9815 --out /tmp/terraform-rock-controls/ui
+// node repro/rock-controls-ui.mjs --server http://127.0.0.1:8904 --port 9815 --out /tmp/terra-rock-controls/ui
 import {chromePath, chromeGpuFlags} from './chrome.mjs';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -7,7 +7,7 @@ import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {cdpPortFree} from './cdp-port.mjs';
 const args=process.argv.slice(2),opt=(k,d)=>args.includes(k)?args[args.indexOf(k)+1]:d;
-const server=opt('--server','http://127.0.0.1:8904'),port=Number(opt('--port',9815)),out=opt('--out','/tmp/terraform-rock-controls/ui');
+const server=opt('--server','http://127.0.0.1:8904'),port=Number(opt('--port',9815)),out=opt('--out','/tmp/terra-rock-controls/ui');
 await cdpPortFree(port);mkdirSync(out,{recursive:true});
 const browser=spawn(chromePath,['--headless=new',...chromeGpuFlags,`--remote-debugging-port=${port}`,`--user-data-dir=${join(out,'profile-'+Date.now())}`,'--window-size=1440,900','--no-first-run','about:blank'],{stdio:'ignore'});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));let ws;

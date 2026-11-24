@@ -10,7 +10,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 const args=process.argv.slice(2),opt=(name,fallback)=>{const i=args.indexOf(name);return i<0?fallback:args.splice(i,2)[1];};
 const edgesAt=args.indexOf('--edges-only'),edgesOnly=edgesAt>=0;if(edgesOnly)args.splice(edgesAt,1);
-const repo=resolve(opt('--repo',join(dirname(fileURLToPath(import.meta.url)),'..'))),server=opt('--server',''),out=resolve(opt('--out','/private/tmp/terraform-color-split')),label=opt('--label','split');
+const repo=resolve(opt('--repo',join(dirname(fileURLToPath(import.meta.url)),'..'))),server=opt('--server',''),out=resolve(opt('--out','/private/tmp/terra-color-split')),label=opt('--label','split');
 if(args.length||!server||new URL(server).port==='8801'||out===repo||out.startsWith(repo+'/')||!/^[\w-]+$/.test(label))throw Error('Give your own --server and an --out folder outside the repository.');
 mkdirSync(out,{recursive:true});
 const H=await import(pathToFileURL(join(repo,'repro/headless.mjs'))),{encodePng}=await import(pathToFileURL(join(repo,'repro/png.mjs'))),{TerrainRenderer}=await import(pathToFileURL(join(repo,'sculpt-renderer.js')));

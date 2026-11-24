@@ -1,6 +1,6 @@
-# Terraform design
+# Terra design
 
-This page explains what Terraform is for, why it is built the way it is, and
+This page explains what Terra is for, why it is built the way it is, and
 how its parts fit together. It is the one place for the project's goals,
 philosophy and technical decisions. The working rules that follow from them
 are in [AGENTS.md](../AGENTS.md), numbered; code and tests cite those numbers.
@@ -12,7 +12,7 @@ development. Nothing here is a compatibility promise except the exported
 
 ## Goal
 
-Terraform is a terrain and map editor for **Total Annihilation** (TA) that
+Terra is a terrain and map editor for **Total Annihilation** (TA) that
 runs in the browser on WebGPU. An artist sketches landforms, rivers, coasts
 and rock with a few strokes. The GPU then grows realistic, weathered ground
 from them at TA's pixel scale and in its 256-color palette. The artist places
@@ -167,7 +167,7 @@ regional renders match whole renders.
 - **The page** is plain ES modules (`sculpt*.js`) and WGSL shaders
   (`engine-*.wgsl`), with the layout in `index.html`. There is no bundler and
   no framework.
-- **The Go command** (`cmd/terraform`, `internal/site`) serves the source for
+- **The Go command** (`cmd/terra`, `internal/site`) serves the source for
   development and builds the static site. It assembles each world's
   generated config from the committed JSON in `materials/` and `site.json`.
 - **Export** is the Go exporter in `export/`, compiled to WebAssembly and run

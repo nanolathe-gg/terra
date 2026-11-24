@@ -6,14 +6,14 @@
 //   node measure/world_controls.mjs [--find key,key] [--out DIR] [--worlds green,lava] [--only key,key] [--set key=v,key=v] [--jobs 3] [--configs DIR]
 //        [--query 'key=v&key=v'] [--column FILE]
 //        [--chrome --audit-port <yours> --assets DIR --port <cdp> | --chrome --server <a running audit host> --port <cdp>]
-// The sweep runs under Node on Dawn by default (repro/headless.mjs, from this checkout's files; --configs DIR for go run ./cmd/terraform --dump-configs output):
+// The sweep runs under Node on Dawn by default (repro/headless.mjs, from this checkout's files; --configs DIR for go run ./cmd/terra --dump-configs output):
 // a world is a page load in the page's own modules, a knob goes in through sculpt-knobs.js applyKnob as the page's setKnob does, a capture is one
 // chunk baked as the page's debugBake bakes it, and the panel's rows are the ones sculpt.js buildKnobs makes, each enabled or not by
 // worldControlRequirement on sculpt-knobs.js worldPanelValues, the same functions the panel runs. The surface sliders the panel offers are
 // read from index.html's markup (one inside a hidden container is not offered). --chrome sweeps the page in headless Chrome instead, and also
 // checks that the panel's own rows say what the schema says (the panel's DOM): it needs the audit host, which it starts itself on --audit-port
 // (your own: there is no default; --assets DIR is that host's assets root, which needs map-catalog.json and features/, as a card's own root has),
-// or --server for one already running; terraformAudit exists only on that host's ?audit pages.
+// or --server for one already running; terraAudit exists only on that host's ?audit pages.
 // --jobs splits the worlds over that many processes (Node) or browsers (Chrome; CDP ports --port, then --port+2, +3, ...). Alone, a world takes
 // about four minutes in Chrome.
 // --digest (Node only): check the input checksum instead of the controls' effect (TerrainRenderer.inputDigest, sculpt-digest-guard.js). Every
@@ -131,7 +131,7 @@ const pageQuery = (world, query) => { if(VARIANT||QUERY){const params=new URLSea
 const diff = (a, b) => { let max = 0, n = 0; for (let i = 0; i < a.length; i += 4) { const d = Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2])); if (d) { n++; if (d > max) max = d; } }
   if (DIGEST && n && a.digest && a.digest === b.digest) { const miss = `${current}: ${n} px move and the input checksum stays the same`; if (!digestMisses.includes(miss)) digestMisses.push(miss); }
   return {max, px: n}; };
-// The host the sweep drives, the same calls on either: the page in headless Chrome on the audit host (terraformAudit; the captures stay in the
+// The host the sweep drives, the same calls on either: the page in headless Chrome on the audit host (terraAudit; the captures stay in the
 // page and only the two numbers travel), or the page's own modules under Node on Dawn (repro/headless.mjs).
 async function chromeHost() {
   await cdpPortFree(port);
@@ -149,7 +149,7 @@ async function chromeHost() {
   await send('Runtime.enable'); await send('Page.enable');
   // In-page helpers: captures stay in the page; only the two numbers travel.
   const HELPERS = `window.__wc = (() => {
-    const A = window.terraformAudit, rect = {x: 0, y: 0, width: 1024, height: 1024};
+    const A = window.terraAudit, rect = {x: 0, y: 0, width: 1024, height: 1024};
     const grab = async (r = rect) => { const c = await A.capture(r); return c.canvas.getContext('2d').getImageData(0, 0, r.width, r.height).data; };
     let saved = [];
     const diff = (a, b) => { let max = 0, n = 0; for (let i = 0; i < a.length; i += 4) { const d = Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2])); if (d) { n++; if (d > max) max = d; } } return {max, px: n}; };
@@ -181,14 +181,14 @@ async function chromeHost() {
   return {
     async load(world, query) {
       await send('Page.navigate', {url: `${server}/?${pageQuery(world, query)}`});
-      for (let i = 0; i < 400; i++) { await sleep(150); try { if (await ev('!!window.terraformAudit&&document.readyState==="complete"')) break; } catch {} }
-      await ev('terraformAudit.ready()'); await ev(HELPERS.replace('KINDS', q(KINDS))); await ev('terraformAudit.idle()');
+      for (let i = 0; i < 400; i++) { await sleep(150); try { if (await ev('!!window.terraAudit&&document.readyState==="complete"')) break; } catch {} }
+      await ev('terraAudit.ready()'); await ev(HELPERS.replace('KINDS', q(KINDS))); await ev('terraAudit.idle()');
     },
-    setUp: set => ev(`(async () => { for (const [k, v] of Object.entries(${q(set)})) await terraformAudit.knob(k, v); return __wc.state(); })()`),
-    panelValues: () => ev('terraformAudit.panelValues()'),
-    variant: key => ev(`terraformAudit.renderer.variant.get(${q(key)})`),
-    knob: (key, value) => ev(`terraformAudit.knob(${q(key)}, ${q(value)})`),
-    restoreAll: base => ev(`(async () => { for (const [k, v] of Object.entries(${q(base)})) if (terraformAudit.renderer.variant.get(k) !== v) await terraformAudit.knob(k, v); })()`),
+    setUp: set => ev(`(async () => { for (const [k, v] of Object.entries(${q(set)})) await terraAudit.knob(k, v); return __wc.state(); })()`),
+    panelValues: () => ev('terraAudit.panelValues()'),
+    variant: key => ev(`terraAudit.renderer.variant.get(${q(key)})`),
+    knob: (key, value) => ev(`terraAudit.knob(${q(key)}, ${q(value)})`),
+    restoreAll: base => ev(`(async () => { for (const [k, v] of Object.entries(${q(base)})) if (terraAudit.renderer.variant.get(k) !== v) await terraAudit.knob(k, v); })()`),
     knobPair: (key, lo, hi) => ev(`__wc.knobPair(${q(key)}, ${lo}, ${hi})`),
     controlPair: (sid, lo, hi) => ev(`__wc.controlPair(${q(sid)}, ${lo}, ${hi})`),
     scene: (list, ground) => ev(`__wc.scene(${q(list)}, ${ground})`),
@@ -201,7 +201,7 @@ async function chromeHost() {
     sliderShown: sid => ev(`!document.getElementById(${q(sid)}).closest('[hidden]:not([role=tabpanel])')`),
     kinds: () => ev('__wc.kinds()'),
     putBack: () => ev('__wc.putBack()'),
-    setBusy: on => ev(`terraformAudit.setBusy(${on})`),
+    setBusy: on => ev(`terraAudit.setBusy(${on})`),
     domPanel: true,   // the panel's rows are its DOM: check them against the schema
     drain() {},
     close

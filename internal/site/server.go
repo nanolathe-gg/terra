@@ -65,19 +65,19 @@ func saveError(body []byte) (int, string) {
 	}
 	save, ok := v.(map[string]any)
 	if !ok || save["format"] != "nanolathe-terrain-sculpt" {
-		return 400, "This is not a Terraform save: its format must be nanolathe-terrain-sculpt."
+		return 400, "This is not a Terra save: its format must be nanolathe-terrain-sculpt."
 	}
 	version, ok := save["version"].(float64)
 	if !ok || version < 1 || version != float64(int64(version)) {
-		return 400, "This is not a Terraform save: it has no version number."
+		return 400, "This is not a Terra save: it has no version number."
 	}
 	nodes, ok := save["nodes"].([]any)
 	if !ok {
-		return 400, "This is not a Terraform save: nodes must be a list of stroke objects."
+		return 400, "This is not a Terra save: nodes must be a list of stroke objects."
 	}
 	for _, n := range nodes {
 		if _, ok := n.(map[string]any); !ok {
-			return 400, "This is not a Terraform save: nodes must be a list of stroke objects."
+			return 400, "This is not a Terra save: nodes must be a list of stroke objects."
 		}
 	}
 	return 0, ""

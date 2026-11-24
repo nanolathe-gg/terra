@@ -1,5 +1,5 @@
 // Recipe form controls at 1x: the same 4-pixel class measure as feature_controls.mjs.
-// Run with --configs <go run ./cmd/terraform --dump-configs directory> and --out <directory>.
+// Run with --configs <go run ./cmd/terra --dump-configs directory> and --out <directory>.
 import {readFileSync, mkdirSync, writeFileSync, mkdtempSync} from 'node:fs';
 import {runSite} from '../repro/site-cli.mjs';
 import {tmpdir} from 'node:os';

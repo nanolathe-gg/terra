@@ -19,7 +19,7 @@ import {isDeepStrictEqual} from 'node:util';
 const args = process.argv.slice(2), opt = k => args[args.indexOf(k) + 1];
 const server = args.includes('--server') ? opt('--server') : '', port = Number(args.includes('--port') ? opt('--port') : 0);
 if (!server || !Number.isInteger(port) || port < 1024) throw Error('Give your own --server and --port.');
-const out = resolve(args.includes('--out') ? opt('--out') : mkdtempSync(join(tmpdir(), 'terraform-map-snapshot-'))); mkdirSync(out, {recursive: true});
+const out = resolve(args.includes('--out') ? opt('--out') : mkdtempSync(join(tmpdir(), 'terra-map-snapshot-'))); mkdirSync(out, {recursive: true});
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..'), file = name => join(root, 'materials', name);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // Each retune edits one served file. `snapshot`: the map saves this part, so the map must not change.

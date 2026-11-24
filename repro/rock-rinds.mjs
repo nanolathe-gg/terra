@@ -5,7 +5,7 @@ import {openHost,openScene,weather,renderWindow,windowHeights,knob,column} from 
 import {encodePng} from './png.mjs';
 import {ROCK_PRESETS} from '../sculpt-rock-presets.js';
 const arg=(k,d)=>process.argv.includes(k)?process.argv[process.argv.indexOf(k)+1]:d;
-const out=arg('--out','/tmp/terraform-rock-rinds/gpu');mkdirSync(out,{recursive:true});
+const out=arg('--out','/tmp/terra-rock-rinds/gpu');mkdirSync(out,{recursive:true});
 const scene={biome:'green',ground:true,strokes:[['landform',[[50,450],[350,440],[700,470],[1000,450]],{card:{diameter:500,elevation:210,lean:180,roughness:0,softness:10,wander:25,widthVary:8,heightVary:5,cracks:20,terraces:0,styleVegetation:0}}]]};
 await openHost();const s=await openScene(scene,'biome=green&mapX=4&mapY=4&erosion=0');
 const rect={x:256,y:260,width:512,height:512,tile:256},set=async values=>{for(const[k,v]of Object.entries(values))await knob(s,k,v);};

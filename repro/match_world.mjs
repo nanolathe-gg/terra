@@ -6,7 +6,7 @@ import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {dumpConfigs} from './headless.mjs';
 
-// The world's built config (go run ./cmd/terraform --dump-configs, the same Go code the server runs) and its map lists.
+// The world's built config (go run ./cmd/terra --dump-configs, the same Go code the server runs) and its map lists.
 export async function worldSlots(world, configs = '') {
   const dir = configs || dumpConfigs();
   const [mats, rock] = await Promise.all([import('../sculpt-materials.js'), import('../sculpt-rock-presets.js')]);

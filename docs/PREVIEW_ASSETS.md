@@ -10,7 +10,7 @@ The archive includes a rendering receipt binding those pixels to their inputs.
 
 ```sh
 go run ./cmd/previews install-hook
-go run ./cmd/terraform --port <yours> --assets-root /tmp/terraform-agent
+go run ./cmd/terra --port <yours> --assets-root /tmp/terra-agent
 ```
 
 The Go development/build commands fetch missing previews. Once cached, ordinary
@@ -22,7 +22,7 @@ go run ./cmd/previews fetch
 
 A private repository requires GitHub authentication (`gh auth login`, `GH_TOKEN`
 or `GITHUB_TOKEN`). Public release assets need no token. Downloaded archives
-are cached by checksum in the OS user cache under `terraform/previews/`.
+are cached by checksum in the OS user cache under `terra/previews/`.
 Local modified pictures are not silently overwritten: finish publishing the
 render or explicitly run `fetch --replace` to restore the pinned set.
 The static build copies the downloaded PNGs into its versioned asset directory;

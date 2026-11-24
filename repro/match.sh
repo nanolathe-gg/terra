@@ -123,7 +123,7 @@ if [ -n "$probe" ]; then
 fi
 # The world's configs as the Go code builds them from this checkout (for the map's rock and material slots), made fresh each run.
 mkdir -p "$out/configs"
-node -e 'import(process.argv[1]).then(h => h.dumpConfigs(process.argv[2]))' "$here/headless.mjs" "$out/configs" || { echo "match.sh: could not build the world configs (go run ./cmd/terraform --dump-configs)" >&2; exit 1; }
+node -e 'import(process.argv[1]).then(h => h.dumpConfigs(process.argv[2]))' "$here/headless.mjs" "$out/configs" || { echo "match.sh: could not build the world configs (go run ./cmd/terra --dump-configs)" >&2; exit 1; }
 # The renders read $out/configs before the checkout, and it is reused every run: a shader or module left there would change every later trial.
 stray=$(find "$out/configs" -type f \( -name '*.wgsl' -o -name '*.js' -o -name '*.mjs' \) | head -3)
 [ -z "$stray" ] || { echo "match.sh: $out/configs holds engine files, which every render would read before the checkout's: $stray. Remove them (an oracle patch goes through --patch)." >&2; exit 2; }

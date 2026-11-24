@@ -1,6 +1,6 @@
-# Terraform: rules for agents
+# Terra: rules for agents
 
-Terraform is an experimental browser (WebGPU) terrain and map editor for
+Terra is an experimental browser (WebGPU) terrain and map editor for
 Total Annihilation. These rules apply to every agent working in this
 repository. The goal, the owner's decisions behind these rules and the
 architecture are in [docs/DESIGN.md](docs/DESIGN.md); setup is in
@@ -10,7 +10,7 @@ numbering.
 
 ## How to work
 
-1. **Work in a worktree:** `git worktree add ../terraform-wt-<task> -b <task> main`.
+1. **Work in a worktree:** `git worktree add ../terra-wt-<task> -b <task> main`.
    Never edit the main checkout or another agent's worktree. Never reset,
    rebase, stash, amend or force-push `main` or anyone else's work.
 2. **Use your own server, browser port and assets root.** Never stop a
@@ -22,7 +22,7 @@ numbering.
    ```
    R=/tmp/nanolathe-map-editor
    mkdir -p $R/agent-<task>
-   go run ./cmd/terraform --port <yours> --assets-root $R/agent-<task> \
+   go run ./cmd/terra --port <yours> --assets-root $R/agent-<task> \
      > $R/agent-<task>/server.log 2>&1 &
    ```
 
@@ -80,7 +80,7 @@ numbering.
    - Add no separate pages, save formats, storage keys or undo stacks.
    - A prototype that breaks this stays on a `prototype/*` branch and does
      not land; port its ideas instead.
-   - The editor is a static site (`go run ./cmd/terraform --build-site <dir>`;
+   - The editor is a static site (`go run ./cmd/terra --build-site <dir>`;
      GitHub Pages).
      Everything the page needs is a file in the build: no server-only path
      or endpoint. Export runs in the page (the exporter built to

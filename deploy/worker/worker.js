@@ -1,6 +1,6 @@
 // Save links: a Cloudflare Worker over an R2 bucket. No dependencies, no secrets in this file.
 //
-//   POST   /maps        body: the gzipped save (Terraform's `sketch()` JSON)   ->  {"id": "..."}
+//   POST   /maps        body: the gzipped save (Terra's `sketch()` JSON)   ->  {"id": "..."}
 //   GET    /maps/<id>   the stored save; a browser fetch() gets the JSON (Content-Encoding: gzip)
 //   DELETE /maps/<id>   owner only: `Authorization: Bearer <ADMIN_TOKEN>`
 //
@@ -71,7 +71,7 @@ export async function mapId(bytes) {
   return out;
 }
 
-// The gzipped body must gunzip within the cap to a Terraform save: the checks the editor's loader makes on its shape.
+// The gzipped body must gunzip within the cap to a Terra save: the checks the editor's loader makes on its shape.
 export async function checkSave(gz) {
   if (gz.length < 2 || gz[0] !== 0x1f || gz[1] !== 0x8b) throw new Refusal(400, 'The body is not gzip data. Send the save compressed with gzip.');
   let text;
@@ -85,11 +85,11 @@ export async function checkSave(gz) {
   }
   let save;
   try { save = JSON.parse(text); } catch { throw new Refusal(400, 'The save is not valid JSON.'); }
-  if (!save || typeof save !== 'object' || Array.isArray(save) || save.format !== FORMAT) throw new Refusal(400, 'This is not a Terraform save: its format must be ' + FORMAT + '.');
-  if (!Number.isInteger(save.version) || save.version < 1) throw new Refusal(400, 'This is not a Terraform save: it has no version number.');
-  if (!Array.isArray(save.nodes) || save.nodes.some(n => !n || typeof n !== 'object' || Array.isArray(n))) throw new Refusal(400, 'This is not a Terraform save: nodes must be a list of stroke objects.');
+  if (!save || typeof save !== 'object' || Array.isArray(save) || save.format !== FORMAT) throw new Refusal(400, 'This is not a Terra save: its format must be ' + FORMAT + '.');
+  if (!Number.isInteger(save.version) || save.version < 1) throw new Refusal(400, 'This is not a Terra save: it has no version number.');
+  if (!Array.isArray(save.nodes) || save.nodes.some(n => !n || typeof n !== 'object' || Array.isArray(n))) throw new Refusal(400, 'This is not a Terra save: nodes must be a list of stroke objects.');
   const extra = Object.keys(save).filter(k => !SAVE_FIELDS.includes(k));
-  if (extra.length) throw new Refusal(400, `This is not a Terraform save: it has fields a save does not have (${extra.slice(0, 3).join(', ')}).`);
+  if (extra.length) throw new Refusal(400, `This is not a Terra save: it has fields a save does not have (${extra.slice(0, 3).join(', ')}).`);
   const object = v => v === undefined || (v && typeof v === 'object' && !Array.isArray(v)), list = v => v === undefined || Array.isArray(v);
   const text16 = v => v === undefined || (typeof v === 'string' && v.length <= 128), number = v => v === undefined || Number.isFinite(v), flag = v => v === undefined || typeof v === 'boolean';
   if (!text16(save.biome) || !text16(save.world) || !text16(save.tool) || !text16(save.encoding) || !text16(save.light)
@@ -97,13 +97,13 @@ export async function checkSave(gz) {
     || !list(save.rocks) || !list(save.materials) || !list(save.tools)
     || !['size', 'grid', 'baseHeight', 'seaLevel', 'seed', 'refinementSeed', 'softness', 'relief', 'materialWeathering', 'depositSpread', 'transitionDetail', 'diameter', 'amount', 'roughness'].every(k => number(save[k]))
     || !['varySeed', 'weather', 'clay'].every(k => flag(save[k])))
-    throw new Refusal(400, 'This is not a Terraform save: a field holds the wrong kind of value.');
+    throw new Refusal(400, 'This is not a Terra save: a field holds the wrong kind of value.');
   const pictures = save.pictures;
   if (pictures !== undefined) {
     const map = pictures?.map, image = map?.image;
     if (!object(pictures) || Object.keys(pictures).length !== 1 || !map || !object(map) || Object.keys(map).length !== 1
       || typeof image !== 'string' || image.length > MAX_MAP_IMAGE || !MAP_IMAGE_RE.test(image))
-      throw new Refusal(400, 'This is not a Terraform save: pictures must hold one small WebP map thumbnail.');
+      throw new Refusal(400, 'This is not a Terra save: pictures must hold one small WebP map thumbnail.');
   }
 }
 

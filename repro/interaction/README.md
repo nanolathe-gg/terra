@@ -5,7 +5,7 @@ It lives outside the normal app and adds no production instrumentation or
 dependencies. The Go host wraps the normal editor handler, binds to loopback,
 and accepts PNG/JSON evidence under its output directory. Source files and
 configs reload on requests. The harness has no retail feature catalog or
-export action; use `go run ./cmd/terraform` for normal editing.
+export action; use `go run ./cmd/terra` for normal editing.
 
 Run from the repository. `--source` selects the editor checkout; `--tools`
 selects the checkout containing the harness (both default to the working

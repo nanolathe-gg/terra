@@ -4,7 +4,7 @@ Run from the repository, using your own port and output directory:
 
 ```sh
 go run ./cmd/repro-host --mode audit --source . --port 8895 \
-  --out /tmp/terraform-audit/results
+  --out /tmp/terra-audit/results
 ```
 
 Open `/audit/index.html`. The host wraps the normal Go development handler;

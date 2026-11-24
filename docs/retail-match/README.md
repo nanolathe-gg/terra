@@ -1,6 +1,6 @@
 # Retail match: brief for a matching agent
 
-You are matching one Total Annihilation world's retail look with Terraform's
+You are matching one Total Annihilation world's retail look with Terra's
 editor, using only data: the world's controls, rock types, materials, surface
 layers and tool presets, and each retail map's own choices from that kit
 (which rock type and ground its strokes use, their steps, its ground relief).
@@ -38,7 +38,7 @@ own output folder and trial log.
 ```text
 Read docs/retail-match/README.md and follow it for world <world>.
 Make your worktree from main:
-  git worktree add ../terraform-wt-match-<world> -b match-<world> main
+  git worktree add ../terra-wt-match-<world> -b match-<world> main
 Budget: 300 trials. Write your report to <out>/REPORT.md as the brief says,
 commit only on your branch, and do not land, merge or push.
 ```
@@ -46,8 +46,8 @@ commit only on your branch, and do not land, merge or push.
 ## Setup
 
 ```sh
-git worktree add ../terraform-wt-match-<world> -b match-<world> main
-cd ../terraform-wt-match-<world>
+git worktree add ../terra-wt-match-<world> -b match-<world> main
+cd ../terra-wt-match-<world>
 export PYTHON=<main checkout>/.venv/bin/python   # numpy, scipy, Pillow
 sh repro/match.sh <world>             # the bases, trial-000 and holdout-000; about a minute
 ```
@@ -63,7 +63,7 @@ The commands need:
 
 If the base trial fails, stop and report the error. Do not work around it.
 
-Your output folder is `$R/match/terraform-wt-match-<world>/<world>/`
+Your output folder is `$R/match/terra-wt-match-<world>/<world>/`
 (`<out>` below). Everything retail-derived stays there.
 
 ## What you may change

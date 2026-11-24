@@ -1,6 +1,6 @@
 # Save-link Worker
 
-Permanent, content-addressed share links for Terraform saves. A Cloudflare Worker (`worker.js`, no dependencies) over an
+Permanent, content-addressed share links for Terra saves. A Cloudflare Worker (`worker.js`, no dependencies) over an
 R2 bucket, on the free tier at a workers.dev address. Wrangler is run with `npx`; nothing is added to the repo.
 
 The editor sends the gzip-compressed JSON it would download, including the optional map thumbnail. Deploy this Worker before releasing
@@ -31,7 +31,7 @@ curl -s https://<worker>/maps/<id> | head -c 200
 
 | Request | Result |
 | --- | --- |
-| `POST /maps`, body is the gzipped save | `{"id": "<16 base32 chars>"}`. Refused with `{"error": "..."}`: 413 over 1 MB compressed, 8 MB uncompressed, or 40 times its gzip size; 400 if not gzip, not JSON, or not a Terraform save (`format` `nanolathe-terrain-sculpt`, integer `version`, `nodes` list) |
+| `POST /maps`, body is the gzipped save | `{"id": "<16 base32 chars>"}`. Refused with `{"error": "..."}`: 413 over 1 MB compressed, 8 MB uncompressed, or 40 times its gzip size; 400 if not gzip, not JSON, or not a Terra save (`format` `nanolathe-terrain-sculpt`, integer `version`, `nodes` list) |
 | `GET /maps/<id>` | the stored bytes with `Content-Encoding: gzip`, `Content-Type: application/json`, `Cache-Control: public, max-age=31536000, immutable`; 404 for an unknown id |
 | `DELETE /maps/<id>` with `Authorization: Bearer <ADMIN_TOKEN>` | `{"deleted": id}`; 401 without the token, 403 if no `ADMIN_TOKEN` is set |
 | `OPTIONS` | CORS preflight |

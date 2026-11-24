@@ -2,5 +2,5 @@
 import {execFileSync} from 'node:child_process';
 const root = new URL('..', import.meta.url).pathname;
 export function runSite(args, options = {}) {
-  return execFileSync('go', ['run', './cmd/terraform', ...args], {cwd: root, encoding: 'utf8', ...options});
+  return execFileSync('go', ['run', './cmd/terra', ...args], {cwd: root, encoding: 'utf8', ...options});
 }

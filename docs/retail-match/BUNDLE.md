@@ -18,7 +18,7 @@ The editor itself needs none of this bundle. Its Go development server and
 static build use only committed JSON data and source files:
 
 ```sh
-go run ./cmd/terraform --port <yours> --assets-root /private/tmp/terraform-agent
+go run ./cmd/terra --port <yours> --assets-root /private/tmp/terra-agent
 ```
 
 For an explicit retail comparison, set `REPRO_CROPS` to the bundle's `repro/`

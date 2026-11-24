@@ -8,7 +8,7 @@ import {resolve,dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import * as H from './headless.mjs';
 const args=process.argv.slice(2),opt=(name,fallback)=>{const at=args.indexOf(name);return at<0?fallback:args.splice(at,2)[1];};
-const server=opt('--server',''),out=resolve(opt('--out','/private/tmp/terraform-color-cache')),repo=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+const server=opt('--server',''),out=resolve(opt('--out','/private/tmp/terra-color-cache')),repo=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 if(args.length||!server||new URL(server).port==='8801'||out===repo||out.startsWith(repo+'/'))throw Error('Give your own --server and an --out folder outside the repository.');
 mkdirSync(out,{recursive:true});await H.openHost({server});
 const rows=[],sha=a=>createHash('sha256').update(a).digest('hex');

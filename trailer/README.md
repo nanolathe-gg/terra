@@ -15,7 +15,7 @@ your own CDP ports and your own editor server, never 8801 or 9450.
 | Cut | `trailer/assemble.sh $A` | `$A/out/trailer-rough.mp4`. |
 
 The editor server is the usual development one, started from this worktree:
-`go run ./cmd/terraform --port <yours> --assets-root /tmp/nanolathe-map-editor/agent-trailer`.
+`go run ./cmd/terra --port <yours> --assets-root /tmp/nanolathe-map-editor/agent-trailer`.
 
 Edits in the explainer are the scene's `trailer.steps` (a node moved, card
 numbers eased), applied in order; the layers after them render the final

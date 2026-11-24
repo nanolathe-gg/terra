@@ -49,7 +49,7 @@ func githubClient() client {
 	}
 	cache, cacheErr := os.UserCacheDir()
 	if cacheErr == nil {
-		cache = filepath.Join(cache, "terraform", "previews")
+		cache = filepath.Join(cache, "terra", "previews")
 	} else {
 		cache = ""
 	}
@@ -177,7 +177,7 @@ func Publish(root, dir, repository string, force bool, tol Tolerance) (Lock, Com
 }
 func publish(root, dir, repository string) (Lock, error) {
 	var l Lock
-	temp, err := os.MkdirTemp("", "terraform-preview-publish-")
+	temp, err := os.MkdirTemp("", "terra-preview-publish-")
 	if err != nil {
 		return l, err
 	}

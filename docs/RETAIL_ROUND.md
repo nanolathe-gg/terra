@@ -59,7 +59,7 @@ before the color.
 ## The loop
 
 1. **Set up.** Make a worktree: `git worktree add
-   ../terraform-wt-retail-<world> -b retail-<world> main`. Run
+   ../terra-wt-retail-<world> -b retail-<world> main`. Run
    `repro/retail.sh <world>`, and keep its folder as the base. Open each
    window's `pair.png` and `layout.png`, and write down, per window, what
    differs most, the shape first.

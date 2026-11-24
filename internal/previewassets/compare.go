@@ -180,7 +180,7 @@ func pinnedPictures(l Lock, c client) (string, func(), error) {
 	if err != nil {
 		return "", nil, err
 	}
-	temp, err := os.MkdirTemp("", "terraform-previews-pinned-")
+	temp, err := os.MkdirTemp("", "terra-previews-pinned-")
 	if err != nil {
 		return "", nil, err
 	}

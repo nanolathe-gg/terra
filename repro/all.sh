@@ -2,7 +2,7 @@
 # Render every scenes/<world>.json and tile the pairs.
 #   repro/all.sh <out-dir> [server] [cdp-port] [--chrome]
 # The scenes render under Node on Dawn (render.mjs's default, repro/headless.mjs): with no server, from this checkout (the world configs are
-# dumped once with go run ./cmd/terraform --dump-configs); with a server, from its files; the CDP port is not used. --chrome renders them in headless
+# dumped once with go run ./cmd/terra --dump-configs); with a server, from its files; the CDP port is not used. --chrome renders them in headless
 # Chrome instead (the page itself), against the server, which --chrome needs (your own; there is no default), on the CDP port (default 9450).
 # Both write the same files for the same pixels. Under Node the scenes render REPRO_JOBS at a time (default 4), each in its own process,
 # with the same bytes as one at a time; --chrome renders one at a time, on its one CDP port.
@@ -43,9 +43,9 @@ if [ -n "$chrome" ] && [ -z "$server" ]; then echo "all.sh: --chrome needs a ser
 mkdir -p "$out"
 configs=
 if [ -z "$chrome" ] && [ -z "$server" ]; then
-  configs=$(mktemp -d "${TMPDIR:-/tmp}/terraform-configs.XXXXXX")
+  configs=$(mktemp -d "${TMPDIR:-/tmp}/terra-configs.XXXXXX")
   trap 'rm -f "$configs"/config/*.json "$configs"/*.json; rmdir "$configs/config" "$configs"' EXIT
-  (cd "$here/.." && go run ./cmd/terraform --dump-configs "$configs")
+  (cd "$here/.." && go run ./cmd/terra --dump-configs "$configs")
 fi
 jobs=${REPRO_JOBS:-4}; [ -n "$chrome" ] && jobs=1
 status=0

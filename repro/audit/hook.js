@@ -1,7 +1,7 @@
 localStorage.removeItem(WORLD_STORE); // Isolated audit origin only; compare preset defaults.
 // Injected only by the Go audit host on ?audit pages. No production entry point.
 const tickAudit=()=>new Promise(r=>setTimeout(r,40));
-window.terraformAudit={
+window.terraAudit={
  async ready(){const t=performance.now();while(!ready||!mapCanvas){if(performance.now()-t>90000)throw Error('Editor boot timeout');await tickAudit();}mapCanvas.setBusy(true);},
  async idle(){const t=performance.now();while(weatherState!=='ready'&&weatherOn()){if(performance.now()-t>90000)throw Error('Refinement timeout '+weatherState);await tickAudit();}document.body.dataset.auditPhase='canvas';await mapCanvas.idle();document.body.dataset.auditPhase='GPU';await renderer.device.queue.onSubmittedWorkDone();document.body.dataset.auditPhase='idle';},
  scene:scriptedScene,
@@ -19,10 +19,10 @@ window.terraformAudit={
 };
 
 if(experiment.has('auditScene'))(async()=>{
- await window.terraformAudit.ready();
+ await window.terraAudit.ready();
  const scenes=await (await fetch('/audit/scenes.json')).json(),scene=scenes[experiment.get('auditScene')];
  if(!scene)throw Error('Unknown audit review scene');
- scriptedScene(scene.strokes,{ground:scene.ground!==false});await window.terraformAudit.idle();
+ scriptedScene(scene.strokes,{ground:scene.ground!==false});await window.terraAudit.idle();
  mapCanvas.setBusy(false);mapCanvas.zoom(1);$('viewport').scrollLeft=0;$('viewport').scrollTop=0;mapCanvas.schedule();
  document.body.dataset.auditReview='ready';
 })().catch(e=>error(e.message));

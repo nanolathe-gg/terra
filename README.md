@@ -1,4 +1,4 @@
-# Terraform
+# Terra
 
 A terrain and map editor for **Total Annihilation** that runs in your browser.
 
@@ -8,7 +8,7 @@ sand, grass and individual stones, at the game's own pixel scale and in its
 256-color palette. Place trees, rocks and start positions, then export a
 playable `.ufo` map.
 
-> **Status: experimental.** Terraform is under active development and not yet
+> **Status: experimental.** Terra is under active development and not yet
 > released. Saved maps and share links may stop working between versions.
 > Exported `.ufo` files are the only stable output.
 
@@ -32,12 +32,12 @@ playable `.ufo` map.
   No game files are needed and nothing is uploaded.
 - **Share a map** as a link, or save it as a file.
 
-All art is generated. Terraform contains no artwork from the original game,
+All art is generated. Terra contains no artwork from the original game,
 and it doesn't need an installed copy.
 
 ## Using it
 
-Terraform needs a browser with WebGPU and hardware acceleration: current
+Terra needs a browser with WebGPU and hardware acceleration: current
 Chrome or Edge, Safari 26, or Firefox with WebGPU enabled. Open the editor,
 choose a world and map size, and start drawing. Hover over any control for
 help.
@@ -54,13 +54,13 @@ git clone https://github.com/nanolathe-gg/terra.git
 ```
 
 ```bash
-cd terra && go run ./cmd/terraform --port 8080
+cd terra && go run ./cmd/terra --port 8080
 ```
 
 Then open <http://127.0.0.1:8080/>. To build the static site instead:
 
 ```bash
-go run ./cmd/terraform --build-site /tmp/terraform-site
+go run ./cmd/terra --build-site /tmp/terra-site
 ```
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the development setup and
@@ -76,4 +76,4 @@ checks.
 ## License
 
 [MIT](LICENSE). Total Annihilation is a trademark of its respective owners.
-Terraform is an independent fan project and is not affiliated with them.
+Terra is an independent fan project and is not affiliated with them.
