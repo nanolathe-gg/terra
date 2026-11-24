@@ -76,7 +76,8 @@ Changes to the owner's first outline (2026-11-19). Strike any of them.
 ## Cartoon cold open (2026-11-23)
 
 The owner's idea: open on the old way, a person stamping maps by hand. Drawn
-as a flat-shape cartoon (`cuts.html?cut=cartoon`, 11.8 s): from above, a hand
+as a flat-shape cartoon (`cuts.html?cut=cartoon`, 11.6 s): "Making Total
+Annihilation maps, the old way"; from above, a hand
 with a "HILL 17" rubber stamp prints the same hill all over a sheet of graph
 paper, faster and faster; then every print gets the same dashed box and
 "HILL 17" tag, and "Every hill: exactly the same." In the match cut the
@@ -87,8 +88,9 @@ variants of the same seven hills (`stills.mjs --vary 1..12`: new seeds,
 size, height, wander and width variation within a fifth) swap in every four
 frames to the end of the cut: there is no end to them. The stamps are generic
 cartoon hills, not retail art. `assemble-combined.sh <cuts> <take> cartoon`
-writes a 66 s version: the cartoon, the real-time take, the quick cut of
-every world, the gameplay and the end card.
+writes a 68 s version: the cartoon, the quick cut of every world, the
+real-time take, the gameplay and the end card (the world cut comes before
+the take so the take's Build click leads straight into the game).
 
 ## End card (2026-11-23)
 
@@ -99,10 +101,12 @@ water below. `logo-from-save.mjs` opens it in the real editor through
 Open, waits for weathering, and captures the canvas without the editor's
 overlays. The card shows the letters only (owner, 2026-11-23), rendered
 larger than the card needs (`--zoom 1.2 --size 1920x924 --center
-2150,2075`) so a slow push in (14% over the card's 6 s, toward the
-letters) stays sharp. Under the picture the name is spelled out, "Terra",
-above the two lines (owner: viewers should not have to read it out of the
-terrain).
+2165,2075`) so a slow push in (14% over the card's 6 s, toward the
+letters) stays sharp. Under the picture the name is spelled out, "Terra"
+(owner: viewers should not have to read it out of the terrain), then "A
+free map editor for Total Annihilation, in your browser" and the address,
+terra.nanolathe.gg. The card comes in fast (0.12 s) so the music's last
+hit lands on the picture.
 `cuts.html` fits the picture above the card's two lines (`?logo=` picks
 another picture). It replaces the Green TERRA letters (`logo-green.json`),
 which stay for comparison.
@@ -112,21 +116,42 @@ which stay for comparison.
 `trailer/music.mjs` synthesizes an original upbeat electro-pop score
 (owner: modern, exciting, pop-like; a fun tool with endless possibilities)
 from oscillators, plucked strings, filtered noise, a sidechain pump, a
-ping-pong delay and a small reverb: no samples, no dependencies, the same
-bytes every run. `assemble-combined.sh` makes it to the cut: each segment
-passes its style and length, so every section starts on its cut. A major at
-120 beats a minute on I-V-vi-IV, with a lead hook. The cartoon keeps its
-gags (pizzicato, a thud on each stamp, a deflating trombone on "exactly the
-same"), then the match cut opens a filtered chord, the hill swaps sparkle
-and a snare roll leads into the take. The take starts with two bars of
-intro and builds (four on the floor, offbeat hats, pumping bass, chord
-stabs, an arpeggio, the hook from the seventh bar) into a roll; the world
-montage hits every world over a rising chord; the gameplay and the battle
-are the drops (wide pumping chords, claps, the hook, an octave up the second
-time); the end card is one big A major hit ringing out with a last sparkle.
-Measured: −12.2 LUFS integrated for the cartoon version, −12.8 for the
-other, peaks at −1 dBFS; about −20 dB RMS in the cartoon, −15 in the take
-and −12 in the drops. Checked by spectrogram and levels only, not by ear.
+ping-pong delay and a reverb with predelay: no samples, no dependencies,
+the same bytes every run. `assemble-combined.sh` makes it to the cut: each
+segment passes its style and length, so every section starts on its cut. A
+major at 120 beats a minute (15 frames a beat) on I-V-vi-IV, with a lead
+hook, and the cut keeps to that grid: the cartoon is eight beats from its
+match cut to its end, the world montage is three bars, the arrival five and
+the battle four, and the take plays whole bars and breathes in what is left.
+
+- Cartoon: pizzicato, a thud with a paper click on each stamp, a deflating
+  trombone on "exactly the same"; the match cut opens a filtered chord and
+  the hook's first notes on bells; bells on sixteenths over the hill swaps;
+  a roll into the montage.
+- World montage: a kick, a chord stab and a bell on every world, over a
+  rising chord; not a build, so the take can start on its groove.
+- Take: three four-bar stages (kick, bass and arpeggio; then claps, open
+  hats and stabs; then the hook on plucks and sixteenth hats), a beat without
+  a kick before each stage, then a roll over the last whole bar into the
+  drop, which falls on the cut from the finished export to the game.
+- Arrival: the first drop, lighter (open voicing at a 3.6 kHz cutoff, the
+  hook on bells an octave up, no sixteenth hats).
+- Battle: everything (the open voicing at 6.5 kHz, the hook on the lead
+  doubled an octave up with a bell above, driving bass, a crash every two
+  bars).
+- End card: one big open A major hit ringing out for 5 s, the hook's last
+  bar on bells, a last A at 4 s.
+
+The arrangement and sound follow a review by another model (2026-11-23):
+hats band-passed between 6 and 10 kHz (they had more energy above 14 kHz
+than below), claps with a 190 Hz body, a brighter lead filter, the reverb
+and delay returns pumping with the kick, a longer kick. Measured, cartoon
+version: −14.2 LUFS integrated, true peak −1.1 dBFS; dB RMS about −19.8 in
+the stamps, −18.2, −17.1 and −16.4 in the take's stages, −21.2 in the roll,
+−14.1 in the arrival, −12.7 in the battle, −15.1 and −23.7 in the end card's
+two halves; in the battle, 1.5 to 4 kHz is 5 dB under 0.4 to 1.5 kHz and
+everything above 14 kHz is under 4 to 9 kHz. The other version: −14.6 LUFS,
+−1.6 dBFS. Checked by spectrogram and levels only, not by ear.
 
 ## Combined cut (2026-11-21)
 
@@ -139,20 +164,20 @@ gameplay to prove the map works.
 | Part | Source | Length |
 | --- | --- | --- |
 | Title | `slate.html` | 3 s |
-| Sections vs Terra | `cuts.html?cut=sections`, its title and end card cut off; the world cut runs Green, Red (0.8 s each), then the other seven (0.42 s each) | 23 s |
+| Sections vs Terra | `cuts.html?cut=sections`, its title and end card cut off; the world cut runs on the music's beat: Green, Red (1 s each), the next six (0.5 s each), Ice (1 s) | 24.3 s |
 | Slate | "One take, in real time" | 2.2 s |
-| Real-time take | `capture-realtime.mjs` on Green: Mountain, two Hills, Deep water and Crater dragged, Knoll field; then the range is selected again for variation at work (New seed, Height dragged up and back, Outline & variation opened and Wander dragged); three metal deposits round start 1 (200 to 330 px apart), eight trees, then Build game map. The two starts and start 2's three deposits (in the far corner, off camera, as far apart) are set just before the take | 24.5 s |
-| Gameplay | Nanolathe `tools/film` with `trailer/nanolathe-film.json` on the take's own `.ufo`: the commander lands at start 1 and builds its extractor on a placed deposit beside the lake, then a staged skirmish by the crater | 18.8 s |
+| Real-time take | `capture-realtime.mjs` on Green: Mountain, two Hills, Deep water and Crater dragged, Knoll field; then the range is selected again for variation at work (New seed, Height dragged up and back, Outline & variation opened and Wander dragged); three metal deposits round start 1 (200 to 330 px apart), eight trees, then Build game map, filmed until the build has finished and its download link shows. The two starts and start 2's three deposits (in the far corner, off camera, as far apart) are set just before the take. Step labels (`labels.mjs`, from the take's own marks) name each step over the map | 26.8 s |
+| Gameplay | Nanolathe `tools/film` with `trailer/nanolathe-film.json` on the take's own `.ufo`: "The same map, exported and in play" / "Nanolathe, an open-source Total Annihilation engine"; the commander lands at start 1 and builds its extractor on a placed deposit beside the lake, then a staged skirmish by the crater from its advance. The bottom 3.4% is cropped: the film tool still draws its game clock there | 18 s |
 | End card | `cuts.html?cut=end`, the owner's Terra map (`logo-terra.json`, see End card) with a slow push in and the name spelled out | 6 s |
 
-Assembled by `trailer/assemble-combined.sh` to 78 s, with music (see Music).
+Assembled by `trailer/assemble-combined.sh` to 80 s (68 s for the cartoon version), with music (see Music). The segments join with hard cuts on the music's beat; only the first fades in and the last fades out.
 
-**Measured (2026-11-23).** The take runs 24.52 s against 24.52 s of wall
-clock (59 delivered frames a second): about 6 s of it is the variation
-step, and the rest is quicker than the first takes (26.3 s without
+**Measured (2026-11-23).** The take runs 26.78 s against 26.79 s of wall
+clock (58 delivered frames a second), the build taking 3.8 s of it on
+camera; about 6 s is the variation step, and the rest is quicker than the first takes (26.3 s without
 variation) because the pauses wait only until the view is drawn, plus a
 quarter second, and the drags and glides are shorter; nothing is retimed
-after capture. Its build passed the exporter's self-check: 1,235 unique
+after capture. Its build passed the exporter's self-check: 1,269 unique
 tiles in 4,420 slots, 14 features, 2 starts.
 
 Variation comes after every shape is down, because a new seed also changes
@@ -164,13 +189,13 @@ lake ends a little short of the metal to keep it dry whatever the outline.
 Many takes show black flashes of one to three frames over the area being
 drawn (an editor preview issue the owner set aside); the take kept here has
 none (checked frame by frame), and its starts and deposits all have game
-heights 84 within 48 px. It was the sixth of seven tries. Every start and deposit has game
-heights 83 to 84 within 48 px (dry base 84, sea 75). Nanolathe loaded
+heights 84 within 48 px (dry base 84, sea 75); it was the fourth of four
+tries. Nanolathe loaded
 `Terra Valley.ufo` from a second `--root` (the TA install is never
 written): the commander landed at start 1 (1130, 880) and built its
 extractor at (1032, 952), about 120 px away, finished about 9.5 s into the
 film; the other commander stays in the far corner with its own metal. It
-staged 74 units for the battle and skipped 18 it could not place.
+staged 71 units for the battle and skipped 21 it could not place.
 
 Before 2026-11-23 both commanders walked to the map's only metal: ours
 along the lake, the other from the far corner, so they met there.
